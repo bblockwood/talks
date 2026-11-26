@@ -91,3 +91,81 @@ Things to write down by hand, since the report can't see them:
 - Whether the projector mirrors the PC monitor or extends it.
 - Round trip medians on Wi-Fi and on cellular, read from the phone.
 - Anything that looked wrong on the projector: blurry text, wrong size, visible cursor, flicker on slide change.
+
+
+---
+
+## W1. Core viewer
+
+### W0 results that shape W1 (from `docs/spikes/W0.md`)
+
+- One machine so far: Chrome 158 on a Mac with a mirrored display, not a classroom PC. Everything W1 depends on worked: PDF.js, full screen, keyboard lock (a single Esc stayed in full screen; Esc twice left), wake lock, key codes for arrows and Page Up/Down. Key → draw was 20 ms median with no render-ahead at all.
+- Still unknown: a Windows classroom PC, a real clicker, and two extended screens. None block W1 (Mode A only). The two-screen result is needed before W4.
+
+### Plan (2026-11-26)
+
+1. **Core (`src/core/`, DOM-free, unit-tested), ported from the native PresenterCore so the two apps agree:**
+   - `frames.ts`: frames and builds from page labels (Native §4.1).
+   - `session.ts`: `SessionState`, `Command`, and the reducer (Native §3.2): steps, frame steps, jumps, back/forward history, audience mode.
+   - `links.ts`: link actions, named-action mapping, normalised hit-testing (Native §4.3).
+   - `keys.ts`: the Native §6.5 key map as a pure interpreter, including digits + Return and Esc-twice-to-end.
+   - `prefetch.ts`: which pages to render ahead (SPEC §6.4).
+2. **Shared (`src/shared/`):** PDF.js deck adapter (labels, links with resolved destinations, annotation rendering off), and a render cache that renders ahead at the exact pixel size and never hands out a partial page.
+3. **Room (`src/room/`):** audience view (one canvas, one draw per change, letterboxed on black, cursor hidden after 2 s, invisible link regions), the presenting controller (keys, wake lock, keyboard lock, full-screen recovery, End and wipe), and the entry screen.
+4. **Interim entry screen.** There are no talk codes until W2, so for W1 the entry screen offers the bundled test decks and "open a PDF from this computer" (read into memory only). W2 replaces this with the code field.
+5. **Tests:** unit tests for all of core; e2e for presenting, links and back, black/white/freeze, End, a malformed PDF, and no off-site requests.
+
+Not in W1: notes, presenter view, overview, timer, pointer, phone (W3/W4). Their keys (Tab, L, D, T) are swallowed and do nothing.
+
+### Done (2026-11-26)
+
+- **Core** (`src/core/`, no DOM, no `any`): `frames.ts`, `session.ts`, `links.ts`, `keys.ts`, `prefetch.ts`. The reducer is a port of the native `SessionReducer`, so steps, jumps, back/forward and freeze behave as in the Mac app.
+- **Shared:** `deck.ts` (PDF.js adapter: labels → frames, link annotations with resolved destinations) and `render-cache.ts` (renders ahead at the exact pixel size; hands out only finished pages).
+- **Room:** `audience.ts`, `presentation.ts`, and the interim entry screen (`index.html`, `main.ts`).
+- **Behaviour:**
+  - Start goes full screen, locks Esc where the browser allows, and holds a wake lock.
+  - Keys per Native §6.5: next/previous, Shift+arrows by frame, number + Enter to jump, Delete (or Cmd+[ / Cmd+]) back/forward, B or `.` black, W white, F freeze. F5 and Tab are swallowed.
+  - Clicking a link follows it; clicking elsewhere does nothing. The cursor hides after 2 s.
+  - Esc twice within 1 s ends; so does holding Esc when the keyboard lock is on. End wipes the canvases, destroys the PDF and its worker, and reloads the entry screen.
+  - If the browser refuses full screen, the entry screen says to press F11 and offers "Present in this window".
+- **Tests:** 108 unit tests (94 for core, 14 for the relay rules) and 10 e2e tests. All pass, and the production build was checked under its CSP.
+- **Speed:** with render-ahead, key → audience draw is 0–2 ms on `tikz-heavy.pdf` at 1920×1080 in headless Chromium (W0 without render-ahead: 20 ms median on Ben's Mac). Measured as `performance.measure("lectern:input-to-draw")`.
+
+### Known issues and notes
+
+- **Interim entry screen.** Test decks and "open a PDF from this computer" replace the code field until W2. A picked PDF is read into memory only.
+- **Not yet tested on real hardware:** a Windows classroom PC, a clicker, Firefox, Safari. The e2e suite is Chromium only.
+- **Notes-split decks** (fixture 3) show the whole double-width page; cropping to the slide half comes with notes in W4.
+- **Memory.** The cache holds up to 12 full-size pages. At 1080p that is about 100 MB; on a 4K projector about 400 MB. Fine for a lectern PC, but the capacity may need to scale with resolution; to revisit if a 4K room shows trouble.
+- **Leaving full screen without ending.** Where keyboard lock isn't available (Firefox, Safari), one Esc leaves full screen. The talk carries on in the window, and the next key press goes back to full screen. See `docs/decisions.md`.
+- **Debug overlay** (Ctrl+Shift+D) is presenter-view only per SPEC §6.4, so it waits for W4. The measurements it will show are already recorded.
+- The W0 pages are still deployed at `/talks/w0/` for the remaining classroom tests.
+
+### Ben checklist: W1
+
+Part A can be done now on your Mac. Part B is for the next time you are at a classroom PC with a clicker (it also finishes the W0 checklist, which so far has only the Mac result).
+
+**A. On your Mac (5 minutes)**
+
+1. Open `benlockwood.com/talks/` in Chrome. Click **Open a PDF from this computer** and pick a real talk of yours, ideally one with overlays and appendix links.
+   - Expect: its title, and "N frames, M pages". Check N matches the frame number on your last slide.
+2. Click **Start**. Expect: the first slide, full screen, instantly, and nothing else on screen.
+3. Step through ten slides with → and ←. Expect: no flicker, no half-drawn slide, sharp text.
+4. Press Shift+→ in the middle of a frame with overlays: it should go to the next frame's first build. Shift+← should land on the previous frame fully built.
+5. Type a frame number and press Enter: it should jump there. Press Delete: it should return to where you were.
+6. Click a link to an appendix slide, step a couple of builds, press Delete. Expect: back at the slide with the link.
+7. Press B (black), B again, W (white), W again. Press F, step forward twice (the screen should not change), press F again (it should catch up).
+8. Leave the mouse still: the cursor should vanish after two seconds.
+9. Press Esc once: nothing should happen. Press Esc twice quickly: back to the entry screen.
+10. Repeat step 1–3 once in Safari and once in Firefox if you have them. There, one Esc leaves full screen; press → and it should go back to full screen by itself.
+
+**B. On a classroom PC, with the clicker (10 minutes)**
+
+1. Do the W0 checklist first at `benlockwood.com/talks/w0/` (steps 3–7 especially: clicker key codes and the two-screen test).
+2. Put a real talk on a USB stick, or open one from your email or cloud storage in the browser's download folder. Open `benlockwood.com/talks/` in a private window, click **Open a PDF from this computer**, pick it, click **Start**.
+3. Run the talk's first few minutes with the clicker only. Note any button that does nothing or does the wrong thing, especially blank-screen and start/stop.
+4. Look at the projector from the back of the room: sharpness, colours, slide size, black bars.
+5. Leave it idle for 15 minutes on one slide: the screen should not sleep or lock. (Some PCs enforce a lock by policy; note it if so.)
+6. Press Esc twice to end, and delete the downloaded PDF if you downloaded one.
+
+Write results under a "W1" heading in `docs/spikes/W0.md` or a new `docs/spikes/W1.md`.

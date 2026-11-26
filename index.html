@@ -9,12 +9,53 @@
     />
     <meta name="robots" content="noindex" />
     <title>Lectern</title>
-    <link rel="stylesheet" href="/src/w0/w0.css" />
+    <link rel="stylesheet" href="/src/room/room.css" />
   </head>
   <body>
-    <main class="page">
+    <main id="entry" class="entry">
       <h1>Lectern</h1>
-      <p>Not ready yet. The lectern-PC smoke test is at <a href="w0/">w0/</a>.</p>
+
+      <!-- Replaced as soon as the app starts. If it stays, the browser could not run the app. -->
+      <p id="boot">Starting… If this message stays, this browser is too old or has JavaScript turned off.</p>
+
+      <section id="choose" hidden>
+        <p class="note">
+          Preview build (W1): talk codes arrive in the next milestone. For now, pick a test deck or open a PDF from
+          this computer. The PDF stays in this tab's memory and is not uploaded anywhere.
+        </p>
+        <div id="fixtures" class="choices"></div>
+        <p>
+          <label class="filepick">
+            Open a PDF from this computer
+            <input id="file" type="file" accept="application/pdf,.pdf" />
+          </label>
+        </p>
+      </section>
+
+      <section id="ready" hidden>
+        <h2 id="deck-title"></h2>
+        <p id="deck-summary" class="summary"></p>
+        <p>
+          <button id="start" class="primary big">Start</button>
+        </p>
+        <p id="fs-problem" class="problem" hidden>
+          This browser refused full screen. Press <kbd>F11</kbd> to make the browser full screen yourself, then:
+          <button id="start-windowed">Present in this window</button>
+        </p>
+        <p class="keys">
+          <kbd>→</kbd> <kbd>Space</kbd> <kbd>Page Down</kbd> next · <kbd>←</kbd> <kbd>Page Up</kbd> previous ·
+          <kbd>Shift</kbd>+<kbd>→</kbd>/<kbd>←</kbd> next/previous frame · number then <kbd>Enter</kbd> jump to frame ·
+          <kbd>Delete</kbd> back after a jump · <kbd>B</kbd> black · <kbd>W</kbd> white · <kbd>F</kbd> freeze ·
+          <kbd>Esc</kbd> twice to end
+        </p>
+        <p><button id="another">Choose another deck</button></p>
+      </section>
+
+      <p id="status" class="status" role="status" aria-live="polite"></p>
+      <p class="hint">On a shared computer, use a private or InPrivate window.</p>
     </main>
+
+    <div id="audience" class="audience" hidden></div>
+    <script type="module" src="/src/room/main.ts"></script>
   </body>
 </html>

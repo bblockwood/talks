@@ -1,0 +1,123 @@
+:root {
+  color-scheme: light dark;
+  font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+  line-height: 1.45;
+}
+html,
+body {
+  margin: 0;
+  height: 100%;
+}
+.entry {
+  max-width: 40rem;
+  margin: 0 auto;
+  padding: 2.5rem 1.25rem 4rem;
+}
+.entry[hidden] {
+  display: none;
+}
+h1 {
+  font-size: 1.6rem;
+  margin: 0 0 1.5rem;
+}
+h2 {
+  font-size: 1.35rem;
+  margin: 0 0 0.25rem;
+}
+.summary,
+.hint,
+.note,
+.keys {
+  opacity: 0.72;
+}
+.hint,
+.keys {
+  font-size: 0.875rem;
+}
+.keys {
+  line-height: 2;
+}
+kbd {
+  font: 0.8rem ui-monospace, Menlo, Consolas, monospace;
+  padding: 0.1rem 0.35rem;
+  border: 1px solid color-mix(in srgb, currentColor 35%, transparent);
+  border-radius: 0.25rem;
+}
+button,
+.filepick {
+  font: inherit;
+  display: inline-block;
+  padding: 0.5rem 1rem;
+  border-radius: 0.4rem;
+  border: 1px solid color-mix(in srgb, currentColor 40%, transparent);
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+}
+button.primary {
+  background: #1d4ed8;
+  border-color: #1d4ed8;
+  color: white;
+}
+button.big {
+  font-size: 1.5rem;
+  padding: 0.9rem 3.5rem;
+}
+button:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+.filepick input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+}
+.filepick:focus-within {
+  outline: 2px solid #1d4ed8;
+  outline-offset: 2px;
+}
+.choices {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin: 1rem 0;
+}
+.status {
+  min-height: 1.5em;
+}
+.status.error,
+.problem {
+  color: #b91c1c;
+}
+@media (prefers-color-scheme: dark) {
+  .status.error,
+  .problem {
+    color: #f87171;
+  }
+}
+
+/* Audience view: slides only. Nothing else is ever drawn here. */
+.audience {
+  position: fixed;
+  inset: 0;
+  background: black;
+  overflow: hidden;
+  cursor: default;
+}
+.audience[hidden] {
+  display: none;
+}
+.audience canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+  /* While a resize is being re-rendered, the old picture scales without distortion. */
+  object-fit: contain;
+}
+.audience.cursor-link {
+  cursor: pointer;
+}
+.audience.cursor-hidden {
+  cursor: none;
+}
