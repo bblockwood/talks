@@ -276,3 +276,57 @@ All on your Mac; about 10 minutes.
 - **Thumbnails** are rendered at up to 2× and kept while the talk is open; a 300-frame deck would hold on to roughly 100 MB on the phone.
 - **Opening a deck from a file gives no phone remote**, since there is no code to derive a room from.
 - The W0 test pages are still deployed for the outstanding classroom-PC checks.
+
+### Live check (2026-11-26)
+
+Against `https://benlockwood.com/talks/` and the deployed relay, with a throwaway deck (published, then revoked) and headless Chromium for both the room page and a phone-sized page on Ben's Mac:
+
+- Room PC: "Phone can connect: benlockwood.com/talks/remote". Phone: "Room PC is ready: click Start there", then "Connected to room PC" after Start.
+- 18 Next/Prev taps from the phone: **ping 64 ms, tap → slide 39 ms (median)**; the room PC drew each within 0–1 ms of receiving the command.
+- End talk from the phone returned the room PC to the code entry screen.
+- The phone page contacted only `benlockwood.com` and the relay. No console errors on either page.
+
+This is from a home connection with both ends on the same machine, so it shows the path works and is well inside 150 ms; it is not the campus measurement the acceptance asks for.
+
+### Ben checklist: W3
+
+You need a published talk (ideally one with notes and an appendix link), your phone, and any computer as the "room PC". About 15 minutes. Parts A–C work at home; part D needs campus Wi-Fi.
+
+**A. Connect**
+
+1. On the computer, open `benlockwood.com/talks` in a private window, type the talk's code, and wait for the title.
+   - Expect under the Start button: a green dot and "Phone can connect: benlockwood.com/talks/remote".
+2. On the phone, open `benlockwood.com/talks/remote`. Type the same code, tick **Remember on this device**, tap **Open**.
+   - Expect: the first slide, and at the top "Room PC is ready: click Start there".
+3. On the computer click **Start**.
+   - Expect on the phone within a second: "Connected to room PC · NN ms" with a green dot, and the clock running at top right.
+
+**B. Drive the talk from the phone**
+
+4. Tap **Next** several times, then **Prev**. The room screen should follow with no visible delay, and the phone should show the frame and build ("Frame 4 of 20", "Build 2 of 3"), the next slide, and your notes.
+5. Swipe left and right on the phone's slide: same as Next and Prev.
+6. Press and hold on the phone's slide until it buzzes (about a third of a second), then drag: a red dot should follow on the room screen, and vanish when you lift your finger. Check that a hold-and-drag never changes the slide.
+7. Tap **Slides**. Tap a slide far from the current one.
+   - Expect: the phone shows it with a blue "Preview" label; the room screen has not changed. Swipe to look at neighbouring slides. Tap **Show**: now the room screen jumps there.
+8. Tap **Back**: the room screen returns to where you were before the jump.
+9. If the talk has a link (for example to an appendix slide), tap it on the phone's slide: the room screen should follow it. **Back** returns.
+10. Tap **Black**, then **Black** again. Tap **Freeze**, tap Next twice (the room screen should not move, and the phone shows "ROOM SCREEN FROZEN"), then **Freeze** again (the room screen catches up).
+11. Tap the clock, then **Pause**, **Resume**, **Reset**. Use **A+** and **A−** to change the notes size.
+12. Press → on the computer's keyboard: the phone should follow.
+
+**C. Things that go wrong on stage**
+
+13. Lock the phone for 30 seconds, unlock it. Expect: "Reconnecting…" briefly at most, then "Connected to room PC" by itself, on the right slide. Does the phone screen stay awake on its own while the remote is open?
+14. Switch the phone to another app for a minute and come back. Same expectation.
+15. Put the phone in airplane mode. On the computer, keep presenting with the arrow keys: it must be completely unaffected. Turn airplane mode off: the phone should reconnect and show the current slide.
+16. Turn the phone's Wi-Fi off so it uses cellular: it should reconnect by itself.
+17. Close the phone's browser tab completely, then open `benlockwood.com/talks/remote` again: the talk should be listed under "Saved on this phone"; one tap reopens it, on the current slide.
+18. Tap **More**, **End talk…**, **End talk**. Expect: the computer leaves full screen and returns to the code entry page.
+
+**D. The acceptance measurement, on campus Wi-Fi** (phone on campus Wi-Fi, room PC on the classroom network)
+
+19. Repeat steps 1–3 in a classroom. Tap Next and Prev about 30 times at a normal pace.
+20. Tap **More** and read the **Connection** line, e.g. "ping 64 ms · tap → slide 39 ms (median of 30)". Write both numbers down. The target is tap → slide under 150 ms.
+21. Do the same with the phone on cellular.
+
+Please record results in `docs/spikes/W3.md` (a short list is fine). The things most likely to need fixing are the touch gestures in steps 5–6 and the background behaviour in steps 13–14, since those could only be tested with a mouse in a desktop browser.
