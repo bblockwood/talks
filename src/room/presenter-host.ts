@@ -1,7 +1,7 @@
 // The audience window's side of Mode B: opens the presenter window on the other screen and keeps
 // it supplied with the deck and the session state. If the window can't be opened or is closed,
 // the talk simply continues as Mode A.
-import { parseCommand } from "../core/protocol";
+import { inkCommand, parseCommand, parseMessage } from "../core/protocol";
 import type { Presentation } from "./presentation";
 import { SWAP_MESSAGE, randomChannelName } from "./presenter-channel";
 import type { PresenterDeck, ToAudience, ToPresenter } from "./presenter-channel";
@@ -110,6 +110,13 @@ export class PresenterHost {
       case "pointer":
         this.presentation.pointer(Number(message.x), Number(message.y), message.visible === true);
         break;
+      case "ink": {
+        // Validated exactly like ink from a phone; "presenter" stands in for a sender id.
+        const parsed = parseMessage("ink", message.ink);
+        const command = parsed?.type === "ink" ? inkCommand("presenter", parsed.body) : null;
+        if (command) this.presentation.dispatch(command, performance.now());
+        break;
+      }
       case "end":
         void this.presentation.end();
         break;

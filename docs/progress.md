@@ -497,3 +497,13 @@ W0–W5 are built. SPEC §10 says the next step is Ben's: use it for a real talk
 3. Drawing with a finger and an Apple Pencil (W5 part A).
 4. Swap displays on real screens (W5 part C).
 5. Firefox or Safari as the room browser.
+
+### After W5 (2026-11-26)
+
+- Ben's W5 feedback: all looks good; the one thing missing was drawing from the second-screen presenter view.
+- **Added: Draw in the presenter window.** Draw button or D; colours, Undo, Clear, Board beside it. Ink goes through the same validation as ink from a phone. Covered by the two-screen e2e test (stroke pixels on the audience layer, Undo, switching between Draw and Laser, the whiteboard, C, Esc).
+- **Ben checklist for this change** (two screens, 2 minutes):
+  1. Start in two-screen mode. In the presenter window press **D** (or click **Draw**): the current slide gets an orange outline and colour dots appear.
+  2. Drag on the current slide. Expect: the line appears on the projector as you draw, and the slide does not advance.
+  3. Try a colour, **Undo**, **Clear**, and **Board** (white screen with its own drawing; **Board** again returns).
+  4. Press **Esc** once: Draw turns off and the talk does not end. Click the slide: it advances again.

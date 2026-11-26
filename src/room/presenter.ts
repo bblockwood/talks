@@ -1,6 +1,7 @@
 // The presenter window of Mode B (SPEC §5.2, Native §6.2–6.4): current slide, next slide, notes,
 // overview and search. It renders its own copy of the deck at its own resolution and sends
 // Commands to the audience window, which owns the session. It never touches storage.
+import { DEFAULT_INK_WIDTH } from "../core/ink";
 import { KeyInterpreter } from "../core/keys";
 import { hitTest } from "../core/links";
 import { formatClock, renderNotesHtml } from "../core/markdown";
@@ -47,6 +48,13 @@ let laser = false;
 let overviewOpen = false;
 let notesSize = 22;
 let lastPointerSent = 0;
+/** Draw mode (Native §6.5, D): the mouse, a pen or a finger on the current slide draws ink. */
+let drawing = false;
+let inkColor = 0;
+let strokeSeq = 0;
+let activeStroke: number | null = null;
+let pendingPoints: number[] = [];
+let inkFrame = 0;
 let notice = "";
 let noticeUntil = 0;
 
@@ -158,6 +166,11 @@ function render(): void {
   $("digits").textContent = keys.typedDigits === "" ? "" : `Go to frame ${keys.typedDigits}⏎`;
   $("laser").classList.toggle("on", laser);
   $("current").classList.toggle("laser", laser);
+  $("draw").classList.toggle("on", drawing);
+  $("current").classList.toggle("drawing", drawing);
+  $("drawtools").hidden = !drawing;
+  $("ink-board").classList.toggle("on", board);
+  for (const el of document.querySelectorAll<HTMLElement>(".ink-color")) el.classList.toggle("on", Number(el.dataset["color"]) === inkColor);
 
   if (overviewOpen && grid) {
     const shown = audiencePage(state);
@@ -278,7 +291,30 @@ async function runSearch(): Promise<void> {
 
 // ---------------------------------------------------------------- input
 
+function setDrawing(on: boolean): void {
+  if (on) setLaser(false);
+  if (!on) endStroke();
+  drawing = on;
+  render();
+}
+
+function flushInk(): void {
+  inkFrame = 0;
+  const id = activeStroke;
+  if (id === null) return;
+  while (pendingPoints.length > 0) post({ t: "ink", ink: { op: "append", id, points: pendingPoints.splice(0, 256) } });
+}
+
+function endStroke(): void {
+  if (activeStroke === null) return;
+  cancelAnimationFrame(inkFrame);
+  flushInk();
+  post({ t: "ink", ink: { op: "end", id: activeStroke } });
+  activeStroke = null;
+}
+
 function setLaser(on: boolean): void {
+  if (on && drawing) setDrawing(false);
   laser = on;
   if (!on) {
     current?.setDot(null);
@@ -340,11 +376,17 @@ function onKeyDown(ev: KeyboardEvent): void {
     setLaser(!laser);
     return;
   }
+  if (plain && !ev.repeat && (ev.key === "d" || ev.key === "D")) {
+    ev.preventDefault();
+    setDrawing(!drawing);
+    return;
+  }
   // A single Esc first clears typed digits, then turns the laser off, then closes the overview;
   // only after that does it count towards ending the talk (Native §6.5).
-  if (plain && ev.key === "Escape" && !ev.repeat && keys.typedDigits === "" && (laser || overviewOpen)) {
+  if (plain && ev.key === "Escape" && !ev.repeat && keys.typedDigits === "" && (laser || drawing || overviewOpen)) {
     ev.preventDefault();
     if (laser) setLaser(false);
+    else if (drawing) setDrawing(false);
     else setOverview(false);
     return;
   }
@@ -363,7 +405,32 @@ function bind(): void {
   window.addEventListener("keydown", onKeyDown, { capture: true });
 
   const cur = $("current");
+  // Draw mode: every press on the slide is ink, from a mouse, a pen or a touch screen.
+  cur.addEventListener("pointerdown", (ev) => {
+    if (!drawing || !current || !state || ev.button !== 0 || activeStroke !== null) return;
+    const mode = state.audienceMode.kind;
+    const point = current.pointAt(ev.clientX, ev.clientY, true);
+    if (!point || (mode !== "live" && mode !== "white")) return;
+    ev.preventDefault();
+    cur.setPointerCapture(ev.pointerId);
+    activeStroke = ++strokeSeq;
+    pendingPoints = [];
+    post({ t: "ink", ink: { op: "begin", id: activeStroke, ...point, color: inkColor, width: DEFAULT_INK_WIDTH } });
+  });
+  cur.addEventListener("pointermove", (ev) => {
+    if (activeStroke === null || !current) return;
+    const samples = typeof ev.getCoalescedEvents === "function" ? ev.getCoalescedEvents() : [];
+    for (const sample of samples.length > 0 ? samples : [ev]) {
+      const point = current.pointAt(sample.clientX, sample.clientY, true);
+      if (point) pendingPoints.push(point.x, point.y);
+    }
+    if (inkFrame === 0) inkFrame = requestAnimationFrame(flushInk); // one batch per frame
+  });
+  cur.addEventListener("pointerup", endStroke);
+  cur.addEventListener("pointercancel", endStroke);
+
   cur.addEventListener("click", (ev) => {
+    if (drawing) return; // a click while drawing is a dot, not "next"
     if (!deck || !state || !current) return;
     const page = state.committedPage;
     const point = current.pointAt(ev.clientX, ev.clientY);
@@ -390,6 +457,18 @@ function bind(): void {
 
   $("next").addEventListener("click", () => send({ name: "next" }));
   $("laser").addEventListener("click", () => setLaser(!laser));
+  $("draw").addEventListener("click", () => setDrawing(!drawing));
+  $("ink-undo").addEventListener("click", () => send({ name: "inkUndo" }));
+  $("ink-clear").addEventListener("click", () => send({ name: "inkClear" }));
+  $("ink-board").addEventListener("click", () =>
+    send({ name: "setAudienceMode", mode: state?.audienceMode.kind === "white" ? { kind: "live" } : { kind: "white" } }),
+  );
+  for (const el of document.querySelectorAll<HTMLElement>(".ink-color")) {
+    el.addEventListener("click", () => {
+      inkColor = Number(el.dataset["color"]) || 0;
+      render();
+    });
+  }
   $("swap").addEventListener("click", swapDisplays);
   $("back").addEventListener("click", () => send({ name: "back" }));
   $("forward").addEventListener("click", () => send({ name: "forward" }));

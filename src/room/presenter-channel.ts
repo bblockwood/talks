@@ -2,6 +2,7 @@
 // same-origin windows on the room PC, joined by a BroadcastChannel with a random name; nothing
 // here leaves the machine. The audience window stays authoritative.
 import type { NoteOverride } from "../core/payload";
+import type { InkMessage } from "../core/protocol";
 import type { Command, SessionState } from "../core/session";
 import type { NotesSplit } from "../core/split";
 
@@ -41,6 +42,8 @@ export type ToAudience =
   | { t: "ready" }
   | { t: "command"; command: Command }
   | { t: "pointer"; x: number; y: number; visible: boolean }
+  /** Ink drawn in the presenter window, in the same form a phone sends it. */
+  | { t: "ink"; ink: InkMessage }
   | { t: "end" }
   | { t: "closed" };
 

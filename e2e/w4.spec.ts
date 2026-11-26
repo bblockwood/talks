@@ -184,6 +184,57 @@ test("two screens: the presenter window drives the audience window", async ({ br
   await expect(presenter.locator("#laser")).not.toHaveClass(/on/);
   await expect.poll(() => room(main, (h) => h.pointerVisible()), { timeout: 3000 }).toBe(false);
 
+  // Draw: D, then dragging on the current slide puts ink on the audience screen.
+  const inkShown = () => main.evaluate(() => (window as unknown as { __lectern: { inkShown(): number } }).__lectern.inkShown());
+  const redPixels = () =>
+    main.evaluate(() => {
+      const c = document.querySelector<HTMLCanvasElement>("#audience canvas.ink-layer");
+      if (!c) return 0;
+      const d = c.getContext("2d")!.getImageData(0, 0, c.width, c.height).data;
+      let n = 0;
+      for (let i = 0; i < d.length; i += 4) if (d[i + 3]! > 128 && d[i]! > 180 && d[i + 2]! < 80) n++;
+      return n;
+    });
+  const drag = async (from: [number, number], to: [number, number]) => {
+    await presenter.mouse.move(box.x + box.width * from[0], box.y + box.height * from[1]);
+    await presenter.mouse.down();
+    await presenter.mouse.move(box.x + box.width * to[0], box.y + box.height * to[1], { steps: 10 });
+    await presenter.mouse.up();
+  };
+  await expect(presenter.locator("#drawtools")).toBeHidden();
+  await presenter.keyboard.press("d");
+  await expect(presenter.locator("#draw")).toHaveClass(/on/);
+  await expect(presenter.locator("#drawtools")).toBeVisible();
+  const pageBeforeDrawing = await roomPage(main);
+  await drag([0.3, 0.35], [0.7, 0.55]);
+  await expect.poll(inkShown).toBe(1);
+  expect(await redPixels()).toBeGreaterThan(200);
+  expect(await roomPage(main)).toBe(pageBeforeDrawing); // drawing never advances the slide
+  await presenter.locator('.ink-color[data-color="1"]').click();
+  await drag([0.3, 0.6], [0.7, 0.6]);
+  await expect.poll(inkShown).toBe(2);
+  await presenter.locator("#ink-undo").click();
+  await expect.poll(inkShown).toBe(1);
+  // L switches from drawing to the laser; D switches back. Only one tool is on at a time.
+  await presenter.keyboard.press("l");
+  await expect(presenter.locator("#draw")).not.toHaveClass(/on/);
+  await presenter.keyboard.press("d");
+  await expect(presenter.locator("#laser")).not.toHaveClass(/on/);
+  // Board: the whiteboard, with its own ink, shown in the presenter window too.
+  await presenter.locator("#ink-board").click();
+  expect(await room(main, (h) => h.state().audienceMode.kind)).toBe("white");
+  await expect(presenter.locator("#pill")).toHaveText("WHITE");
+  await drag([0.2, 0.2], [0.5, 0.5]);
+  await expect.poll(inkShown).toBe(1);
+  await presenter.locator("#ink-board").click();
+  await expect.poll(inkShown).toBe(1); // back on the slide, with the stroke that was left there
+  await presenter.keyboard.press("c");
+  await expect.poll(inkShown).toBe(0);
+  expect(await redPixels()).toBe(0);
+  await presenter.keyboard.press("Escape"); // leaves Draw mode, does not start ending the talk
+  await expect(presenter.locator("#drawtools")).toBeHidden();
+  await expect(main.locator("#audience")).toBeVisible();
+
   // Black from the presenter keyboard; the pill shows only in that mode.
   await presenter.keyboard.press("b");
   await expect(presenter.locator("#pill")).toHaveText("BLACK");

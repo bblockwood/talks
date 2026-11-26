@@ -30,7 +30,7 @@ npm run revoke -- talk.pdf       # take a deck down
 
 - Type the code, or use **open a PDF from this computer** for a deck that isn't published (no phone remote in that case).
 - **Keys:** → Space Page Down next; ← Page Up previous; Shift+→/← next/previous frame; a number then Enter jumps to that frame; Delete goes back after a jump; B or `.` black; W white (the whiteboard); F freeze; T pause the clock; C clear ink; Esc twice ends the talk.
-- **Two screens** (Chrome or Edge, displays set to extend): choose "Two screens", allow window management, and Start. Slides go full screen on the projector and a presenter window opens on the other screen with notes, the next slide, an overview (Tab), search, a laser pointer (L) and Swap displays (Ctrl+D or Cmd+D).
+- **Two screens** (Chrome or Edge, displays set to extend): choose "Two screens", allow window management, and Start. Slides go full screen on the projector and a presenter window opens on the other screen with notes, the next slide, an overview (Tab), search, a laser pointer (L), drawing with the mouse (D) and Swap displays (Ctrl+D or Cmd+D).
 - Ending the talk wipes the slides from memory and returns to the code screen. Use a private window on a shared computer.
 
 ## On the phone

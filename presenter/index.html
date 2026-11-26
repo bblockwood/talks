@@ -20,6 +20,15 @@
           <div id="current" class="slide"></div>
           <div class="under">
             <button id="laser" title="Laser pointer (L)">Laser</button>
+            <button id="draw" title="Draw on the slide (D)">Draw</button>
+            <span id="drawtools" class="drawtools" hidden>
+              <button class="ink-color" data-color="0" aria-label="Red"></button>
+              <button class="ink-color" data-color="1" aria-label="Blue"></button>
+              <button class="ink-color" data-color="2" aria-label="Black"></button>
+              <button id="ink-undo">Undo</button>
+              <button id="ink-clear" title="Clear (C)">Clear</button>
+              <button id="ink-board" title="Whiteboard (W)">Board</button>
+            </span>
             <button id="swap" title="Swap displays (Ctrl+D, or Cmd+D on a Mac)">Swap displays</button>
             <span id="digits" class="digits"></span>
             <span class="spacer"></span>
