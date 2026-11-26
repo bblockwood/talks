@@ -19,7 +19,7 @@ src/room/      entry screen, audience view, presenter view
 src/remote/    phone remote
 src/shared/    rendering, relay client, UI bits
 relay/         Cloudflare Worker + Durable Object (own package.json, wrangler.toml)
-tools/         publish, codes, revoke CLIs (Node ≥ 20)
+tools/         publish, codes, revoke CLIs (TypeScript run directly by Node ≥ 22.18)
 fixtures/      test decks (see SPEC §11)
 docs/          native-spec.md, decisions.md, progress.md, spikes/
 ```
@@ -37,7 +37,7 @@ docs/          native-spec.md, decisions.md, progress.md, spikes/
 
 - **Allowed dependencies:**
   - Runtime: `pdfjs-dist`, `fflate`, and optionally `preact`.
-  - Dev: `vite`, `typescript`, `vitest`, `@playwright/test`, `wrangler`.
+  - Dev: `vite`, `typescript`, `vitest`, `@playwright/test`, `wrangler`, `@types/node`.
   - Ask before adding anything else.
 - **No CDNs, analytics, or third-party requests at runtime.** Self-host PDF.js assets.
 - **Never** log, print (except the publish tool's stdout), commit, or store talk codes or decrypted deck contents. Only `~/.config/lectern/codes.json` holds codes.

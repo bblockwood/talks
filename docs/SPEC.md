@@ -55,7 +55,7 @@ These are Native §1.1, adapted for the browser:
 
 Everything derives from the **talk code**.
 
-**Code format.** Four words from the EFF short wordlist, hyphen-separated, e.g. `otter-maple-quiz-lunar`.
+**Code format.** One talk-relevant word chosen by Ben at publish time, e.g. `bunching` (Ben, 2026-11-26: expediency over security; see `docs/decisions.md`). `--random` generates four words from the EFF short wordlist instead, hyphen-separated, e.g. `otter-maple-quiz-lunar`, and `--long` six.
 
 **Normalization.** Lowercase, trim, and treat any run of spaces or hyphens as one hyphen.
 
@@ -375,5 +375,5 @@ Reuse Native §12 fixtures 1–9 and 11, adding:
 ## 12. Open decisions (Ben)
 
 - Repo/path name (`talks`).
-- Code length default: four words, or six?
+- ~~Code length default: four words, or six?~~ Decided 2026-11-26: one chosen word.
 - Should the phone remote also allow ink in W3, or wait for W5?

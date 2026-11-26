@@ -19,3 +19,8 @@ Newest last. Each entry: date, decision, why.
   - Tab, L, D, C, T and ? are swallowed and do nothing until their features exist.
   - Cmd+[ and Cmd+] are back/forward as in Native; on Windows that is the Windows key, so Delete is the practical one there.
 - **2026-11-26. Deck title in W1 is the PDF's own Title field**, else the file name. From W2 it comes from `meta.json`.
+- **2026-11-26 (Ben). Talk codes are one talk-relevant word that Ben chooses**, e.g. `bunching`, not four random words. Ben values expediency over security. Consequence, accepted: anyone who guesses the word can open the slides and, from W3, drive them during the talk; a published deck should be treated as roughly public. `--random` (four EFF words) and `--long` (six) remain for a deck that needs more. If no code is given on first publish, the PDF's file name is used.
+- **2026-11-26 (Ben). The file picker stays** on the entry screen as a permanent secondary option, next to the code field. The bundled test decks are shown in development builds only.
+- **2026-11-26 (Ben). `@types/node` is an allowed dev dependency** (added to CLAUDE.md).
+- **2026-11-26. Tools are TypeScript run directly by Node** (`node tools/publish.ts`, built-in type stripping), so they import the same `src/core` crypto and payload code the browser uses, with no build step. This needs Node ≥ 22.18, up from the "Node ≥ 20" in CLAUDE.md (now updated); PDF.js 6 needed ≥ 22.13 anyway.
+- **2026-11-26. HKDF salt is empty.** SPEC §3 gives the `info` strings but no HKDF salt; the PBKDF2 step already carries the salt `lectern-web-v1`. Fixed by the test vectors in `fixtures/crypto-vectors.json`.

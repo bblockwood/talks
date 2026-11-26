@@ -121,3 +121,38 @@ button:disabled {
 .audience.cursor-hidden {
   cursor: none;
 }
+
+/* Entry: the code field (SPEC §5.1). */
+.code-form label {
+  display: block;
+  margin-bottom: 0.4rem;
+  opacity: 0.72;
+}
+.code-row {
+  display: flex;
+  gap: 0.6rem;
+}
+.code-row input {
+  flex: 1;
+  min-width: 0;
+  font: 600 1.8rem ui-monospace, Menlo, Consolas, monospace;
+  padding: 0.6rem 0.8rem;
+  border-radius: 0.4rem;
+  border: 1px solid color-mix(in srgb, currentColor 40%, transparent);
+  background: transparent;
+  color: inherit;
+}
+.code-row button {
+  font-size: 1.2rem;
+  padding: 0 1.6rem;
+}
+.secondary {
+  font-size: 0.9rem;
+  opacity: 0.8;
+}
+.secondary .filepick {
+  padding: 0.2rem 0.6rem;
+}
+.choices[hidden] {
+  display: none;
+}

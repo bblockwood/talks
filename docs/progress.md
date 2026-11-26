@@ -169,3 +169,26 @@ Part A can be done now on your Mac. Part B is for the next time you are at a cla
 6. Press Esc twice to end, and delete the downloaded PDF if you downloaded one.
 
 Write results under a "W1" heading in `docs/spikes/W0.md` or a new `docs/spikes/W1.md`.
+
+
+---
+
+## W2. Publishing and encryption
+
+### W1 results that shape W2
+
+- Part A of the W1 checklist passed on Ben's Mac with a PDF opened from the computer (`docs/spikes/W1.md`). Part B (classroom PC, clicker) is still open and does not block W2.
+- Ben's decisions for W2: one chosen word as the talk code; keep the file picker; `@types/node` allowed.
+
+### Plan (2026-11-26)
+
+1. **Core, shared by browser and tools (WebCrypto only):**
+   - `code.ts`: code normalisation and validation.
+   - `crypto.ts`: PBKDF2 → HKDF key derivation (SPEC §3) and the `.bin` format (SPEC §4.2).
+   - `payload.ts`: the stored ZIP with `deck.pdf`, `meta.json`, `notes.json`, `deck.pdfpc`.
+   - `pptx.ts`: PowerPoint notes extraction (Native §5.1(5)).
+2. **Test vectors.** `fixtures/crypto-vectors.json` and `fixtures/encrypted-sample.bin`, produced by a separate reference implementation (Node's OpenSSL bindings, not WebCrypto), and checked by the same core code in Node (Vitest) and in the browser (Playwright).
+3. **Tools:** `npm run publish`, `npm run codes`, `npm run revoke`. Codes live only in `~/.config/lectern/codes.json` (mode 0600). The `decks` branch is rewritten as a single commit with git plumbing and force-pushed; the tool then triggers the deploy and, with `--wait`, polls until the deck is live.
+4. **Entry screen (SPEC §5.1):** one large code field; "Unlocking…"; fetch `current.json` (no-store, `?t=`) and the `.bin`; decrypt and unzip in memory; title from `meta.json`; plain-language errors. The file picker stays as a secondary option.
+5. **Tests:** unit tests for all of the above; e2e for opening a published deck by code, a wrong code, and the browser side of the vectors.
+6. **Acceptance:** publish a fixture to the real site with `--wait`, open it by code in a headless browser, then revoke it.

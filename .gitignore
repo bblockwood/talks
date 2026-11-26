@@ -9,3 +9,4 @@ playwright-report/
 .env.*.local
 .envrc
 .DS_Store
+.e2e/

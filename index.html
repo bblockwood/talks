@@ -19,17 +19,30 @@
       <p id="boot">Starting… If this message stays, this browser is too old or has JavaScript turned off.</p>
 
       <section id="choose" hidden>
-        <p class="note">
-          Preview build (W1): talk codes arrive in the next milestone. For now, pick a test deck or open a PDF from
-          this computer. The PDF stays in this tab's memory and is not uploaded anywhere.
-        </p>
-        <div id="fixtures" class="choices"></div>
-        <p>
+        <form id="code-form" class="code-form">
+          <label for="code">Talk code</label>
+          <div class="code-row">
+            <input
+              id="code"
+              name="lectern-talk-code"
+              type="text"
+              autocomplete="off"
+              autocapitalize="none"
+              autocorrect="off"
+              spellcheck="false"
+              enterkeyhint="go"
+            />
+            <button id="open" class="primary">Open</button>
+          </div>
+        </form>
+        <p class="secondary">
+          or
           <label class="filepick">
-            Open a PDF from this computer
+            open a PDF from this computer
             <input id="file" type="file" accept="application/pdf,.pdf" />
           </label>
         </p>
+        <div id="fixtures" class="choices" hidden></div>
       </section>
 
       <section id="ready" hidden>
@@ -48,7 +61,7 @@
           <kbd>Delete</kbd> back after a jump · <kbd>B</kbd> black · <kbd>W</kbd> white · <kbd>F</kbd> freeze ·
           <kbd>Esc</kbd> twice to end
         </p>
-        <p><button id="another">Choose another deck</button></p>
+        <p><button id="another">Open a different talk</button></p>
       </section>
 
       <p id="status" class="status" role="status" aria-live="polite"></p>
