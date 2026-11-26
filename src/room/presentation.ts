@@ -1,57 +1,57 @@
-// Presenting in Mode A (SPEC §5.2–5.3): owns the session state while a talk is running, turns
-// keys and clicks into Commands, and wipes everything at the end.
+// Presenting (SPEC §5.2–5.3): the audience window while a talk is running. It wraps the session
+// host with the screen: keys and clicks become Commands, the audience view draws the state, and
+// every presenter view (a second window here, or other devices through the relay) is kept in
+// step. Ending wipes everything.
+import { SessionHost } from "../core/host";
 import { KeyInterpreter } from "../core/keys";
 import { prefetchPages } from "../core/prefetch";
-import { inkCommand, stateBody } from "../core/protocol";
-import type { Ack, Envelope } from "../core/protocol";
-import { apply, initialState } from "../core/session";
-import type { Command, DeckContext, SessionState } from "../core/session";
+import type { Envelope, Message } from "../core/protocol";
+import type { Command, SessionState } from "../core/session";
 import type { Deck } from "../shared/deck";
+import { deviceName } from "../shared/relay-client";
 import type { RenderCache } from "../shared/render-cache";
 import { AudienceView } from "./audience";
-import type { PresenterInfo } from "./presenter-channel";
-import type { RoomLink } from "./room-link";
 
 const HEARTBEAT_MS = 5000;
+
+/** A connection to presenter views: the relay, or the local channel to a second window. */
+export interface HostTransport {
+  onMessage: ((envelope: Envelope) => void) | null;
+  /** Called with "connected" when the connection (re)opens, so the host can resync its listeners. */
+  onStatus: ((status: string) => void) | null;
+  readonly status: string;
+  send(message: Message): void;
+  close(): void;
+}
 
 export interface PresentationOptions {
   /** False when the user chose to present in the window (full screen was blocked). */
   readonly fullscreen: boolean;
-  /** Mode B: the screen to put the audience view on. Omitted, full screen uses the current screen. */
+  /** Two-screen mode: the screen to put the audience view on. Omitted, full screen uses the current screen. */
   readonly screen?: ScreenDetailed;
   /** Called once everything decrypted has been dropped. */
   readonly onEnded: () => void;
   /** The relay connection, when the deck was opened by code. Null means keyboard and clicker only. */
-  readonly link: RoomLink | null;
-  /** `meta.published` of the open deck, sent to phones so they can tell their copy is stale. */
+  readonly relay: HostTransport | null;
+  /** `meta.published` of the open deck, so presenter views can tell their copy is stale. */
   readonly deckPublished: string;
   /** Target length of the talk for the clock, if the deck sets one. */
   readonly targetMs: number | null;
 }
 
 export class Presentation {
-  private state: SessionState = initialState;
+  private readonly host: SessionHost;
   private readonly view: AudienceView;
   private readonly keys = new KeyInterpreter();
-  private readonly context: DeckContext;
+  private readonly transports = new Set<HostTransport>();
   private wakeLock: WakeLockSentinel | null = null;
   private keyboardLocked = false;
   private escapeDown = false;
   private ended = false;
-  private heartbeat: number | undefined;
-  /** Remotes heard from recently: sender id → device name and when. */
-  private readonly remotes = new Map<string, { device: string; at: number }>();
+  private readonly heartbeat: number;
 
-  /** Mode B: called after every state change, and when the talk ends. */
-  onChange: (() => void) | null = null;
-  onEnd: (() => void) | null = null;
-  /** Mode B: Ctrl+D or Cmd+D was pressed in the audience window (swap displays, Native §6.5). */
+  /** Two-screen mode: Ctrl+D or Cmd+D was pressed in the audience window (swap displays, Native §6.5). */
   onSwapKey: (() => void) | null = null;
-
-  /** Moves the full-screen audience view to another screen. Needs a user gesture, or one delegated to this window. */
-  async moveToScreen(screen: ScreenDetailed): Promise<void> {
-    await this.root.requestFullscreen({ navigationUI: "hide", screen });
-  }
 
   /**
    * Starts presenting. Must be called synchronously from the Start click, because full screen
@@ -83,9 +83,31 @@ export class Presentation {
     private readonly root: HTMLElement,
     private readonly options: PresentationOptions,
   ) {
-    this.context = { frames: deck.frames, linksFor: (page) => deck.linksNow(page) };
     this.view = new AudienceView(root, cache, deck);
     this.view.onLink = (page, index) => this.dispatch({ name: "followLink", page, index }, performance.now());
+
+    this.host = new SessionHost(
+      {
+        get frames() {
+          return deck.frames;
+        },
+        get split() {
+          return deck.split;
+        },
+        linksFor: (page) => deck.linksNow(page),
+      },
+      { deckPublished: options.deckPublished, targetMs: options.targetMs, device: deviceName() },
+      {
+        now: () => Date.now(),
+        send: (message) => {
+          for (const transport of this.transports) transport.send(message);
+        },
+        applied: (state, inputTime) => this.render(state, inputTime ?? performance.now()),
+        pointer: (x, y, visible) => this.view.setPointer(x, y, visible),
+        end: () => void this.end(),
+        status: () => this.status(),
+      },
+    );
 
     window.addEventListener("keydown", this.onKeyDown, { capture: true });
     window.addEventListener("keyup", this.onKeyUp, { capture: true });
@@ -95,24 +117,16 @@ export class Presentation {
 
     if (document.fullscreenElement === root) void this.lockKeyboard();
     void this.requestWakeLock();
-    // The clock runs while presenting (Native §6.7).
-    this.state = { ...initialState, timer: { accumulatedMs: 0, runningSince: Date.now(), targetMs: options.targetMs } };
-    this.render(performance.now());
+    this.render(this.host.state, performance.now());
 
-    const link = options.link;
-    if (link) {
-      link.onMessage = this.onRelayMessage;
-      link.onStatus = (status) => {
-        if (status === "connected") this.broadcast(); // resync whoever is listening after a reconnect
-      };
-      this.heartbeat = window.setInterval(() => this.broadcast(), HEARTBEAT_MS);
-      this.broadcast();
-    }
+    if (options.relay) this.addTransport(options.relay);
+    this.heartbeat = window.setInterval(() => this.host.broadcast(), HEARTBEAT_MS);
 
     if (import.meta.env.DEV) {
       // Development and e2e only: lets tests read the state without anything showing on the audience view.
       (window as unknown as { __lectern?: unknown }).__lectern = {
-        state: () => this.state,
+        state: () => this.host.state,
+        session: () => this.host.session,
         shownPage: () => this.view.shownPage,
         links: (page: number) => this.deck.linksNow(page),
         frames: () => this.deck.frames.frames,
@@ -123,104 +137,34 @@ export class Presentation {
     }
   }
 
-  /**
-   * Applies a command from any input. `inputTime` is a `performance.now()` timestamp. `ack` names
-   * the relay message that carried the command, so its sender can time the round trip.
-   */
-  dispatch(command: Command, inputTime: number, ack?: Ack): void {
+  /** Connects a set of presenter views. They are told who this is and what the state is. */
+  addTransport(transport: HostTransport): void {
     if (this.ended) return;
-    const next = apply(this.state, command, this.context, Date.now());
-    if (next !== this.state) {
-      const previous = this.state;
-      this.state = next;
-      this.render(inputTime);
-      // Points streaming into a stroke change nothing a phone needs to hear about; everything else does.
-      const onlyPoints =
-        command.name === "inkAppend" &&
-        next.ink.page.length === previous.ink.page.length &&
-        next.ink.board.length === previous.ink.board.length;
-      if (!onlyPoints || ack) this.broadcast(ack);
-      this.onChange?.();
-    } else if (ack) {
-      this.broadcast(ack); // nothing changed (e.g. Next on the last slide), but the sender still gets its answer
-    }
-  }
-
-  /** The room PC is authoritative: it sends `state` after every change and as a heartbeat (SPEC §8.2). */
-  private broadcast(ack?: Ack): void {
-    if (this.ended) return;
-    this.options.link?.send({
-      type: "state",
-      body: stateBody(this.state, this.deck.frames, Date.now(), this.options.deckPublished, ack, this.deck.split),
-    });
-  }
-
-  get currentState(): SessionState {
-    return this.state;
-  }
-
-  /** The presenter's pointer, from the presenter window or a phone. */
-  pointer(x: number, y: number, visible: boolean): void {
-    if (this.ended || !Number.isFinite(x) || !Number.isFinite(y)) return;
-    this.view.setPointer(Math.min(1, Math.max(0, x)), Math.min(1, Math.max(0, y)), visible);
-  }
-
-  /** Status for the presenter view only; none of it is ever shown to the audience. */
-  info(): PresenterInfo {
-    const now = performance.now();
-    for (const [sid, remote] of this.remotes) if (now - remote.at > 10_000) this.remotes.delete(sid);
-    const draws = performance.getEntriesByName("lectern:input-to-draw").map((e) => e.duration);
-    const sorted = [...draws].sort((a, b) => a - b);
-    return {
-      relay: this.options.link?.status ?? "unavailable",
-      remotes: [...this.remotes.values()].map((r) => r.device || "remote"),
-      draw: {
-        count: draws.length,
-        medianMs: sorted[Math.floor(sorted.length / 2)] ?? null,
-        lastMs: draws.at(-1) ?? null,
-        maxMs: sorted.at(-1) ?? null,
-      },
-      cacheMisses: this.cache.misses,
+    this.transports.add(transport);
+    transport.onMessage = (envelope) => {
+      if (!this.ended) this.host.receive(envelope);
     };
+    transport.onStatus = (status) => {
+      if (status === "connected" && !this.ended) this.host.announce(); // resync whoever is listening
+    };
+    this.host.announce();
   }
 
-  private readonly onRelayMessage = (envelope: Envelope): void => {
-    if (this.ended) return;
-    const known = this.remotes.get(envelope.sid);
-    if (envelope.type === "hello") {
-      if (envelope.body.role !== "room") this.remotes.set(envelope.sid, { device: envelope.body.device, at: performance.now() });
-    } else if (known) {
-      known.at = performance.now();
-    } else {
-      this.remotes.set(envelope.sid, { device: "", at: performance.now() });
-    }
-    switch (envelope.type) {
-      case "hello":
-        if (envelope.body.role !== "room") this.broadcast(); // late joiners sync
-        break;
-      case "command":
-        // Anyone who can decrypt is authorised: knowing the code is the credential (SPEC §8.2).
-        this.dispatch(envelope.body, performance.now(), { sid: envelope.sid, seq: envelope.seq });
-        break;
-      case "pointer":
-        this.pointer(envelope.body.x, envelope.body.y, envelope.body.visible);
-        break;
-      case "ink": {
-        // Each stroke id is prefixed with its sender, so two devices can draw at once.
-        const command = inkCommand(envelope.sid, envelope.body);
-        if (command) this.dispatch(command, performance.now());
-        break;
-      }
-      case "ping":
-        this.options.link?.send({ type: "pong", body: { t: envelope.body.t } });
-        break;
-      case "end":
-        void this.end();
-        break;
-      default:
-        break;
-    }
-  };
+  removeTransport(transport: HostTransport): void {
+    this.transports.delete(transport);
+    transport.onMessage = null;
+    transport.onStatus = null;
+  }
+
+  /** Applies a command from this window's own keyboard or mouse. `inputTime` is a `performance.now()` timestamp. */
+  dispatch(command: Command, inputTime: number): void {
+    if (!this.ended) this.host.dispatch(command, inputTime);
+  }
+
+  /** Moves the full-screen audience view to another screen. Needs a user gesture, or one delegated to this window. */
+  async moveToScreen(screen: ScreenDetailed): Promise<void> {
+    await this.root.requestFullscreen({ navigationUI: "hide", screen });
+  }
 
   /** End (SPEC §5.3): leave full screen, release locks, drop every decrypted byte and pixel. */
   async end(navigate = true): Promise<void> {
@@ -234,8 +178,9 @@ export class Presentation {
     if (import.meta.env.DEV) delete (window as unknown as { __lectern?: unknown }).__lectern;
 
     window.clearInterval(this.heartbeat);
-    this.onEnd?.();
-    this.options.link?.close();
+    for (const transport of this.transports) transport.close();
+    this.transports.clear();
+    this.onSwapKey = null;
     this.view.wipe();
     this.cache.wipe();
     this.root.hidden = true;
@@ -247,11 +192,27 @@ export class Presentation {
     if (navigate) this.options.onEnded();
   }
 
-  private render(inputTime: number): void {
-    const pages = prefetchPages(this.state, this.deck.frames);
+  /** The room PC's own status, for presenter views only; none of it is ever shown to the audience. */
+  private status(): { relay: string; draw: { count: number; medianMs: number | null; lastMs: number | null; maxMs: number | null }; cacheMisses: number } {
+    const draws = performance.getEntriesByName("lectern:input-to-draw").map((e) => e.duration);
+    const sorted = [...draws].sort((a, b) => a - b);
+    return {
+      relay: this.options.relay?.status ?? "unavailable",
+      draw: {
+        count: draws.length,
+        medianMs: sorted[Math.floor(sorted.length / 2)] ?? null,
+        lastMs: draws.at(-1) ?? null,
+        maxMs: sorted.at(-1) ?? null,
+      },
+      cacheMisses: this.cache.misses,
+    };
+  }
+
+  private render(state: SessionState, inputTime: number): void {
+    const pages = prefetchPages(state, this.deck.frames);
     this.cache.want(pages);
     for (const page of pages) void this.deck.loadLinks(page);
-    this.view.show(this.state, inputTime);
+    this.view.show(state, inputTime);
   }
 
   private readonly onKeyDown = (ev: KeyboardEvent): void => {
@@ -271,7 +232,7 @@ export class Presentation {
         repeat: ev.repeat,
         time: ev.timeStamp,
       },
-      this.state,
+      this.host.state,
     );
     if (result.handled) ev.preventDefault();
 

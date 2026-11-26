@@ -143,7 +143,14 @@ describe("message validation", () => {
       history: [0, 3],
       timer: { accumulatedMs: 60_000, runningSince: 1_000_000, targetMs: 1_800_000 },
     };
-    const body = stateBody(state, frames, 1_030_000, "2026-11-26T00:00:00.000Z", { sid: "aabbccddeeff0011", seq: 9 });
+    const room = { relay: "connected", devices: ["iPhone", "Mac"], draw: { count: 3, medianMs: 1.5, lastMs: 0.4, maxMs: 9 }, cacheMisses: 1 };
+    const body = stateBody(state, frames, 1_030_000, {
+      deckPublished: "2026-11-26T00:00:00.000Z",
+      session: "0011223344556677",
+      split: "right",
+      room,
+      ack: { sid: "aabbccddeeff0011", seq: 9 },
+    });
     expect(body).toMatchObject({
       page: 5,
       frameLabel: "3",
@@ -154,6 +161,9 @@ describe("message validation", () => {
       history: [0, 3],
       timer: { running: true, elapsedMs: 90_000, targetMs: 1_800_000 },
       ack: { sid: "aabbccddeeff0011", seq: 9 },
+      session: "0011223344556677",
+      split: "right",
+      room,
     });
     expect(parseMessage("state", JSON.parse(JSON.stringify(body)))).toEqual({ type: "state", body });
   });

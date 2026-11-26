@@ -9,7 +9,7 @@ import type { LinkStatus } from "../shared/relay-client";
 export class RoomLink {
   /** Set by the presentation while a talk is running. */
   onMessage: ((envelope: Envelope) => void) | null = null;
-  onStatus: ((status: LinkStatus) => void) | null = null;
+  onStatus: ((status: string) => void) | null = null;
   status: LinkStatus = "connecting";
   private readonly client: RelayClient;
 

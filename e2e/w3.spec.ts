@@ -5,21 +5,35 @@ import type { Browser, Page } from "@playwright/test";
 import { buildDeck } from "../tools/lib/build.ts";
 import type { BuiltDeck } from "../tools/lib/build.ts";
 
-// Room PC page and phone page, talking through the local relay (wrangler dev) with real encryption.
+// A room PC page and presenter views on other "devices" (pages at phone, tablet and laptop
+// sizes), joined by code through the local relay (wrangler dev) with real encryption.
 const CODE = "e2e-remote-code";
 const DECKS = path.resolve(".e2e/d");
 const SRC = path.resolve(".e2e/w3src");
 
 interface RoomHook {
   state(): { committedPage: number; audienceMode: { kind: string }; timer: { runningSince: number | null } };
+  session(): string;
   shownPage(): number | null | undefined;
   pointerVisible(): boolean;
+  inkShown(): number;
 }
-interface RemoteHook {
+interface ViewHook {
   taps(): number[];
   rtts(): number[];
-  dropConnection(): void;
+  drop(): void;
+  layout(): string;
+  kind(): string;
+  shownPage(): number | null;
+  ink(): { page: number; board: number };
+  hits(): { page: number }[];
 }
+const roomHook = <T>(page: Page, pick: (h: RoomHook) => T): Promise<T> =>
+  page.evaluate((src) => (0, eval)(`(${src})`)((window as unknown as { __lectern: RoomHook }).__lectern) as T, pick.toString());
+const viewHook = <T>(page: Page, pick: (h: ViewHook) => T): Promise<T> =>
+  page.evaluate((src) => (0, eval)(`(${src})`)((window as unknown as { __console: ViewHook }).__console) as T, pick.toString());
+const roomPage = (page: Page) => page.evaluate(() => (window as unknown as { __lectern?: RoomHook }).__lectern?.shownPage());
+const roomMode = (page: Page) => roomHook(page, (h) => h.state().audienceMode.kind);
 
 function place(deck: BuiltDeck): void {
   const dir = path.join(DECKS, deck.deckId);
@@ -41,39 +55,53 @@ test.beforeAll(async () => {
 });
 test.afterAll(() => rmSync(path.resolve(".e2e"), { recursive: true, force: true }));
 
-const roomPage = (page: Page) => page.evaluate(() => (window as unknown as { __lectern?: RoomHook }).__lectern?.shownPage());
-const roomMode = (page: Page) => page.evaluate(() => (window as unknown as { __lectern?: RoomHook }).__lectern?.state().audienceMode.kind);
-const pointerOn = (page: Page) => page.evaluate(() => (window as unknown as { __lectern?: RoomHook }).__lectern?.pointerVisible());
-
-async function openRoom(browser: Browser): Promise<Page> {
+async function openRoom(browser: Browser, start = false): Promise<Page> {
   const room = await browser.newPage();
   await room.goto("./");
   await room.locator("#code").fill(CODE);
   await room.locator("#code").press("Enter");
   await expect(room.locator("#ready")).toBeVisible();
+  if (start) {
+    await room.locator("#start").click();
+    await expect.poll(() => roomPage(room)).toBe(0);
+  }
   return room;
 }
 
-async function openPhone(browser: Browser, remember = false): Promise<Page> {
-  const context = await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2 });
-  const phone = await context.newPage();
-  await phone.goto("remote/");
-  await phone.locator("#code").fill(CODE);
-  if (remember) await phone.locator("#remember").check();
-  await phone.locator("#open").click();
-  await expect(phone.locator("#console")).toBeVisible();
-  return phone;
+const PHONE = { width: 390, height: 844 };
+const LAPTOP = { width: 1280, height: 800 };
+
+/** A presenter view on another device, joined by code. */
+async function openView(browser: Browser, viewport = PHONE, remember = false): Promise<Page> {
+  const context = await browser.newContext({ viewport, deviceScaleFactor: viewport.width < 700 ? 2 : 1 });
+  const view = await context.newPage();
+  await view.goto("present/");
+  await view.locator("#code").fill(CODE);
+  if (remember) await view.locator("#remember").check();
+  await view.locator("#open").click();
+  await expect(view.locator("#console")).toBeVisible();
+  return view;
 }
 
-test("the phone drives the room PC: steps, notes, clock, preview, back, black, pointer, end", async ({ browser }) => {
-  const room = await openRoom(browser);
-  await expect(room.locator("#phone-status")).toContainText("Phone can connect");
+async function drag(page: Page, selector: string, from: [number, number], to: [number, number], holdMs = 0): Promise<void> {
+  const box = (await page.locator(selector).boundingBox())!;
+  await page.mouse.move(box.x + box.width * from[0], box.y + box.height * from[1]);
+  await page.mouse.down();
+  if (holdMs > 0) await page.waitForTimeout(holdMs);
+  await page.mouse.move(box.x + box.width * to[0], box.y + box.height * to[1], { steps: 12 });
+  await page.mouse.up();
+}
 
-  const phone = await openPhone(browser, true);
-  const phoneErrors: string[] = [];
+test("a phone drives the room PC: steps, notes, clock, slide grid, back, black, freeze, end", async ({ browser }) => {
+  const room = await openRoom(browser);
+  await expect(room.locator("#phone-status")).toContainText("Other devices can join");
+
+  const phone = await openView(browser, PHONE, true);
+  const errors: string[] = [];
   phone.on("console", (m) => {
-    if (m.type() === "error") phoneErrors.push(m.text());
+    if (m.type() === "error") errors.push(m.text());
   });
+  expect(await viewHook(phone, (h) => h.layout())).toBe("compact");
   // The room PC has the deck open but has not started: the phone says so.
   await expect(phone.locator("#link")).toHaveText("Room PC is ready: click Start there");
   await expect(phone.locator("#next")).toBeDisabled();
@@ -86,7 +114,6 @@ test("the phone drives the room PC: steps, notes, clock, preview, back, black, p
   await expect(phone.locator("#timer")).toHaveText(/^0:0\d · (30:00|29:5\d)$/);
   await expect(phone.locator("#timer")).toHaveClass(/good/);
 
-  // Next from the phone.
   await phone.locator("#next").click();
   await expect.poll(() => roomPage(room)).toBe(1);
   await expect(phone.locator("#frame-line")).toHaveText("Frame 2 of 7");
@@ -94,39 +121,30 @@ test("the phone drives the room PC: steps, notes, clock, preview, back, black, p
   await expect(phone.locator("#notes")).toContainText("Sidecar note for frame 2");
   await phone.locator("#next").click();
   await expect(phone.locator("#build-line")).toHaveText("Build 1 of 3");
-  await expect(phone.locator("#notes")).not.toContainText("Sidecar note for frame 2");
   await expect(phone.locator("#notes")).not.toContainText("No notes for this slide");
 
   // The room keyboard and the phone stay in step: the room PC reports every change.
   await room.keyboard.press("ArrowRight");
   await expect(phone.locator("#build-line")).toHaveText("Build 2 of 3");
   await room.keyboard.press("ArrowRight");
-  await expect(phone.locator("#build-line")).toHaveText("Build 3 of 3");
   await expect(phone.locator("#notes")).toContainText("Sidecar note for build 3 of frame 3 only");
   await expect(phone.locator("#notes strong")).toHaveText("markdown");
 
   // Swipe left on the slide = next.
-  const slide = (await phone.locator("#current").boundingBox())!;
-  await phone.mouse.move(slide.x + slide.width * 0.8, slide.y + slide.height / 2);
-  await phone.mouse.down();
-  await phone.mouse.move(slide.x + slide.width * 0.3, slide.y + slide.height / 2, { steps: 4 });
-  await phone.mouse.up();
+  await drag(phone, "#current", [0.8, 0.5], [0.3, 0.5]);
   await expect.poll(() => roomPage(room)).toBe(5);
 
-  // Private browse: a thumbnail tap previews on the phone only; Show commits it.
+  // Slides: picking one jumps at once (one behaviour everywhere); the grid stays open; Back undoes it.
   await phone.locator("#t-slides").click();
   await expect(phone.locator("#grid .thumb")).toHaveCount(7);
   await expect(phone.locator("#grid .thumb.current .cap span").first()).toHaveText("4");
   await phone.locator("#grid .thumb").nth(6).click();
-  await expect(phone.locator("#preview-badge")).toBeVisible();
-  await expect(phone.locator("#frame-line")).toHaveText("Frame 7 of 7");
-  await phone.waitForTimeout(400);
-  expect(await roomPage(room)).toBe(5); // nothing happened on the room screen
-  await phone.locator("#preview-show").click();
   await expect.poll(() => roomPage(room)).toBe(9);
-  await expect(phone.locator("#preview-badge")).toBeHidden();
-
-  // Back returns to where the jump started.
+  await expect(phone.locator("#grid")).toBeVisible();
+  await expect(phone.locator("#grid .thumb.current .cap span").first()).toHaveText("7");
+  await phone.locator("#overview-close").click();
+  await expect(phone.locator("#grid")).toBeHidden();
+  await expect(phone.locator("#frame-line")).toHaveText("Frame 7 of 7");
   await expect(phone.locator("#t-back")).toBeEnabled();
   await phone.locator("#t-back").click();
   await expect.poll(() => roomPage(room)).toBe(5);
@@ -134,46 +152,42 @@ test("the phone drives the room PC: steps, notes, clock, preview, back, black, p
   // Black and freeze.
   await phone.locator("#t-black").click();
   await expect.poll(() => roomMode(room)).toBe("black");
-  await expect(phone.locator("#mode-badge")).toHaveText("ROOM SCREEN BLACK");
+  await expect(phone.locator("#pill")).toHaveText("BLACK");
   await expect(phone.locator("#t-black")).toHaveClass(/on/);
   await phone.locator("#t-black").click();
   await expect.poll(() => roomMode(room)).toBe("live");
+  await expect(phone.locator("#pill")).toBeHidden();
   await phone.locator("#t-freeze").click();
-  await expect.poll(() => roomMode(room)).toBe("frozen");
-  await expect(phone.locator("#mode-badge")).toHaveText("ROOM SCREEN FROZEN");
+  await expect(phone.locator("#pill")).toHaveText("FROZEN");
   await phone.locator("#next").click();
   await expect(phone.locator("#build-line")).toHaveText("Build 2 of 2"); // the presenter moved on
   expect(await roomPage(room)).toBe(5); // the audience still sees the frozen page
   await phone.locator("#t-freeze").click();
   await expect.poll(() => roomPage(room)).toBe(6);
 
-  // Pointer: long-press, then drag. It disappears from the room screen when the finger lifts.
-  expect(await pointerOn(room)).toBe(false);
+  // Pointer: press and hold, then drag. It disappears from the room screen when the finger lifts.
+  expect(await roomHook(room, (h) => h.pointerVisible())).toBe(false);
+  const slide = (await phone.locator("#current").boundingBox())!;
   await phone.mouse.move(slide.x + slide.width / 2, slide.y + slide.height / 2);
   await phone.mouse.down();
   await phone.waitForTimeout(500);
   await phone.mouse.move(slide.x + slide.width * 0.6, slide.y + slide.height * 0.4, { steps: 5 });
-  await expect.poll(() => pointerOn(room)).toBe(true);
+  await expect.poll(() => roomHook(room, (h) => h.pointerVisible())).toBe(true);
   expect(await roomPage(room)).toBe(6); // a press-and-drag is not a swipe
   await phone.mouse.up();
-  await expect.poll(() => pointerOn(room), { timeout: 3000 }).toBe(false);
-
-  if (process.env["LECTERN_SHOTS"]) await phone.screenshot({ path: `${process.env["LECTERN_SHOTS"]}/phone.png` });
+  await expect.poll(() => roomHook(room, (h) => h.pointerVisible()), { timeout: 3000 }).toBe(false);
 
   // Clock: pause from the phone.
   await phone.locator("#timer").click();
   await phone.locator("#clock-toggle").click();
   await expect(phone.locator("#clock-toggle")).toHaveText("Resume");
   await expect(phone.locator("#timer")).toHaveClass(/paused/);
-  expect(await room.evaluate(() => (window as unknown as { __lectern: RoomHook }).__lectern.state().timer.runningSince)).toBeNull();
+  expect(await roomHook(room, (h) => h.state().timer.runningSince)).toBeNull();
   await phone.locator("#clock-toggle").click();
 
   // The measured numbers Ben reads off for the acceptance test.
   await expect(phone.locator("#diag")).toHaveText(/ping \d+ ms · tap → slide \d+ ms \(median of \d+\)/);
-  const numbers = await phone.evaluate(() => {
-    const h = (window as unknown as { __remote: RemoteHook }).__remote;
-    return { taps: h.taps().map(Math.round), rtts: h.rtts().map(Math.round) };
-  });
+  const numbers = await viewHook(phone, (h) => ({ taps: h.taps().map(Math.round), rtts: h.rtts().map(Math.round) }));
   console.log("local relay: command round trips ms", JSON.stringify(numbers.taps), "ping ms", JSON.stringify(numbers.rtts));
 
   // Remembered on the phone because the box was ticked; nothing is ever stored on the room PC.
@@ -188,18 +202,247 @@ test("the phone drives the room PC: steps, notes, clock, preview, back, black, p
   await expect(room.locator("#audience")).toBeHidden();
   await expect(phone.locator("#link")).toHaveText("Waiting for the room PC", { timeout: 15_000 });
 
-  expect(phoneErrors).toEqual([]);
+  expect(errors).toEqual([]);
+  await phone.context().close();
+  await room.close();
+});
+
+test("a laptop joined by code gets the full presenter view and drives the room PC", async ({ browser }) => {
+  const room = await openRoom(browser, true);
+  const laptop = await openView(browser, LAPTOP);
+  const errors: string[] = [];
+  laptop.on("console", (m) => {
+    if (m.type() === "error") errors.push(m.text());
+  });
+  await expect(laptop.locator("#link")).toContainText("Connected to room PC");
+
+  // Wide layout: slide, next slide and notes side by side; no big buttons with a mouse.
+  expect(await viewHook(laptop, (h) => h.layout())).toBe("wide");
+  await expect(laptop.locator("#bar-where")).toHaveText("Frame 1/7");
+  await expect(laptop.locator("#steps")).toBeHidden();
+  await expect(laptop.locator("#next-slide")).toBeVisible();
+  const current = (await laptop.locator("#current").boundingBox())!;
+  const nextSlide = (await laptop.locator("#next-slide").boundingBox())!;
+  expect(nextSlide.x).toBeGreaterThan(current.x + current.width); // beside it, not below
+  expect(current.width).toBeGreaterThan(600);
+
+  // Keys, as on the room PC.
+  await laptop.keyboard.press("ArrowRight");
+  await expect.poll(() => roomPage(room)).toBe(1);
+  await laptop.keyboard.press("PageDown");
+  await expect(laptop.locator("#bar-where")).toHaveText("Frame 3/7 · 1/3");
+  await expect(laptop.locator("#notes")).toContainText("every build");
+  // A click on the current slide advances; so does a click on the next slide.
+  await laptop.locator("#current").click({ position: { x: 300, y: 100 } });
+  await expect.poll(() => roomPage(room)).toBe(3);
+  await laptop.locator("#next-slide").click();
+  await expect.poll(() => roomPage(room)).toBe(4);
+
+  // Jump by number; Back and Forward name where they go.
+  await laptop.keyboard.type("6");
+  await expect(laptop.locator("#digits")).toContainText("Go to frame 6");
+  await laptop.keyboard.press("Enter");
+  await expect.poll(() => roomPage(room)).toBe(8);
+  await expect(laptop.locator("#t-back")).toHaveAttribute("title", /Back to frame 3/);
+  await laptop.locator("#t-back").click();
+  await expect.poll(() => roomPage(room)).toBe(4);
+  await expect(laptop.locator("#t-forward")).toHaveAttribute("title", /Forward to frame 6/);
+
+  // Overview: Tab swaps the right column for the grid; a click jumps at once and the overview stays.
+  await laptop.keyboard.press("Tab");
+  await expect(laptop.locator("#grid .thumb")).toHaveCount(7);
+  await expect(laptop.locator("#next-slide")).toBeHidden();
+  await laptop.locator("#grid .thumb").nth(4).click();
+  await expect.poll(() => roomPage(room)).toBe(7);
+  await expect(laptop.locator("#grid .thumb.current .cap span").first()).toHaveText("5");
+  await laptop.keyboard.press("ArrowLeft"); // keys keep their presenting meaning with the overview open
+  await expect.poll(() => roomPage(room)).toBe(6);
+
+  // Frozen: the frame the audience sees is ringed separately from the presenter's.
+  await laptop.keyboard.press("f");
+  await expect(laptop.locator("#pill")).toHaveText("FROZEN");
+  await laptop.keyboard.press("ArrowRight");
+  await expect(laptop.locator("#grid .thumb.audience .cap span").first()).toHaveText("4");
+  await expect(laptop.locator("#grid .thumb.current .cap span").first()).toHaveText("5");
+  await laptop.keyboard.press("f");
+  await expect.poll(() => roomPage(room)).toBe(7); // unfrozen: the room screen catches up
+
+  // Search: results grouped by frame; Enter jumps; typing does not drive the slides.
+  const before = await roomPage(room);
+  await laptop.locator("#search").fill("enduserslide");
+  await expect(laptop.locator("#results .hit")).toHaveCount(1);
+  await expect(laptop.locator("#results .hit .frame")).toHaveText("Frame 5");
+  expect(await roomPage(room)).toBe(before);
+  await laptop.locator("#search").fill("NOTES");
+  await expect.poll(() => laptop.locator("#results .hit").count()).toBeGreaterThan(1);
+  const target = await viewHook(laptop, (h) => h.hits()[1]!.page);
+  await laptop.locator("#search").press("ArrowDown");
+  await laptop.locator("#search").press("Enter");
+  await expect.poll(() => roomPage(room)).toBe(target);
+  // Esc clears the search, then closes the overview; neither counts towards ending the talk.
+  await laptop.locator("#search").press("Escape");
+  await expect(laptop.locator("#grid")).toBeVisible();
+  await laptop.locator("#search").press("Escape");
+  await expect(laptop.locator("#next-slide")).toBeVisible();
+  await expect(room.locator("#audience")).toBeVisible();
+
+  // Laser: L, then the mouse over the current slide puts the pointer on the room screen.
+  await laptop.keyboard.press("l");
+  await expect(laptop.locator("#t-laser")).toHaveClass(/on/);
+  const box = (await laptop.locator("#current").boundingBox())!;
+  await laptop.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+  await laptop.mouse.move(box.x + box.width / 2 + 30, box.y + box.height / 2 + 10, { steps: 4 });
+  await expect.poll(() => roomHook(room, (h) => h.pointerVisible())).toBe(true);
+  await laptop.keyboard.press("Escape"); // turns the laser off, does not start ending the talk
+  await expect(laptop.locator("#t-laser")).not.toHaveClass(/on/);
+  await expect.poll(() => roomHook(room, (h) => h.pointerVisible()), { timeout: 3000 }).toBe(false);
+
+  // The timings panel shows the room PC's numbers, here on another device.
+  await laptop.keyboard.press("Control+Shift+D");
+  await expect(laptop.locator("#debug")).toContainText("input → audience draw");
+  await expect(laptop.locator("#debug")).toContainText(/median \d/);
+  await expect(laptop.locator("#debug")).toContainText("relay, wide");
+  await laptop.keyboard.press("Control+Shift+D");
+
+  // Esc twice here ends the talk on the room PC.
+  await laptop.keyboard.press("Escape");
+  await laptop.keyboard.press("Escape");
+  await expect(room.locator("#code")).toBeVisible();
+  expect(errors).toEqual([]);
+  await laptop.context().close();
+  await room.close();
+});
+
+test("several presenter views at once: each drives, all stay in step, and ink reaches every one", async ({ browser }) => {
+  const room = await openRoom(browser, true);
+  const laptop = await openView(browser, LAPTOP);
+  const phone = await openView(browser, PHONE);
+  await expect(laptop.locator("#link")).toContainText("Connected to room PC");
+  await expect(phone.locator("#link")).toContainText("Connected to room PC");
+
+  await phone.locator("#next").click();
+  await expect(laptop.locator("#bar-where")).toHaveText("Frame 2/7");
+  await laptop.keyboard.press("ArrowRight");
+  await expect(phone.locator("#build-line")).toHaveText("Build 1 of 3");
+  await expect.poll(() => roomPage(room)).toBe(2);
+
+  // Both are listed, on either device.
+  await laptop.keyboard.press("Control+Shift+D");
+  await expect(laptop.locator("#debug")).toContainText(/presenter views\s+.+, .+/);
+  await laptop.keyboard.press("Control+Shift+D");
+
+  // Draw on the laptop with the mouse (D): the room screen shows it, and so does the phone.
+  const ink = (page: Page) => viewHook(page, (h) => h.ink());
+  await laptop.keyboard.press("d");
+  await expect(laptop.locator("#drawbar")).toBeVisible();
+  await drag(laptop, "#current", [0.3, 0.3], [0.7, 0.6]);
+  await expect.poll(() => roomHook(room, (h) => h.inkShown())).toBe(1);
+  await expect.poll(() => ink(phone)).toEqual({ page: 1, board: 0 });
+  expect(await ink(laptop)).toEqual({ page: 1, board: 0 }); // not doubled by its own echo
+  expect(await roomPage(room)).toBe(2); // drawing never advances the slide
+
+  // Draw on the phone too; the laptop gets that stroke. Undo from the laptop removes the newest.
+  await phone.locator("#t-draw").click();
+  await phone.locator('.ink-color[data-color="1"]').click();
+  await drag(phone, "#current", [0.2, 0.7], [0.8, 0.7]);
+  await expect.poll(() => roomHook(room, (h) => h.inkShown())).toBe(2);
+  await expect.poll(() => ink(laptop)).toEqual({ page: 2, board: 0 });
+  await laptop.locator("#ink-undo").click();
+  await expect.poll(() => roomHook(room, (h) => h.inkShown())).toBe(1);
+  await expect.poll(() => ink(phone)).toEqual({ page: 1, board: 0 });
+
+  // A view that joins late gets a full copy of the ink on screen.
+  const tablet = await openView(browser, { width: 820, height: 1180 });
+  expect(await viewHook(tablet, (h) => h.layout())).toBe("stacked");
+  await expect(tablet.locator("#link")).toContainText("Connected to room PC");
+  await expect.poll(() => ink(tablet)).toEqual({ page: 1, board: 0 });
+
+  // The whiteboard, from the phone: every view shows it; its ink is kept apart from the slide's.
+  await phone.locator("#ink-board").click();
+  await expect.poll(() => roomMode(room)).toBe("white");
+  await expect(laptop.locator("#pill")).toHaveText("WHITEBOARD");
+  await drag(phone, "#current", [0.3, 0.3], [0.6, 0.3]);
+  await expect.poll(() => ink(laptop)).toEqual({ page: 1, board: 1 });
+  await expect.poll(() => ink(tablet)).toEqual({ page: 1, board: 1 });
+  await phone.locator("#ink-board").click();
+  await expect.poll(() => roomHook(room, (h) => h.inkShown())).toBe(1);
+
+  // C on the room keyboard clears the slide's ink everywhere; leaving the page would too.
+  await room.keyboard.press("c");
+  await expect.poll(() => roomHook(room, (h) => h.inkShown())).toBe(0);
+  await expect.poll(() => ink(phone)).toEqual({ page: 0, board: 1 });
+  await expect.poll(() => ink(laptop)).toEqual({ page: 0, board: 1 });
+  await drag(phone, "#current", [0.2, 0.2], [0.4, 0.4]);
+  await expect.poll(() => ink(tablet)).toEqual({ page: 1, board: 1 });
+  await laptop.keyboard.press("Escape"); // leaves Draw on the laptop
+  await laptop.keyboard.press("ArrowRight");
+  await expect.poll(() => ink(tablet)).toEqual({ page: 0, board: 1 });
+  await expect.poll(() => ink(phone)).toEqual({ page: 0, board: 1 });
+
+  // Draw off on the phone restores swiping.
+  await phone.locator("#t-draw").click();
+  await expect(phone.locator("#drawbar")).toBeHidden();
+  const before = (await roomPage(room)) ?? 0;
+  await drag(phone, "#current", [0.8, 0.5], [0.3, 0.5]);
+  await expect.poll(() => roomPage(room)).toBe(before + 1);
+
+  for (const view of [laptop, phone, tablet]) await view.context().close();
+  await room.close();
+});
+
+test("ink on the room screen: colours, undo, the whiteboard", async ({ browser }) => {
+  const room = await openRoom(browser, true);
+  const phone = await openView(browser);
+  await expect(phone.locator("#link")).toContainText("Connected to room PC");
+  /** Count of painted pixels on the audience's ink layer, by colour. */
+  const inkPixels = () =>
+    room.evaluate(() => {
+      const c = document.querySelector<HTMLCanvasElement>("#audience canvas.ink-layer");
+      if (!c) return { red: 0, blue: 0, any: 0 };
+      const d = c.getContext("2d")!.getImageData(0, 0, c.width, c.height).data;
+      let red = 0, blue = 0, any = 0;
+      for (let i = 0; i < d.length; i += 4) {
+        if (d[i + 3]! < 128) continue;
+        any++;
+        if (d[i]! > 180 && d[i + 2]! < 80) red++;
+        if (d[i + 2]! > 180 && d[i]! < 80) blue++;
+      }
+      return { red, blue, any };
+    });
+
+  await phone.locator("#t-draw").click();
+  await drag(phone, "#current", [0.2, 0.3], [0.8, 0.6]);
+  await expect.poll(async () => (await inkPixels()).red).toBeGreaterThan(200);
+  await phone.locator('.ink-color[data-color="1"]').click();
+  await drag(phone, "#current", [0.2, 0.7], [0.8, 0.7]);
+  await expect.poll(async () => (await inkPixels()).blue).toBeGreaterThan(100);
+  await phone.locator("#ink-undo").click();
+  await expect.poll(async () => (await inkPixels()).blue).toBe(0);
+  // Leaving the page clears its ink.
+  await phone.locator("#next").click();
+  await expect.poll(async () => (await inkPixels()).any).toBe(0);
+  // The board keeps its ink across a return to the slides.
+  await phone.locator("#ink-board").click();
+  await drag(phone, "#current", [0.3, 0.3], [0.7, 0.3]);
+  await expect.poll(async () => (await inkPixels()).blue).toBeGreaterThan(100);
+  await phone.locator("#ink-board").click();
+  await expect.poll(async () => (await inkPixels()).any).toBe(0);
+  await phone.locator("#next").click();
+  await phone.locator("#ink-board").click();
+  await expect.poll(async () => (await inkPixels()).blue).toBeGreaterThan(100);
+  await phone.locator("#ink-clear").click();
+  await expect.poll(async () => (await inkPixels()).any).toBe(0);
   await phone.context().close();
   await room.close();
 });
 
 test("a phone held sideways shows two very large buttons that still drive the talk", async ({ browser }) => {
-  const room = await openRoom(browser);
-  await room.locator("#start").click();
-  const phone = await openPhone(browser);
+  const room = await openRoom(browser, true);
+  const phone = await openView(browser);
   await expect(phone.locator("#link")).toContainText("Connected to room PC");
 
   await phone.setViewportSize({ width: 844, height: 390 });
+  await expect.poll(() => viewHook(phone, (h) => h.layout())).toBe("buttons");
   await expect(phone.locator("#current")).toBeHidden();
   await expect(phone.locator("#notes")).toBeHidden();
   await expect(phone.locator("#bar-where")).toHaveText("Frame 1/7");
@@ -219,112 +462,139 @@ test("a phone held sideways shows two very large buttons that still drive the ta
   await expect(phone.locator("#bar-where")).toHaveText("Frame 3/7 · 1/3");
   await phone.locator("#prev").click();
   await expect.poll(() => roomPage(room)).toBe(1);
-  if (process.env["LECTERN_SHOTS"]) await phone.screenshot({ path: `${process.env["LECTERN_SHOTS"]}/phone-landscape.png` });
+  if (process.env["LECTERN_SHOTS"]) await phone.screenshot({ path: `${process.env["LECTERN_SHOTS"]}/view-buttons.png` });
 
   // Turned upright again, the slide and notes come back on the right page.
-  await phone.setViewportSize({ width: 390, height: 844 });
+  await phone.setViewportSize(PHONE);
   await expect(phone.locator("#current")).toBeVisible();
   await expect(phone.locator("#frame-line")).toHaveText("Frame 2 of 7");
-  await expect.poll(() => phone.evaluate(() => (window as unknown as { __remote: { shownPage(): number | null } }).__remote.shownPage())).toBe(1);
+  await expect.poll(() => viewHook(phone, (h) => h.shownPage())).toBe(1);
   await phone.context().close();
   await room.close();
 });
 
-test("drawing on the phone appears on the room screen; the white screen is a whiteboard", async ({ browser }) => {
-  const room = await openRoom(browser);
-  await room.locator("#start").click();
-  const phone = await openPhone(browser);
-  await expect(phone.locator("#link")).toContainText("Connected to room PC");
-
-  const inkShown = () => room.evaluate(() => (window as unknown as { __lectern: { inkShown(): number } }).__lectern.inkShown());
-  const local = () => phone.evaluate(() => (window as unknown as { __remote: { localInk(): { page: number; board: number } } }).__remote.localInk());
-  /** Count of painted pixels on the audience's ink layer, by colour. */
-  const inkPixels = () =>
-    room.evaluate(() => {
-      const c = document.querySelector<HTMLCanvasElement>("#audience canvas.ink-layer");
-      if (!c) return { red: 0, blue: 0, any: 0 };
-      const d = c.getContext("2d")!.getImageData(0, 0, c.width, c.height).data;
-      let red = 0, blue = 0, any = 0;
-      for (let i = 0; i < d.length; i += 4) {
-        if (d[i + 3]! < 128) continue;
-        any++;
-        if (d[i]! > 180 && d[i + 2]! < 80) red++;
-        if (d[i + 2]! > 180 && d[i]! < 80) blue++;
-      }
-      return { red, blue, any };
-    });
-  const slide = (await phone.locator("#current").boundingBox())!;
-  const draw = async (from: [number, number], to: [number, number]) => {
-    await phone.mouse.move(slide.x + slide.width * from[0], slide.y + slide.height * from[1]);
-    await phone.mouse.down();
-    await phone.mouse.move(slide.x + slide.width * to[0], slide.y + slide.height * to[1], { steps: 12 });
-    await phone.mouse.up();
-  };
-
-  await expect(phone.locator("#drawbar")).toBeHidden();
-  await phone.locator("#t-draw").click();
-  await expect(phone.locator("#drawbar")).toBeVisible();
-
-  // A stroke in red: it is on the room screen, and it did not swipe to the next slide.
-  await draw([0.2, 0.3], [0.8, 0.6]);
-  await expect.poll(inkShown).toBe(1);
-  expect((await inkPixels()).red).toBeGreaterThan(200);
-  expect(await roomPage(room)).toBe(0);
-
-  // A second stroke in blue, then Undo removes it.
-  await phone.locator('.ink-color[data-color="1"]').click();
-  await draw([0.2, 0.7], [0.8, 0.7]);
-  await expect.poll(inkShown).toBe(2);
-  expect((await inkPixels()).blue).toBeGreaterThan(100);
-  await phone.locator("#ink-undo").click();
-  await expect.poll(inkShown).toBe(1);
-  expect((await inkPixels()).blue).toBe(0);
-  expect(await local()).toEqual({ page: 1, board: 0 });
-
-  // Leaving the page clears its ink, on the room screen and on the phone.
-  await phone.locator("#next").click();
-  await expect.poll(() => roomPage(room)).toBe(1);
-  await expect.poll(inkShown).toBe(0);
-  expect((await inkPixels()).any).toBe(0);
-  await expect.poll(local).toEqual({ page: 0, board: 0 });
-
-  // Board: the room screen goes white and takes ink.
-  await phone.locator("#ink-board").click();
-  await expect.poll(() => roomMode(room)).toBe("white");
-  await expect(phone.locator("#mode-badge")).toHaveText("WHITEBOARD");
-  await draw([0.3, 0.3], [0.7, 0.3]);
-  await draw([0.3, 0.5], [0.7, 0.5]);
-  await expect.poll(inkShown).toBe(2);
-  expect((await inkPixels()).blue).toBeGreaterThan(200);
-
-  // Back to the slides (no ink there), step on, and return: the board is as it was left.
-  await phone.locator("#ink-board").click();
-  await expect.poll(() => roomMode(room)).toBe("live");
-  await expect.poll(inkShown).toBe(0);
-  await phone.locator("#next").click();
-  await phone.locator("#ink-board").click();
-  await expect.poll(inkShown).toBe(2);
-  expect(await local()).toEqual({ page: 0, board: 2 });
-
-  // C on the room keyboard clears the board; the phone's copy follows.
-  await room.keyboard.press("c");
-  await expect.poll(inkShown).toBe(0);
-  await expect.poll(local).toEqual({ page: 0, board: 0 });
-
-  // Clear from the phone, and Draw off restores the normal gestures.
-  await phone.locator("#ink-board").click();
-  await draw([0.2, 0.2], [0.4, 0.4]);
-  await expect.poll(inkShown).toBe(1);
-  await phone.locator("#ink-clear").click();
-  await expect.poll(inkShown).toBe(0);
-  await phone.locator("#t-draw").click();
-  await expect(phone.locator("#drawbar")).toBeHidden();
-  const before = await roomPage(room);
-  await draw([0.8, 0.5], [0.3, 0.5]); // now a swipe again
-  await expect.poll(() => roomPage(room)).toBe((before ?? 0) + 1);
-
-  await phone.context().close();
+test("the layout follows the window: phone, tablet upright, tablet on its side, laptop", async ({ browser }) => {
+  const room = await openRoom(browser, true);
+  const view = await openView(browser, PHONE);
+  await expect(view.locator("#link")).toContainText("Connected to room PC");
+  const shots = process.env["LECTERN_SHOTS"];
+  for (const [width, height, layout] of [
+    [390, 844, "compact"],
+    [820, 1180, "stacked"],
+    [1180, 820, "wide"],
+    [1440, 900, "wide"],
+    [844, 390, "buttons"],
+  ] as const) {
+    await view.setViewportSize({ width, height });
+    await expect.poll(() => viewHook(view, (h) => h.layout())).toBe(layout);
+    // Everything stays on screen: no pane hangs off the right or bottom edge.
+    const overflow = await view.evaluate(() => ({ x: document.documentElement.scrollWidth - window.innerWidth, y: document.documentElement.scrollHeight - window.innerHeight }));
+    expect(overflow).toEqual({ x: 0, y: 0 });
+    if (layout !== "buttons") {
+      await expect(view.locator("#current")).toBeVisible();
+      await expect(view.locator("#notes")).toBeVisible();
+      const box = (await view.locator("#current").boundingBox())!;
+      expect(box.width).toBeGreaterThan(width * 0.3);
+      expect(box.height).toBeGreaterThan(120);
+      await expect.poll(() => viewHook(view, (h) => h.shownPage())).toBe(0);
+    }
+    if (shots) {
+      await view.waitForTimeout(300);
+      await view.screenshot({ path: `${shots}/view-${layout}-${width}.png` });
+    }
+  }
+  await view.context().close();
   await room.close();
+});
+
+test("rehearsing: a presenter view runs the talk by itself, with or without a code", async ({ browser }) => {
+  // By code, with no room PC anywhere.
+  const view = await openView(browser, LAPTOP);
+  await expect(view.locator("#link")).toHaveText("Waiting for the room PC");
+  await expect(view.locator("#t-draw")).toBeDisabled();
+  await view.locator("#t-more").click();
+  await expect(view.locator("#rehearse")).toHaveText("Rehearse here");
+  await view.locator("#rehearse").click();
+  await expect(view.locator("#link")).toHaveText("Rehearsing: no room screen");
+  expect(await viewHook(view, (h) => h.kind())).toBe("solo");
+  await view.keyboard.press("ArrowRight");
+  await view.keyboard.press("ArrowRight");
+  await expect(view.locator("#bar-where")).toHaveText("Frame 3/7 · 1/3");
+  await expect(view.locator("#notes")).toContainText("every build");
+  await expect(view.locator("#timer")).toHaveText(/^0:0\d · (30:00|29:5\d)$/); // the .pdfpc file's 30 minutes
+  // Ink, jumps and Back all work as they will in the talk.
+  await view.keyboard.press("d");
+  await drag(view, "#current", [0.3, 0.3], [0.6, 0.6]);
+  await expect.poll(() => viewHook(view, (h) => h.ink())).toEqual({ page: 1, board: 0 });
+  await view.keyboard.press("Escape");
+  await view.keyboard.type("6");
+  await view.keyboard.press("Enter");
+  await expect(view.locator("#bar-where")).toHaveText("Frame 6/7");
+  await view.locator("#t-back").click();
+  await expect(view.locator("#bar-where")).toHaveText("Frame 3/7 · 1/3");
+
+  // A room PC starts: stop rehearsing and this view joins it, at the room PC's position.
+  const room = await openRoom(browser, true);
+  await view.locator("#t-more").click();
+  await expect(view.locator("#rehearse")).toHaveText("Stop rehearsing");
+  await view.locator("#rehearse").click();
+  await expect(view.locator("#link")).toContainText("Connected to room PC");
+  await expect(view.locator("#bar-where")).toHaveText("Frame 1/7");
+  await view.context().close();
+  await room.close();
+
+  // From a PDF on this device: no code, no network.
+  const context = await browser.newContext({ viewport: PHONE });
+  const phone = await context.newPage();
+  const requests: string[] = [];
+  phone.on("websocket", (ws) => {
+    if (ws.url().includes(":8787")) requests.push(ws.url());
+  });
+  await phone.goto("present/");
+  await phone.locator("#file").setInputFiles("fixtures/overlays.pdf");
+  await expect(phone.locator("#console")).toBeVisible();
+  await expect(phone.locator("#link")).toHaveText("Rehearsing: no room screen");
+  await phone.locator("#next").click();
+  await expect(phone.locator("#frame-line")).toHaveText("Frame 2 of 9");
+  await phone.locator("#t-more").click();
+  await expect(phone.locator("#end-talk")).toHaveText("End rehearsal…");
+  await phone.locator("#end-talk").click();
+  await phone.locator("#end-yes").click();
+  await expect(phone.locator("#code")).toBeVisible();
+  expect(requests).toEqual([]); // nothing was sent anywhere
+  expect(await phone.evaluate(() => localStorage.getItem("lectern.savedTalks"))).toBeNull();
+  await context.close();
+});
+
+test("the talk page offers the presenter view for a device that is not the room's computer", async ({ browser }) => {
+  const room = await openRoom(browser, true);
+  const context = await browser.newContext({ viewport: LAPTOP });
+  const page = await context.newPage();
+  await page.goto("./");
+  await page.locator("#code").fill(CODE);
+  await page.locator("#code").press("Enter");
+  await expect(page.locator("#presenter-line")).toBeVisible();
+  await page.locator("#as-presenter").click();
+  await expect(page.locator("#console")).toBeVisible();
+  expect(page.url()).toBe("http://localhost:5173/talks/present/"); // the code is taken out of the address bar
+  await expect(page.locator("#link")).toContainText("Connected to room PC");
+  expect(await page.evaluate(() => localStorage.length)).toBe(0); // not remembered unless asked
+
+  // A deck opened from a file has no code, so there is nothing to join from elsewhere.
+  const other = await context.newPage();
+  await other.goto("./");
+  await other.locator("#file").setInputFiles("fixtures/overlays.pdf");
+  await expect(other.locator("#ready")).toBeVisible();
+  await expect(other.locator("#presenter-line")).toBeHidden();
+  await expect(other.locator("#phone-status")).toHaveText("Other devices can't join: keyboard and clicker only");
+  await context.close();
+  await room.close();
+});
+
+test("the old /remote address still leads to the presenter view", async ({ page }) => {
+  await page.goto("remote/");
+  await expect(page).toHaveURL(/\/talks\/present\/$/);
+  await expect(page.locator("#code")).toBeVisible();
 });
 
 test("relay refuses other origins, bad room ids and non-WebSocket requests", async ({ request }) => {
@@ -341,7 +611,7 @@ test("relay refuses other origins, bad room ids and non-WebSocket requests", asy
 
 test("only ciphertext crosses the relay", async ({ browser }) => {
   const room = await openRoom(browser);
-  const context = await browser.newContext({ viewport: { width: 390, height: 844 } });
+  const context = await browser.newContext({ viewport: PHONE });
   const phone = await context.newPage();
   const frames: (string | Buffer)[] = [];
   phone.on("websocket", (ws) => {
@@ -349,7 +619,7 @@ test("only ciphertext crosses the relay", async ({ browser }) => {
     ws.on("framesent", (f) => frames.push(f.payload));
     ws.on("framereceived", (f) => frames.push(f.payload));
   });
-  await phone.goto("remote/");
+  await phone.goto("present/");
   await phone.locator("#code").fill(CODE);
   await phone.locator("#open").click();
   await room.locator("#start").click();
@@ -358,24 +628,24 @@ test("only ciphertext crosses the relay", async ({ browser }) => {
   await expect(phone.locator("#frame-line")).toHaveText("Frame 2 of 7");
 
   expect(frames.length).toBeGreaterThanOrEqual(4);
+  const session = await roomHook(room, (h) => h.session());
   for (const frame of frames) {
     expect(typeof frame).not.toBe("string"); // binary frames only
     const text = (frame as Buffer).toString("latin1");
-    for (const word of ["command", "state", "hello", "frameLabel", "deckPublished", CODE]) expect(text).not.toContain(word);
+    for (const word of ["command", "state", "hello", "frameLabel", "deckPublished", session, CODE]) expect(text).not.toContain(word);
   }
   await context.close();
   await room.close();
 });
 
-test("the phone recovers by itself when the connection drops, and resyncs", async ({ browser }) => {
-  const room = await openRoom(browser);
-  await room.locator("#start").click();
-  const phone = await openPhone(browser);
+test("a presenter view recovers by itself when the connection drops, and resyncs", async ({ browser }) => {
+  const room = await openRoom(browser, true);
+  const phone = await openView(browser);
   await expect(phone.locator("#link")).toContainText("Connected to room PC");
   await phone.locator("#next").click();
   await expect(phone.locator("#frame-line")).toHaveText("Frame 2 of 7");
 
-  await phone.evaluate(() => (window as unknown as { __remote: RemoteHook }).__remote.dropConnection());
+  await viewHook(phone, (h) => h.drop());
   await expect(phone.locator("#link")).toHaveText("Reconnecting…");
   // While the phone is away the room PC carries on from its keyboard.
   await room.keyboard.press("ArrowRight");
@@ -392,6 +662,33 @@ test("the phone recovers by itself when the connection drops, and resyncs", asyn
   await room.close();
 });
 
+test("a room PC that restarts is a new session: the view follows it and old commands mean nothing", async ({ browser }) => {
+  const room = await openRoom(browser, true);
+  const phone = await openView(browser);
+  await expect(phone.locator("#link")).toContainText("Connected to room PC");
+  await phone.locator("#next").click();
+  await expect.poll(() => roomPage(room)).toBe(1);
+  const first = await roomHook(room, (h) => h.session());
+
+  // End and start again on the room PC: a new session id.
+  await room.keyboard.press("Escape");
+  await room.keyboard.press("Escape");
+  await room.locator("#code").fill(CODE);
+  await room.locator("#code").press("Enter");
+  await room.locator("#start").click();
+  await expect.poll(() => roomPage(room)).toBe(0);
+  const second = await roomHook(room, (h) => h.session());
+  expect(second).not.toBe(first);
+
+  // The phone picks up the new session by itself and drives it.
+  await expect(phone.locator("#frame-line")).toHaveText("Frame 1 of 7");
+  await expect(phone.locator("#link")).toContainText("Connected to room PC");
+  await phone.locator("#next").click();
+  await expect.poll(() => roomPage(room)).toBe(1);
+  await phone.context().close();
+  await room.close();
+});
+
 test("the room PC keeps presenting when the relay is unreachable", async ({ browser }) => {
   const context = await browser.newContext();
   // No relay at all for this room PC.
@@ -401,7 +698,7 @@ test("the room PC keeps presenting when the relay is unreachable", async ({ brow
   await room.locator("#code").fill(CODE);
   await room.locator("#code").press("Enter");
   await expect(room.locator("#ready")).toBeVisible();
-  await expect(room.locator("#phone-status")).toHaveText("Phone unavailable: keyboard and clicker only");
+  await expect(room.locator("#phone-status")).toHaveText("Other devices can't join: keyboard and clicker only");
   await room.locator("#start").click();
   await expect.poll(() => roomPage(room)).toBe(0);
   await room.keyboard.press("PageDown");
@@ -409,20 +706,19 @@ test("the room PC keeps presenting when the relay is unreachable", async ({ brow
   await context.close();
 });
 
-test("a link opens the remote; a newer publish on the room PC offers a reload", async ({ browser }) => {
-  const context = await browser.newContext({ viewport: { width: 390, height: 844 } });
+test("a link opens the presenter view; a newer publish on the room PC offers a reload", async ({ browser }) => {
+  const context = await browser.newContext({ viewport: PHONE });
   const phone = await context.newPage();
-  await phone.goto(`remote/#c=${CODE}`);
+  await phone.goto(`present/#c=${CODE}`);
   await expect(phone.locator("#console")).toBeVisible();
-  expect(phone.url()).toBe("http://localhost:5173/talks/remote/"); // the code is taken out of the address bar
+  expect(phone.url()).toBe("http://localhost:5173/talks/present/"); // the code is taken out of the address bar
   expect(await phone.evaluate(() => localStorage.length)).toBe(0); // not remembered unless asked
 
   // Ben republishes; the room PC opens the new copy while the phone still has the old one.
   const newer = await buildDeck(path.join(SRC, "talk.pdf"), CODE, new Date(Date.now() + 60_000));
   place(newer);
   try {
-    const room = await openRoom(browser);
-    await room.locator("#start").click();
+    const room = await openRoom(browser, true);
     await expect(phone.locator("#banner")).toBeVisible();
     await expect(phone.locator("#banner-text")).toHaveText("Slides updated — reload?");
     await phone.locator("#banner-action").click();
@@ -435,10 +731,10 @@ test("a link opens the remote; a newer publish on the room PC offers a reload", 
   await context.close();
 });
 
-test("the phone refuses a wrong code and forgets a saved talk on request", async ({ browser }) => {
-  const context = await browser.newContext({ viewport: { width: 390, height: 844 } });
+test("a wrong code is refused, and a saved talk can be reopened and forgotten", async ({ browser }) => {
+  const context = await browser.newContext({ viewport: PHONE });
   const phone = await context.newPage();
-  await phone.goto("remote/");
+  await phone.goto("present/");
   await phone.locator("#code").fill("definitely-wrong");
   await phone.locator("#open").click();
   await expect(phone.locator("#status")).toHaveText("No talk found for that code.");
@@ -452,6 +748,7 @@ test("the phone refuses a wrong code and forgets a saved talk on request", async
   await expect(phone.locator("#saved .talk")).toHaveCount(1);
   await phone.locator("#saved .talk").click(); // one tap reopens it
   await expect(phone.locator("#console")).toBeVisible();
+  await expect(phone.locator("#sheet-more")).toBeHidden(); // a fresh view, not the last one's leftovers
   await phone.locator("#t-more").click();
   await phone.locator("#leave").click();
   await phone.getByRole("button", { name: "Forget" }).click();

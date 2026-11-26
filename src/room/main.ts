@@ -11,8 +11,8 @@ import { RenderCache } from "../shared/render-cache";
 import { Presentation } from "./presentation";
 import { chooseSplit } from "../core/split";
 import type { NotesSplit } from "../core/split";
-import type { PresenterDeck } from "./presenter-channel";
-import { PresenterHost } from "./presenter-host";
+import type { PresenterDeck } from "../shared/local-channel";
+import { LocalHub } from "./local-hub";
 import { RoomLink } from "./room-link";
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string): T => {
@@ -38,6 +38,8 @@ let deckPublished = "";
 let targetMs: number | null = null;
 let starting = false;
 let loading = false;
+/** The code of the open talk, in memory only, in case this device should be a presenter view instead. */
+let currentCode = "";
 /** What the presenter window will need in Mode B. Held in memory only, and dropped at Start in Mode A. */
 let presenterDeck: PresenterDeck | null = null;
 /** The split the deck's own settings and shape suggest; the user can turn it off on this screen. */
@@ -156,8 +158,8 @@ const phoneStatus = $("phone-status");
 function showPhoneStatus(): void {
   const ok = link?.status === "connected";
   phoneStatus.textContent = ok
-    ? `Phone can connect: ${window.location.host}${import.meta.env.BASE_URL}remote`
-    : "Phone unavailable: keyboard and clicker only";
+    ? `Other devices can join: ${window.location.host}${import.meta.env.BASE_URL}present`
+    : "Other devices can't join: keyboard and clicker only";
   phoneStatus.classList.toggle("ok", ok);
   phoneStatus.classList.toggle("off", !ok);
 }
@@ -174,6 +176,7 @@ async function dropDeck(): Promise<void> {
   targetMs = null;
   presenterDeck = null;
   suggestedSplit = null;
+  currentCode = "";
   cache?.wipe();
   cache = null;
   const old = deck;
@@ -227,6 +230,7 @@ async function load(source: () => Promise<{ pdf: ArrayBuffer; title: string | nu
     setStatus("");
     codeInput.value = "";
     showPhoneStatus();
+    $("presenter-line").hidden = currentCode === "";
     ready.hidden = false;
     startButton.focus();
   } catch (e) {
@@ -248,6 +252,7 @@ function openByCode(code: string): void {
     // The room PC never waits on the relay: this connects in the background (SPEC §8.4).
     link = new RoomLink(keys);
     link.onStatus = showPhoneStatus;
+    currentCode = code;
     deckPublished = payload.meta.published;
     const pdfpcText = payload.pdfpc ? strFromU8(payload.pdfpc) : null;
     targetMs = targetDurationMs(pdfpcText ? parsePdfpc(pdfpcText) : null, payload.meta.settings.targetDuration);
@@ -280,7 +285,7 @@ function start(fullscreen: boolean): void {
     ...(placement ? { screen: placement.audience } : {}),
     // Reloading the entry screen guarantees nothing of the talk survives in this tab.
     onEnded: () => window.location.replace(import.meta.env.BASE_URL),
-    link,
+    relay: link,
     deckPublished,
     targetMs,
   });
@@ -289,7 +294,7 @@ function start(fullscreen: boolean): void {
     if (presentation) {
       // Mode B: the presenter window opens from the same click, right after full screen is granted.
       // If the browser blocks it, the talk is simply in Mode A.
-      if (placement && forPresenter) new PresenterHost(presentation, forPresenter).open(placement.presenter, placement.audience);
+      if (placement && forPresenter) new LocalHub(presentation, forPresenter).open(placement.presenter, placement.audience);
       presenterDeck = null;
       entry.hidden = true;
       // The presentation now owns the deck and cache, and wipes them when it ends.
@@ -322,6 +327,12 @@ fileInput.addEventListener("change", () => {
 });
 
 startButton.addEventListener("click", () => start(document.fullscreenEnabled));
+$("as-presenter").addEventListener("click", () => {
+  // The code travels in the URL hash, which is never sent to a server, and is removed on arrival.
+  const code = currentCode;
+  if (code === "") return;
+  void dropDeck().then(() => window.location.assign(`${import.meta.env.BASE_URL}present/#c=${encodeURIComponent(code)}`));
+});
 $("mode-a").addEventListener("change", showModes);
 modeB.addEventListener("change", showModes);
 $("detect-screens").addEventListener("click", () => void detectScreens());

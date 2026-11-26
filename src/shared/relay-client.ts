@@ -28,12 +28,21 @@ export function deviceName(): string {
 }
 
 export class RelayClient {
+  readonly kind = "relay";
   readonly channel: Channel;
+
+  /** This device's sender id. */
+  get sid(): string {
+    return this.channel.sid;
+  }
+
   private socket: WebSocket | null = null;
   private attempt = 0;
   private retryTimer: number | undefined;
   private closed = false;
   private status: LinkStatus = "connecting";
+  /** The room PC's session id, once known. Quoted on every message so the room PC accepts it. */
+  target: string | undefined;
   /** Seal and open are asynchronous; chaining them keeps messages in order. */
   private outgoing: Promise<void> = Promise.resolve();
   private incoming: Promise<void> = Promise.resolve();
@@ -58,7 +67,7 @@ export class RelayClient {
     const socket = this.socket;
     if (!socket || socket.readyState !== WebSocket.OPEN) return 0;
     const seq = this.channel.nextSeq;
-    const sealed = this.channel.seal(message);
+    const sealed = this.channel.seal(message, this.target);
     this.outgoing = this.outgoing
       .then(() => sealed)
       .then((frame) => {

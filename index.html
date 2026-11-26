@@ -55,7 +55,7 @@
         <fieldset id="modes" class="modes" hidden>
           <legend>Screens</legend>
           <label><input id="mode-a" type="radio" name="mode" value="a" checked /> This screen only</label>
-          <label><input id="mode-b" type="radio" name="mode" value="b" /> Two screens: slides on the projector, notes and controls here</label>
+          <label><input id="mode-b" type="radio" name="mode" value="b" /> Two screens: slides on the projector, presenter view here</label>
           <div id="mode-b-panel" class="mode-b-panel" hidden>
             <p>Your browser will ask to manage windows — click Allow.</p>
             <p><button id="detect-screens" type="button">Choose screens</button> <span id="screens-status"></span></p>
@@ -70,6 +70,10 @@
           <button id="start" class="primary big">Start</button>
         </p>
         <p id="phone-status" class="phone-status off"></p>
+        <p id="presenter-line" class="secondary" hidden>
+          Not the room's computer?
+          <button id="as-presenter" type="button">Presenter view on this device instead</button>
+        </p>
         <p id="fs-problem" class="problem" hidden>
           This browser refused full screen. Press <kbd>F11</kbd> to make the browser full screen yourself, then:
           <button id="start-windowed">Present in this window</button>

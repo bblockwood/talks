@@ -71,7 +71,7 @@ async function startTwoScreens(context: BrowserContext, open: (page: Page) => Pr
   await expect(main.locator("#screens label")).toHaveCount(2);
   await expect(main.locator('#screens input[value="1"]')).toBeChecked(); // the projector is the default for slides
   const [presenter] = await Promise.all([context.waitForEvent("page"), main.locator("#start").click()]);
-  await expect(presenter.locator("#app")).toBeVisible({ timeout: 15_000 });
+  await expect(presenter.locator("#console")).toBeVisible({ timeout: 15_000 });
   return { main, presenter };
 }
 
@@ -80,7 +80,7 @@ const byCode = async (page: Page): Promise<void> => {
   await page.locator("#code").press("Enter");
 };
 
-test("two screens: the presenter window drives the audience window", async ({ browser }) => {
+test("two screens: the presenter view in a second window drives the audience window", async ({ browser }) => {
   const context = await browser.newContext({ viewport: { width: 1280, height: 720 } });
   await fakeTwoScreens(context);
   const { main, presenter } = await startTwoScreens(context, byCode);
@@ -88,182 +88,106 @@ test("two screens: the presenter window drives the audience window", async ({ br
   presenter.on("console", (m) => {
     if (m.type() === "error") problems.push(m.text());
   });
+  const view = <T>(pick: (h: { layout(): string; kind(): string; shownPage(): number | null; hits(): { page: number }[] }) => T): Promise<T> =>
+    presenter.evaluate((src) => (0, eval)(`(${src})`)((window as unknown as { __console: unknown }).__console) as T, pick.toString());
 
   expect(await main.evaluate(() => (window as unknown as { __askedScreen?: string }).__askedScreen)).toBe("Projector");
-  expect(presenter.url()).toMatch(/\/talks\/presenter\/#ch=[0-9a-f]{32}$/);
+  expect(presenter.url()).toMatch(/\/talks\/present\/#ch=[0-9a-f]{32}$/);
   await expect.poll(() => roomPage(main)).toBe(0);
   // The audience window still shows nothing but slides.
   expect(await main.locator("#audience > :not(canvas)").count()).toBe(0);
 
-  // Layout: frame and build, notes, clock with the .pdfpc file's 30 minutes.
-  await expect(presenter.locator("#where")).toHaveText("Frame 1 / 7");
-  await expect(presenter.locator("#clock")).toHaveText(/^0:\d\d · (30:00|29:\d\d)$/);
-  await expect(presenter.locator("#relay")).toHaveText("Phone: none connected");
+  // The same presenter view as on any other device, here joined without a code or the relay.
+  expect(await view((h) => h.kind())).toBe("local");
+  expect(await view((h) => h.layout())).toBe("wide");
+  await expect(presenter.locator("#bar-where")).toHaveText("Frame 1/7");
+  await expect(presenter.locator("#timer")).toHaveText(/^0:\d\d · (30:00|29:\d\d)$/);
+  await expect(presenter.locator("#link")).toHaveText("Slides on the other screen");
+  await expect(presenter.locator("#entry")).toBeHidden();
 
   // Keys in the presenter window move the audience.
   await presenter.keyboard.press("ArrowRight");
   await expect.poll(() => roomPage(main)).toBe(1);
-  await expect(presenter.locator("#where")).toHaveText("Frame 2 / 7");
+  await expect(presenter.locator("#bar-where")).toHaveText("Frame 2/7");
   await expect(presenter.locator("#notes")).toContainText("Sidecar note for frame 2");
   await presenter.keyboard.press("PageDown");
-  await expect(presenter.locator("#where")).toHaveText("Frame 3 / 7   Build 1/3");
-  await expect.poll(() => presenter.evaluate(() => (window as unknown as { __presenter: { shownPage(): number | null } }).__presenter.shownPage())).toBe(2);
-
+  await expect(presenter.locator("#bar-where")).toHaveText("Frame 3/7 · 1/3");
+  await expect.poll(() => view((h) => h.shownPage())).toBe(2);
   if (process.env["LECTERN_SHOTS"]) await presenter.screenshot({ path: `${process.env["LECTERN_SHOTS"]}/presenter.png` });
 
   // Clicking the current slide advances; so does clicking the next-slide preview.
   await presenter.locator("#current").click({ position: { x: 300, y: 80 } });
   await expect.poll(() => roomPage(main)).toBe(3);
-  await presenter.locator("#next").click();
+  await presenter.locator("#next-slide").click();
   await expect.poll(() => roomPage(main)).toBe(4);
 
-  // Jump by number, then the Back button names where it returns to.
-  await presenter.keyboard.type("6");
-  await expect(presenter.locator("#digits")).toContainText("Go to frame 6");
-  await presenter.keyboard.press("Enter");
-  await expect.poll(() => roomPage(main)).toBe(8);
-  await expect(presenter.locator("#back")).toHaveText("Back to Frame 3");
-  await presenter.locator("#back").click();
-  await expect.poll(() => roomPage(main)).toBe(4);
-  await expect(presenter.locator("#forward")).toHaveText("Forward to Frame 6");
-
-  // Overview: Tab swaps the right column for the grid; a click jumps at once and the overview stays.
+  // Overview and search work as on any device (covered in depth in w3.spec.ts).
   await presenter.keyboard.press("Tab");
   await expect(presenter.locator("#grid .thumb")).toHaveCount(7);
-  await expect(presenter.locator("#grid .thumb.current .cap span").first()).toHaveText("3");
-  await expect(presenter.locator("#next")).toBeHidden();
   await presenter.locator("#grid .thumb").nth(4).click();
   await expect.poll(() => roomPage(main)).toBe(7);
-  await expect(presenter.locator("#grid")).toBeVisible();
-  await expect(presenter.locator("#grid .thumb.current .cap span").first()).toHaveText("5");
-  // Keys keep their presenting meaning with the overview open.
-  await presenter.keyboard.press("ArrowLeft");
-  await expect.poll(() => roomPage(main)).toBe(6);
-
-  // Frozen: the frame the audience sees is ringed separately from the presenter's.
-  await presenter.keyboard.press("f");
-  await expect(presenter.locator("#pill")).toHaveText("FROZEN");
-  await presenter.keyboard.press("ArrowRight");
-  await expect(presenter.locator("#grid .thumb.audience .cap span").first()).toHaveText("4");
-  await expect(presenter.locator("#grid .thumb.current .cap span").first()).toHaveText("5");
-  await presenter.keyboard.press("f");
-  await expect(presenter.locator("#pill")).toBeHidden();
-
-  if (process.env["LECTERN_SHOTS"]) await presenter.screenshot({ path: `${process.env["LECTERN_SHOTS"]}/presenter-overview.png` });
-
-  // Search: results grouped by frame; Enter jumps to the selected one; typing does not drive slides.
-  const before = await roomPage(main);
   await presenter.locator("#search").fill("enduserslide");
   await expect(presenter.locator("#results .hit")).toHaveCount(1);
-  await expect(presenter.locator("#results .hit .frame")).toHaveText("Frame 5");
-  expect(await roomPage(main)).toBe(before);
-  await presenter.locator("#search").fill("zzzz");
-  await expect(presenter.locator("#results")).toHaveText("No slides match.");
-  await presenter.locator("#search").fill("NOTES");
-  await expect.poll(() => presenter.locator("#results .hit").count()).toBeGreaterThan(1);
-  const target = await presenter.evaluate(() => (window as unknown as { __presenter: { hits(): { page: number }[] } }).__presenter.hits()[1]!.page);
-  await presenter.locator("#search").press("ArrowDown");
-  await presenter.locator("#search").press("Enter");
-  await expect.poll(() => roomPage(main)).toBe(target);
-  // Esc clears the search, then closes the overview; neither counts towards ending the talk.
   await presenter.locator("#search").press("Escape");
-  await expect(presenter.locator("#grid")).toBeVisible();
   await presenter.locator("#search").press("Escape");
-  await expect(presenter.locator("#next")).toBeVisible();
-  await expect(main.locator("#audience")).toBeVisible();
+  await expect(presenter.locator("#next-slide")).toBeVisible();
 
-  // Laser: L, then the mouse over the current slide puts the pointer on the audience screen.
-  expect(await room(main, (h) => h.pointerVisible())).toBe(false);
-  await presenter.keyboard.press("l");
-  await expect(presenter.locator("#laser")).toHaveClass(/on/);
+  // Laser and Draw with the mouse.
   const box = (await presenter.locator("#current").boundingBox())!;
+  await presenter.keyboard.press("l");
   await presenter.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
   await presenter.mouse.move(box.x + box.width / 2 + 30, box.y + box.height / 2 + 10, { steps: 4 });
   await expect.poll(() => room(main, (h) => h.pointerVisible())).toBe(true);
-  await presenter.keyboard.press("Escape"); // turns the laser off, does not start ending the talk
-  await expect(presenter.locator("#laser")).not.toHaveClass(/on/);
-  await expect.poll(() => room(main, (h) => h.pointerVisible()), { timeout: 3000 }).toBe(false);
-
-  // Draw: D, then dragging on the current slide puts ink on the audience screen.
+  await presenter.keyboard.press("d"); // Draw takes over from the laser
+  await expect(presenter.locator("#t-laser")).not.toHaveClass(/on/);
+  await expect(presenter.locator("#drawbar")).toBeVisible();
   const inkShown = () => main.evaluate(() => (window as unknown as { __lectern: { inkShown(): number } }).__lectern.inkShown());
-  const redPixels = () =>
-    main.evaluate(() => {
-      const c = document.querySelector<HTMLCanvasElement>("#audience canvas.ink-layer");
-      if (!c) return 0;
-      const d = c.getContext("2d")!.getImageData(0, 0, c.width, c.height).data;
-      let n = 0;
-      for (let i = 0; i < d.length; i += 4) if (d[i + 3]! > 128 && d[i]! > 180 && d[i + 2]! < 80) n++;
-      return n;
-    });
-  const drag = async (from: [number, number], to: [number, number]) => {
-    await presenter.mouse.move(box.x + box.width * from[0], box.y + box.height * from[1]);
-    await presenter.mouse.down();
-    await presenter.mouse.move(box.x + box.width * to[0], box.y + box.height * to[1], { steps: 10 });
-    await presenter.mouse.up();
-  };
-  await expect(presenter.locator("#drawtools")).toBeHidden();
-  await presenter.keyboard.press("d");
-  await expect(presenter.locator("#draw")).toHaveClass(/on/);
-  await expect(presenter.locator("#drawtools")).toBeVisible();
-  const pageBeforeDrawing = await roomPage(main);
-  await drag([0.3, 0.35], [0.7, 0.55]);
+  const before = await roomPage(main);
+  await presenter.mouse.move(box.x + box.width * 0.3, box.y + box.height * 0.35);
+  await presenter.mouse.down();
+  await presenter.mouse.move(box.x + box.width * 0.7, box.y + box.height * 0.55, { steps: 10 });
+  await presenter.mouse.up();
   await expect.poll(inkShown).toBe(1);
-  expect(await redPixels()).toBeGreaterThan(200);
-  expect(await roomPage(main)).toBe(pageBeforeDrawing); // drawing never advances the slide
-  await presenter.locator('.ink-color[data-color="1"]').click();
-  await drag([0.3, 0.6], [0.7, 0.6]);
-  await expect.poll(inkShown).toBe(2);
-  await presenter.locator("#ink-undo").click();
-  await expect.poll(inkShown).toBe(1);
-  // L switches from drawing to the laser; D switches back. Only one tool is on at a time.
-  await presenter.keyboard.press("l");
-  await expect(presenter.locator("#draw")).not.toHaveClass(/on/);
-  await presenter.keyboard.press("d");
-  await expect(presenter.locator("#laser")).not.toHaveClass(/on/);
-  // Board: the whiteboard, with its own ink, shown in the presenter window too.
+  expect(await roomPage(main)).toBe(before); // drawing never advances the slide
   await presenter.locator("#ink-board").click();
+  await expect(presenter.locator("#pill")).toHaveText("WHITEBOARD");
   expect(await room(main, (h) => h.state().audienceMode.kind)).toBe("white");
-  await expect(presenter.locator("#pill")).toHaveText("WHITE");
-  await drag([0.2, 0.2], [0.5, 0.5]);
-  await expect.poll(inkShown).toBe(1);
   await presenter.locator("#ink-board").click();
-  await expect.poll(inkShown).toBe(1); // back on the slide, with the stroke that was left there
   await presenter.keyboard.press("c");
   await expect.poll(inkShown).toBe(0);
-  expect(await redPixels()).toBe(0);
-  await presenter.keyboard.press("Escape"); // leaves Draw mode, does not start ending the talk
-  await expect(presenter.locator("#drawtools")).toBeHidden();
+  await presenter.keyboard.press("Escape"); // leaves Draw, does not start ending the talk
+  await expect(presenter.locator("#drawbar")).toBeHidden();
   await expect(main.locator("#audience")).toBeVisible();
 
-  // Black from the presenter keyboard; the pill shows only in that mode.
-  await presenter.keyboard.press("b");
-  await expect(presenter.locator("#pill")).toHaveText("BLACK");
-  expect(await room(main, (h) => h.state().audienceMode.kind)).toBe("black");
-  await presenter.keyboard.press("b");
-
-  // The debug overlay lives here, never on the audience view.
-  await expect(presenter.locator("#debug")).toBeHidden();
+  // The timings panel lives here, never on the audience view.
   await presenter.keyboard.press("Control+Shift+D");
   await expect(presenter.locator("#debug")).toContainText("input → audience draw");
-  await expect(presenter.locator("#debug")).toContainText(/median \d/);
+  await expect(presenter.locator("#debug")).toContainText("local, wide");
   await presenter.keyboard.press("Control+Shift+D");
 
   // Swap displays: the button hands its click to the audience window, which moves its full screen
   // to the other screen; the presenter window moves the opposite way. Ctrl+D does the same.
   const asked = () => main.evaluate(() => (window as unknown as { __askedScreen?: string }).__askedScreen);
+  await presenter.locator("#t-more").click();
+  await expect(presenter.locator("#row-swap")).toBeVisible();
+  await expect(presenter.locator("#row-rehearse")).toBeHidden();
   await presenter.locator("#swap").click();
   await expect.poll(asked).toBe("Built-in Display");
   await expect.poll(() => presenter.evaluate(() => (window as unknown as { __moves: number[][] }).__moves.at(-1))).toEqual([1280, 0]);
+  await presenter.locator("#more-close").click();
   await presenter.keyboard.press("Control+d");
   await expect.poll(asked).toBe("Projector");
   await expect.poll(() => presenter.evaluate(() => (window as unknown as { __moves: number[][] }).__moves.at(-1))).toEqual([0, 0]);
   await expect(main.locator("#audience")).toBeVisible();
 
   // Keys in the audience window still work, and the presenter view follows.
-  const where = await presenter.locator("#where").textContent();
+  const where = await presenter.locator("#bar-where").textContent();
   await main.bringToFront();
   await main.keyboard.press("ArrowRight");
-  await expect(presenter.locator("#where")).not.toHaveText(where ?? "");
+  await expect(presenter.locator("#bar-where")).not.toHaveText(where ?? "");
+
+  // Nothing is stored on the room PC, by either window.
+  expect(await presenter.evaluate(() => localStorage.length + sessionStorage.length)).toBe(0);
 
   // Esc twice in the presenter window ends the talk: the window closes and the room PC is wiped.
   await presenter.bringToFront();
@@ -276,18 +200,27 @@ test("two screens: the presenter window drives the audience window", async ({ br
   await context.close();
 });
 
-test("two screens: a phone shows up on the presenter view; closing the presenter window does not stop the talk", async ({ browser }) => {
+test("two screens plus a phone: three views of one talk; closing the second window does not stop it", async ({ browser }) => {
   const context = await browser.newContext({ viewport: { width: 1280, height: 720 } });
   await fakeTwoScreens(context);
   const { main, presenter } = await startTwoScreens(context, byCode);
 
   const phoneContext = await browser.newContext({ viewport: { width: 390, height: 844 } });
   const phone = await phoneContext.newPage();
-  await phone.goto(`remote/#c=${CODE}`);
+  await phone.goto(`present/#c=${CODE}`);
   await expect(phone.locator("#link")).toContainText("Connected to room PC");
-  await expect(presenter.locator("#relay")).toHaveText(/^Phone: \S+/);
+  await expect(presenter.locator("#link")).toHaveText("Slides on the other screen · 1 more device");
   await phone.locator("#next").click();
-  await expect(presenter.locator("#where")).toHaveText("Frame 2 / 7");
+  await expect(presenter.locator("#bar-where")).toHaveText("Frame 2/7");
+  // Ink drawn on the phone reaches the second window on the room PC too.
+  await phone.locator("#t-draw").click();
+  const slide = (await phone.locator("#current").boundingBox())!;
+  await phone.mouse.move(slide.x + slide.width * 0.2, slide.y + slide.height * 0.4);
+  await phone.mouse.down();
+  await phone.mouse.move(slide.x + slide.width * 0.8, slide.y + slide.height * 0.6, { steps: 8 });
+  await phone.mouse.up();
+  await expect.poll(() => presenter.evaluate(() => (window as unknown as { __console: { ink(): { page: number } } }).__console.ink().page)).toBe(1);
+  await phone.locator("#t-draw").click();
 
   await presenter.close();
   await main.bringToFront();
@@ -329,7 +262,7 @@ test("a Beamer notes-split deck: the audience gets the slide half, the presenter
   await expect(presenter.locator("#notes-image")).toBeVisible();
   await expect(presenter.locator("#notes")).toBeHidden();
   await expect(presenter.locator("#notes-image canvas")).toHaveCount(1);
-  await expect(presenter.locator("#where")).toHaveText("Frame 1 / 6");
+  await expect(presenter.locator("#bar-where")).toHaveText("Frame 1/6");
   await context.close();
 });
 

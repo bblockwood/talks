@@ -214,3 +214,7 @@ button:disabled {
 .mode-b-panel button {
   padding: 0.25rem 0.7rem;
 }
+
+.secondary button {
+  padding: 0.2rem 0.6rem;
+}

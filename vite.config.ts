@@ -36,8 +36,8 @@ export default defineConfig(({ mode }) => {
       rollupOptions: {
         input: {
           index: page("index.html"),
+          present: page("present/index.html"),
           remote: page("remote/index.html"),
-          presenter: page("presenter/index.html"),
           sw: page("src/sw/sw.ts"),
         },
         output: {

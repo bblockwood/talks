@@ -236,6 +236,8 @@ From `getAnnotations()`, link annotations give a rect plus one of: `dest` (resol
 
 ## 7. Phone remote (`/talks/remote`)
 
+> **Superseded in part (Ben, 2026-11-26, W6).** The phone remote and the presenter view of Mode B are now one **presenter view** at `/talks/present`, used as a second window on the room PC or from any other device by code, several at once, laid out for the screen it is on. `/talks/remote` redirects there. Picking a slide from the grid jumps at once everywhere; the private preview with a "Show" button below no longer exists. See `docs/decisions.md` and `docs/progress.md` (W6). The rest of this section still describes the phone-sized layout.
+
 - **Access.** Ben opens it on his phone and enters the same code. An optional "Remember on this device" stores it in localStorage on his own phone only, so he can tap a saved talk next time. A deep link `…/remote#c=<code>` is allowed here, since the hash is never sent to servers.
 - **Deck.** The phone downloads and decrypts the same `.bin` itself, so it renders slides and thumbnails locally. Only small messages cross the relay.
 - **Connection.** It connects to the relay room. When the room PC is connected, the status shows "Connected to room PC", with round-trip time.

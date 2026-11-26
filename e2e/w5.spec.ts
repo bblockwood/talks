@@ -57,7 +57,7 @@ test("offline: the page reloads, and a deck opened before opens again and presen
   await expect(page.locator("#code")).toBeVisible();
   await openByCode(page);
   await expect(page.locator("#deck-summary")).toHaveText("9 frames, 23 pages");
-  await expect(page.locator("#phone-status")).toHaveText("Phone unavailable: keyboard and clicker only");
+  await expect(page.locator("#phone-status")).toHaveText("Other devices can't join: keyboard and clicker only");
   await page.locator("#start").click();
   await expect(page.locator("#audience canvas").first()).toBeVisible();
   await page.keyboard.press("ArrowRight");
@@ -169,10 +169,10 @@ test("a republished deck replaces the cached one; a revoked deck is forgotten", 
   await context.close();
 });
 
-test("the phone remote reloads offline and reopens a remembered talk", async ({ browser }) => {
+test("the presenter view reloads offline and reopens a remembered talk", async ({ browser }) => {
   const context = await browser.newContext({ viewport: { width: 390, height: 844 } });
   const phone = await context.newPage();
-  await phone.goto(`${SITE}remote/`);
+  await phone.goto(`${SITE}present/`);
   await controlled(phone);
   await phone.locator("#code").fill(CODE);
   await phone.locator("#remember").check();

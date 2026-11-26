@@ -1,0 +1,197 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; worker-src 'self'; connect-src 'self' __RELAY_ORIGIN__; img-src 'self' blob: data:; font-src 'self' blob: data:; style-src 'self' 'unsafe-inline'; base-uri 'self'; form-action 'none'"
+    />
+    <meta name="robots" content="noindex" />
+    <meta name="theme-color" content="#111418" />
+    <title>Lectern presenter view</title>
+    <link rel="stylesheet" href="/src/console/console.css" />
+  </head>
+  <body>
+    <main id="entry" class="entry">
+      <h1>Lectern presenter view</h1>
+      <p id="boot">Starting… If this message stays, this browser is too old or has JavaScript turned off.</p>
+
+      <div id="chooser" hidden>
+        <div id="saved" class="saved" hidden></div>
+        <form id="code-form">
+          <label for="code">Talk code</label>
+          <input
+            id="code"
+            name="lectern-talk-code"
+            type="text"
+            autocomplete="off"
+            autocapitalize="none"
+            autocorrect="off"
+            spellcheck="false"
+            enterkeyhint="go"
+          />
+          <label class="check"><input id="remember" type="checkbox" /> Remember on this device</label>
+          <button id="open" class="primary wide">Open</button>
+        </form>
+        <p class="secondary">
+          or
+          <label class="filepick">
+            rehearse from a PDF on this device
+            <input id="file" type="file" accept="application/pdf,.pdf" />
+          </label>
+        </p>
+        <p class="hint">
+          This is the view for you: notes, the next slide, a clock and the controls. To put slides on a screen for the
+          audience, open <a href="../">the talk page</a> on that computer instead.
+        </p>
+      </div>
+      <p id="status" class="status" role="status" aria-live="polite"></p>
+    </main>
+
+    <div id="console" class="console" data-layout="compact" hidden>
+      <header class="bar">
+        <button id="link" class="linkstate" aria-live="polite">Connecting…</button>
+        <span id="bar-where" class="bar-where"></span>
+        <span id="pill" class="pill" hidden></span>
+        <span class="spacer"></span>
+        <button id="timer" class="timer">0:00</button>
+        <span id="wall" class="wall"></span>
+      </header>
+
+      <div id="banner" class="banner" hidden>
+        <span id="banner-text"></span>
+        <button id="banner-action"></button>
+      </div>
+
+      <div class="body">
+        <section class="main">
+          <div id="stage" class="stage">
+            <div id="current" class="slide"></div>
+          </div>
+          <nav id="drawbar" class="drawbar" hidden>
+            <span class="colors">
+              <button class="ink-color" data-color="0" aria-label="Red"></button>
+              <button class="ink-color" data-color="1" aria-label="Blue"></button>
+              <button class="ink-color" data-color="2" aria-label="Black"></button>
+            </span>
+            <button id="ink-undo">Undo</button>
+            <button id="ink-clear">Clear</button>
+            <button id="ink-board">Board</button>
+          </nav>
+        </section>
+
+        <div id="divider" class="divider" title="Drag to resize"></div>
+
+        <section class="side">
+          <div id="side-normal" class="side-normal">
+            <div class="info">
+              <div class="where">
+                <div id="frame-line" class="frame-line">–</div>
+                <div id="build-line" class="build-line"></div>
+              </div>
+              <div class="nextbox">
+                <div class="nextlabel">Next</div>
+                <div id="next-slide" class="slide small"></div>
+              </div>
+            </div>
+            <div class="noteshead">
+              <span>Notes</span>
+              <span>
+                <button id="notes-smaller" aria-label="Smaller notes">A−</button>
+                <button id="notes-larger" aria-label="Larger notes">A+</button>
+              </span>
+            </div>
+            <section id="notes" class="notes"></section>
+            <section id="notes-image" class="slide notes-image" hidden></section>
+          </div>
+
+          <div id="overview" class="overview" hidden>
+            <header class="sheet-head">
+              <strong>Slides</strong>
+              <button id="overview-close">Close</button>
+            </header>
+            <input id="search" type="search" placeholder="Search slides" autocomplete="off" spellcheck="false" />
+            <div id="results" class="results" hidden></div>
+            <div id="grid" class="grid"></div>
+          </div>
+        </section>
+      </div>
+
+      <nav id="tools" class="tools">
+        <button id="t-slides" title="Overview (Tab)">Slides</button>
+        <button id="t-back" disabled>Back</button>
+        <button id="t-forward" disabled>Forward</button>
+        <button id="t-draw" title="Draw (D)">Draw</button>
+        <button id="t-laser" title="Laser pointer (L)">Laser</button>
+        <button id="t-black" title="Black screen (B)">Black</button>
+        <button id="t-freeze" title="Freeze the room screen (F)">Freeze</button>
+        <button id="t-more">More</button>
+        <span id="digits" class="digits"></span>
+      </nav>
+
+      <nav id="steps" class="steps">
+        <button id="prev" class="step">Prev</button>
+        <button id="next" class="step primary">Next</button>
+      </nav>
+
+      <div id="sheet-more" class="sheet" hidden>
+        <div class="sheet-panel">
+          <header class="sheet-head">
+            <strong>More</strong>
+            <button id="more-close">Close</button>
+          </header>
+          <div class="rows">
+            <div class="row">
+              <span>Clock</span>
+              <span>
+                <button id="clock-toggle">Pause</button>
+                <button id="clock-reset">Reset</button>
+              </span>
+            </div>
+            <div class="row">
+              <span>Room screen</span>
+              <span><button id="m-white">Whiteboard</button></span>
+            </div>
+            <div class="row">
+              <span>Notes size</span>
+              <span><button id="m-notes-smaller" aria-label="Smaller notes">A−</button> <button id="m-notes-larger" aria-label="Larger notes">A+</button></span>
+            </div>
+            <div class="row" id="row-swap" hidden>
+              <span>Displays</span>
+              <span><button id="swap" title="Ctrl+D, or Cmd+D on a Mac">Swap displays</button></span>
+            </div>
+            <div class="row" id="row-rehearse" hidden>
+              <span id="rehearse-label">No room screen yet</span>
+              <span><button id="rehearse">Rehearse here</button></span>
+            </div>
+            <div class="row">
+              <span>Connection</span>
+              <span id="diag" class="diag">–</span>
+            </div>
+            <div class="row">
+              <span>Details</span>
+              <span><button id="debug-toggle" title="Ctrl+Shift+D">Timings</button></span>
+            </div>
+            <div class="row">
+              <span>This device</span>
+              <span><button id="leave">Close presenter view</button></span>
+            </div>
+            <div class="row danger">
+              <span>Room screen</span>
+              <span><button id="end-talk" class="dangerous">End talk…</button></span>
+            </div>
+            <div id="end-confirm" class="confirm" hidden>
+              <p>End the talk? The slides leave the room screen, which returns to the code entry page.</p>
+              <button id="end-cancel">Cancel</button>
+              <button id="end-yes" class="dangerous solid">End talk</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <pre id="debug" class="debug" hidden></pre>
+    </div>
+    <script type="module" src="/src/console/main.ts"></script>
+  </body>
+</html>

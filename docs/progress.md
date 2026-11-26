@@ -512,3 +512,94 @@ W0–W5 are built. SPEC §10 says the next step is Ben's: use it for a real talk
 - **Remaining hardware checks:** Apple Pencil; the campus Wi-Fi latency number; a Windows classroom PC with a clicker; Firefox or Safari as the room browser.
 
 - **W0 test pages removed (Ben, 2026-11-26):** `/talks/w0/` and `/talks/w0/phone` are gone from the site and the repo, with their source (`w0/`, `src/w0/`) and tests. Earlier sections of this file that point at those addresses are history. The relay's own checks (origins, room ids) moved into `e2e/w3.spec.ts`. To learn a clicker's key codes on a classroom PC, just present a talk with it: every key the spec lists is handled, and anything that does nothing is worth reporting.
+
+---
+
+## W6. One presenter view
+
+### Why (Ben, 2026-11-26)
+
+Until now there were three things: the audience view, the presenter window of two-screen mode, and the phone remote. The last two do the same job with two separate screens whose features had drifted apart. Ben's proposal, adopted: there is the **audience view** and there is the **presenter view**. The presenter view can be a second window on the room PC, or any other device (laptop, iPad, phone) that joins by code, and several can be open at once. It lays itself out for the screen it is on and the input it has.
+
+Ben's decisions:
+- One behaviour everywhere for picking a slide from the grid. Fable chose **jump at once** (as the native Mac app does after Ben dropped private browsing there), with Back to undo a mis-tap. The phone's preview-then-Show goes away. Easy to flip if Ben meant the other one.
+- Do all of it now, before the first real talk.
+
+### Plan
+
+1. **Core**
+   - `host.ts`: the authoritative side of a talk, with no DOM: applies commands from any presenter view, sends `state`, relays ink, tracks who is connected. The audience window uses it; so does rehearsal.
+   - Protocol: `state` gains the room PC's status (relay, connected devices, draw timings) so every presenter view can show it; a new `strokes` message carries ink from the room PC to every presenter view, with a full copy for late joiners; and every talk gets a random **session id** that commands must quote, which closes the replay gap noted in W3.
+2. **One presenter view** (`src/console/`, page `/talks/present`), replacing `src/remote/` and `src/room/presenter.*`. It talks to the room PC through one small interface with three implementations: the relay (joined by code), a local channel (second window on the room PC), and none at all (rehearsal).
+3. **Layouts**, chosen from the window's size: wide (laptop, iPad landscape: slide, next slide and notes side by side), stacked (iPad portrait), compact (phone), and buttons only (phone held sideways). Touch gets swipes and the large buttons; a mouse gets click-to-advance and the hover laser; a pen always draws.
+4. **One way in.** After typing the code at `/talks`: "Start" shows the slides on this screen; "Presenter view" opens the presenter view on this device. `/talks/remote` keeps working as an alias.
+5. **Rehearse.** A presenter view with no room PC can run the talk by itself.
+6. **Tests** rewritten around the one view, then every earlier hand-test repeated by Ben, since this replaces screens he has already checked on real hardware.
+
+### Done (2026-11-26)
+
+- **Core:** `host.ts` (the session host), and in `protocol.ts` the room status in `state`, `strokes` messages, and session ids.
+- **Audience window:** `presentation.ts` rewritten around the host, with pluggable connections: the relay (`room-link.ts`) and a second window (`local-hub.ts`, which also places the window and swaps displays).
+- **Presenter view:** `src/console/` (`console.ts`, `client.ts`, `main.ts`, `console.css`), page `/talks/present`. Removed: `src/remote/`, `src/room/presenter.ts`, their pages and styles. `/talks/remote` is a redirect.
+- **Four layouts** from one page, switched live as the window changes.
+- **New capabilities that fall out of the merge:**
+  - A laptop or tablet joined by code gets the full view: overview, search, laser, drawing, timings panel.
+  - Several presenter views at once, all in step.
+  - Ink from any device shows on every presenter view, including ones that join late.
+  - The phone gets the overview with search and the notes marks.
+  - Rehearsal, by code or from a local PDF.
+  - "Presenter view on this device instead" on the talk page after typing a code.
+- **Tests:** 260 unit and 39 e2e, all passing. New: the host (sessions, acks, device list, ink relay and full copies, freeze), a laptop by code driving the room PC, three views at once with ink reaching each, the four layouts with nothing off screen, rehearsal both ways, a restarted room PC being followed as a new session.
+- **Two bugs found by the new tests and fixed:** freezing a stale page (see decisions), and every device treating any pong as its own, which would have given wrong ping numbers with more than one presenter view.
+
+### Known issues and notes
+
+- **This replaced screens Ben had hand-tested**, so those checks need repeating: phone gestures, two-screen start, Swap displays, drawing by finger. The automated tests use a mouse and faked screens.
+- **The phone's layout changed slightly:** room-screen state (BLACK, FROZEN, WHITEBOARD) is now a pill in the top bar rather than a badge on the slide; the slide grid has a search box and stays open after a pick.
+- **Rehearsal's ink and position are not carried over** when the view then joins a real room PC; it starts from the room PC's state.
+- **A pen always draws**, so on an iPad the Pencil cannot be used to swipe or tap links; a finger does those.
+- **Two views drawing at once** each see their own stroke immediately and the other's as it arrives; Undo removes the newest stroke on screen, whoever drew it.
+- **Still untried:** Apple Pencil, a Windows classroom PC with a clicker, the campus Wi-Fi number, Firefox or Safari as the room browser.
+
+### Ben checklist: W6
+
+About 20 minutes. A published talk, your laptop, your phone, an iPad if handy, and the second display for part D. Everything is at `benlockwood.com/talks` (slides) and `benlockwood.com/talks/present` (presenter view).
+
+**A. Phone, as before** (the old `/talks/remote` bookmark still works)
+
+1. Start a talk on a computer by code. On the phone open the presenter view with the same code.
+2. Next/Prev, swipe, press-hold-drag pointer, tap a link: all as before.
+3. **Slides**: tap a slide. Expect: the room screen jumps there at once (no preview step), and the grid stays open. **Close**, then **Back** returns.
+4. **Black**, **Freeze**: a coloured pill appears at the top of the phone.
+5. **Draw** with a finger, **Board**, **Undo**, **Clear**: as before.
+6. Turn the phone sideways: two very large buttons. Lock and unlock: it reconnects.
+
+**B. Laptop as presenter view** (the main new thing)
+
+7. With the talk still running on the first computer, on your laptop open `benlockwood.com/talks/present` and type the code.
+   - Expect: the slide large on the left, next slide and notes on the right, like the Mac app.
+8. Step with the arrow keys. Click the slide (advances). Tab for the overview; type in the search box; Enter on a result.
+9. Press **L** and move the mouse over the slide: the red dot appears on the room screen. Press **D** and draw with the trackpad or mouse.
+10. With the phone still connected: tap Next on the phone and watch the laptop follow; draw on the laptop and watch the ink appear on the phone.
+11. **More → Timings** (or Ctrl+Shift+D): the room PC's draw timings, and both devices listed.
+12. Narrow the laptop's browser window until it is phone-width, then widen it again: the layout should change and nothing should be cut off.
+
+**C. Rehearse**
+
+13. End the talk. On the laptop, open the presenter view with the code again. It says "Waiting for the room PC". **More → Rehearse here**.
+    - Expect: "Rehearsing: no room screen", the clock running, slides and notes stepping.
+14. On the phone's presenter view first screen, tap **rehearse from a PDF on this device** and pick a PDF: it should run with no network.
+
+**D. Two screens** (second display)
+
+15. Start in two-screen mode as in W4. The second window should now be the same presenter view as in part B. Check keys, the overview, Laser, Draw.
+16. **More → Swap displays**, and Cmd+D.
+17. Connect the phone as well: the second window's top line should say "Slides on the other screen · 1 more device".
+18. Esc twice in the second window: both windows go.
+
+**E. iPad, if you have one**
+
+19. Open the presenter view by code, held upright (stacked panes) and on its side (side by side).
+20. With a Pencil: it should draw without tapping Draw first, while a finger still swipes.
+
+Results in `docs/spikes/W6.md`, please. Parts A and D repeat things that worked before the rewrite; anything that used to work and now doesn't is the most important thing to report.

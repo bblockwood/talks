@@ -134,7 +134,7 @@ describe("ink on the wire", () => {
 
   it("state reports how many strokes the audience sees", () => {
     const s = run([begin("p:1"), begin("p:2"), white, begin("b:1")]);
-    expect(stateBody(s, deck.frames, 0, "").ink).toBe(1);
-    expect(stateBody(run([live], s), deck.frames, 0, "").ink).toBe(2);
+    expect(stateBody(s, deck.frames, 0).ink).toBe(1);
+    expect(stateBody(run([live], s), deck.frames, 0).ink).toBe(2);
   });
 });

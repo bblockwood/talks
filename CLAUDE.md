@@ -15,8 +15,8 @@ Ben is an experienced LaTeX/Beamer user who works mostly in the terminal, often 
 
 ```
 src/core/      DOM-free logic: frames, notes merge, links, history, commands, crypto, protocol
-src/room/      entry screen, audience view, presenter view
-src/remote/    phone remote
+src/room/      entry screen, audience view (the room's computer)
+src/console/   presenter view: second window, laptop, tablet or phone (was src/remote/ and the presenter window)
 src/shared/    rendering, relay client, UI bits
 relay/         Cloudflare Worker + Durable Object (own package.json, wrangler.toml)
 tools/         publish, codes, revoke CLIs (TypeScript run directly by Node ≥ 22.18)

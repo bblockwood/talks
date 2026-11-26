@@ -3,8 +3,9 @@
 import type { AudienceMode, Command, SessionState } from "./session";
 import { elapsedMs, inkLayer } from "./session";
 import type { FrameIndex } from "./frames";
+import type { InkLayer } from "./ink";
 
-export const APP_VERSION = "web-w3";
+export const APP_VERSION = "web-w6";
 const IV_BYTES = 12;
 const MAX_FRAME_BYTES = 64 * 1024; // the relay drops anything larger
 
@@ -15,6 +16,17 @@ export interface TimerSnapshot {
   /** Elapsed at the moment the state was sent. The receiver extrapolates from when it arrived. */
   readonly elapsedMs: number;
   readonly targetMs: number | null;
+}
+
+/** The room PC's own status, for presenter views to show. Never shown to the audience. */
+export interface RoomInfo {
+  /** The room PC's relay connection: "connected", "reconnecting", "unavailable"… */
+  readonly relay: string;
+  /** Presenter views heard from in the last few seconds, by device name. */
+  readonly devices: readonly string[];
+  /** Input → audience draw timings in milliseconds, for the debug overlay (SPEC §6.4). */
+  readonly draw: { readonly count: number; readonly medianMs: number | null; readonly lastMs: number | null; readonly maxMs: number | null };
+  readonly cacheMisses: number;
 }
 
 /** Identifies the command a state message answers, so the sender can time the round trip. */
@@ -40,19 +52,26 @@ export interface StateBody {
   readonly deckPublished: string;
   /** Beamer notes layout the room PC is cropping to ("left", "right", "top", "bottom"), or null. */
   readonly split: string | null;
-  /** Number of ink strokes the audience currently sees, so a phone knows when its own copy is stale. */
+  /** Number of ink strokes the audience currently sees, so a presenter view knows when its copy is stale. */
   readonly ink: number;
+  /**
+   * Random id of this talk session. Commands, ink, pointer and end messages must quote it in
+   * `to`, so frames recorded in an earlier session of the same talk code cannot be replayed.
+   */
+  readonly session: string;
+  readonly room?: RoomInfo;
   readonly ack?: Ack;
 }
 
 export type Message =
-  | { readonly type: "hello"; readonly body: { readonly role: Role; readonly device: string; readonly appVersion: string } }
+  | { readonly type: "hello"; readonly body: { readonly role: Role; readonly device: string; readonly appVersion: string; readonly session?: string } }
   | { readonly type: "state"; readonly body: StateBody }
   | { readonly type: "command"; readonly body: Command }
   | { readonly type: "pointer"; readonly body: { readonly x: number; readonly y: number; readonly visible: boolean } }
   | { readonly type: "ping"; readonly body: { readonly t: number } }
   | { readonly type: "pong"; readonly body: { readonly t: number } }
   | { readonly type: "ink"; readonly body: InkMessage }
+  | { readonly type: "strokes"; readonly body: StrokeOp }
   | { readonly type: "end"; readonly body: Record<string, never> };
 
 /**
@@ -65,6 +84,18 @@ export type InkMessage =
   | { readonly op: "end"; readonly id: number }
   | { readonly op: "undo" }
   | { readonly op: "clear" };
+
+/**
+ * Ink as the room PC applied it, sent to every presenter view so they all show the same ink.
+ * `from` is the sender id of whoever drew it; that device already has the stroke and skips it.
+ * `reset` starts a full copy (for a view that just joined): the strokes follow as begin/append.
+ */
+export type StrokeOp =
+  | { readonly op: "reset" }
+  | { readonly op: "begin"; readonly from: string; readonly layer: InkLayer; readonly id: string; readonly x: number; readonly y: number; readonly color: number; readonly width: number }
+  | { readonly op: "append"; readonly from: string; readonly id: string; readonly points: readonly number[] }
+  | { readonly op: "undo"; readonly from: string; readonly layer: InkLayer }
+  | { readonly op: "clear"; readonly from: string; readonly layer: InkLayer };
 
 /** The session command an ink message stands for, or null for `end`, which changes nothing. */
 export function inkCommand(sid: string, ink: InkMessage): Command | null {
@@ -87,16 +118,20 @@ export type Envelope = Message & {
   readonly sid: string;
   /** Increments per sender. Receivers drop anything not newer than the last one seen. */
   readonly seq: number;
+  /** The session id of the talk this message is meant for (see `StateBody.session`). */
+  readonly to?: string;
 };
 
-export function stateBody(
-  state: SessionState,
-  frames: FrameIndex,
-  now: number,
-  deckPublished: string,
-  ack?: Ack,
-  split: string | null = null,
-): StateBody {
+export interface StateExtras {
+  readonly deckPublished?: string;
+  readonly split?: string | null;
+  readonly session?: string;
+  readonly room?: RoomInfo;
+  readonly ack?: Ack;
+}
+
+export function stateBody(state: SessionState, frames: FrameIndex, now: number, extras: StateExtras = {}): StateBody {
+  const { deckPublished = "", split = null, session = "", room, ack } = extras;
   const frame = frames.frameContaining(state.committedPage);
   return {
     page: state.committedPage,
@@ -115,6 +150,8 @@ export function stateBody(
     deckPublished,
     split,
     ink: state.ink[inkLayer(state)].length,
+    session,
+    ...(room ? { room } : {}),
     ...(ack ? { ack } : {}),
   };
 }
@@ -173,6 +210,44 @@ export function parseCommand(v: unknown): Command | null {
   }
 }
 
+function parseRoomInfo(v: unknown): RoomInfo | null {
+  if (!isRecord(v) || !isRecord(v["draw"])) return null;
+  const d = v["draw"];
+  const ms = (x: unknown): number | null => (isUnit(x) ? x : null);
+  return {
+    relay: typeof v["relay"] === "string" ? v["relay"].slice(0, 24) : "",
+    devices: Array.isArray(v["devices"]) ? (v["devices"] as unknown[]).filter((x): x is string => typeof x === "string").slice(0, 8).map((x) => x.slice(0, 64)) : [],
+    draw: { count: isIndex(d["count"]) ? d["count"] : 0, medianMs: ms(d["medianMs"]), lastMs: ms(d["lastMs"]), maxMs: ms(d["maxMs"]) },
+    cacheMisses: isIndex(v["cacheMisses"]) ? v["cacheMisses"] : 0,
+  };
+}
+
+const isLayer = (v: unknown): v is InkLayer => v === "page" || v === "board";
+
+function parseStrokeOp(v: Record<string, unknown>): StrokeOp | null {
+  const from = typeof v["from"] === "string" && v["from"].length <= 32 ? v["from"] : null;
+  const id = typeof v["id"] === "string" && v["id"].length <= 64 ? v["id"] : null;
+  switch (v["op"]) {
+    case "reset":
+      return { op: "reset" };
+    case "begin":
+      return from !== null && id !== null && isLayer(v["layer"]) && isUnit(v["x"]) && isUnit(v["y"]) && isIndex(v["color"]) && isUnit(v["width"])
+        ? { op: "begin", from, layer: v["layer"], id, x: v["x"], y: v["y"], color: v["color"], width: v["width"] }
+        : null;
+    case "append": {
+      const points = v["points"];
+      return from !== null && id !== null && Array.isArray(points) && points.length >= 2 && points.length <= 512 && points.every(isUnit)
+        ? { op: "append", from, id, points: points as number[] }
+        : null;
+    }
+    case "undo":
+    case "clear":
+      return from !== null && isLayer(v["layer"]) ? { op: v["op"], from, layer: v["layer"] } : null;
+    default:
+      return null;
+  }
+}
+
 function parseState(v: unknown): StateBody | null {
   if (!isRecord(v) || !isRecord(v["timer"])) return null;
   const mode = parseAudienceMode(v["audienceMode"]);
@@ -212,6 +287,8 @@ function parseState(v: unknown): StateBody | null {
     deckPublished: v["deckPublished"],
     split: typeof v["split"] === "string" && v["split"].length <= 8 ? v["split"] : null,
     ink: isIndex(v["ink"]) ? v["ink"] : 0,
+    session: typeof v["session"] === "string" && SID.test(v["session"]) ? v["session"] : "",
+    ...(parseRoomInfo(v["room"]) ? { room: parseRoomInfo(v["room"]) as RoomInfo } : {}),
     ...(ack ? { ack } : {}),
   };
 }
@@ -252,6 +329,7 @@ export function parseMessage(type: unknown, body: unknown): Message | null {
           role,
           device: typeof body["device"] === "string" ? body["device"].slice(0, 64) : "",
           appVersion: typeof body["appVersion"] === "string" ? body["appVersion"].slice(0, 32) : "",
+          ...(typeof body["session"] === "string" && SID.test(body["session"]) ? { session: body["session"] } : {}),
         },
       };
     }
@@ -273,6 +351,10 @@ export function parseMessage(type: unknown, body: unknown): Message | null {
     case "ink": {
       const ink = parseInk(body);
       return ink ? { type, body: ink } : null;
+    }
+    case "strokes": {
+      const op = parseStrokeOp(body);
+      return op ? { type, body: op } : null;
     }
     case "end":
       return { type, body: {} };
@@ -310,9 +392,9 @@ export class Channel {
   }
 
   /** `iv (12 bytes) || AES-256-GCM(channel-key, iv, JSON)`, with a fresh random iv per frame. */
-  async seal(message: Message): Promise<Uint8Array<ArrayBuffer>> {
+  async seal(message: Message, to?: string): Promise<Uint8Array<ArrayBuffer>> {
     this.seq += 1;
-    const envelope: Envelope = { sid: this.sid, seq: this.seq, ...message };
+    const envelope: Envelope = { sid: this.sid, seq: this.seq, ...(to ? { to } : {}), ...message };
     const iv = crypto.getRandomValues(new Uint8Array(IV_BYTES));
     const plaintext = new TextEncoder().encode(JSON.stringify(envelope));
     const ciphertext = new Uint8Array(await crypto.subtle.encrypt({ name: "AES-GCM", iv }, this.key, plaintext));
@@ -355,6 +437,7 @@ export class Channel {
     if (seq <= (this.lastSeen.get(sid) ?? 0)) return null;
     if (this.lastSeen.size > 256 && !this.lastSeen.has(sid)) this.lastSeen.clear(); // bound memory
     this.lastSeen.set(sid, seq);
-    return { sid, seq, ...message };
+    const to = raw["to"];
+    return { sid, seq, ...(typeof to === "string" && SID.test(to) ? { to } : {}), ...message };
   }
 }
