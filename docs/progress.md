@@ -478,3 +478,22 @@ About 15 minutes. A published talk, your phone, an iPad if you have one, and a c
 16. A Windows classroom PC with your clicker: `benlockwood.com/talks/w0/` for the key codes, then a real talk at `benlockwood.com/talks`.
 
 Results in `docs/spikes/W5.md`, please.
+
+### Live check (2026-11-26)
+
+Against `https://benlockwood.com/talks/` and the deployed relay, with a throwaway deck (published, then revoked), in headless Chromium:
+
+- `sw.js` is served as JavaScript and takes control of the page; the caches then held 18 app files and the deck's 2 encrypted files.
+- A stroke drawn on a phone-sized remote page appeared on the room page's ink layer through the real relay, and was cleared by stepping to the next slide.
+- After ending the talk, with the network turned off, the entry page reloaded, the same code opened the deck again, and the page reported "Phone unavailable: keyboard and clicker only".
+- No page errors.
+
+### Where things stand
+
+W0–W5 are built. SPEC §10 says the next step is Ben's: use it for a real talk at another institution before anything further. Open hardware checks, in rough order of importance:
+
+1. A Windows classroom PC with a real clicker (W0 key codes, then a real talk).
+2. The campus Wi-Fi latency number (W3 part D).
+3. Drawing with a finger and an Apple Pencil (W5 part A).
+4. Swap displays on real screens (W5 part C).
+5. Firefox or Safari as the room browser.
