@@ -389,7 +389,7 @@ Part A needs only your Mac. Part B needs two screens showing different things: a
    - Expect: both screens listed, with the external one preselected for slides. If the wrong one is selected, pick the other.
 6. Click **Start**.
    - Expect: slides full screen on the projector, and a dark presenter window filling your own screen, with the current slide, the next slide, notes, and a status bar.
-   - **If no presenter window appears**, look for a blocked pop-up icon at the right of the address bar on the screen with the slides... but that window is full screen, so press Esc twice to end, then allow pop-ups for benlockwood.com (Chrome: Settings → Privacy and security → Site settings → Pop-ups and redirects → Allowed to send pop-ups → add `benlockwood.com`) and try again. Please note that this happened.
+   - **If no presenter window appears**, the browser blocked it as a pop-up. Press Esc twice to end, allow pop-ups for the site (Chrome: Settings → Privacy and security → Site settings → Pop-ups and redirects → "Allowed to send pop-ups" → Add → `benlockwood.com`), and start again. Please note that this happened.
    - Note where each window actually landed and whether the presenter window fills its screen.
 7. In the presenter window: step with → and ←, and with the clicker. Click the current slide (advances). Type a frame number and Enter, then click **Back to Frame N**.
 8. Press **Tab**: the overview. Click a slide (it jumps, the overview stays). Type in the search box, press Enter on a result. Esc clears the search; Esc again closes the overview.
