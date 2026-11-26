@@ -193,6 +193,43 @@ test("the phone drives the room PC: steps, notes, clock, preview, back, black, p
   await room.close();
 });
 
+test("a phone held sideways shows two very large buttons that still drive the talk", async ({ browser }) => {
+  const room = await openRoom(browser);
+  await room.locator("#start").click();
+  const phone = await openPhone(browser);
+  await expect(phone.locator("#link")).toContainText("Connected to room PC");
+
+  await phone.setViewportSize({ width: 844, height: 390 });
+  await expect(phone.locator("#current")).toBeHidden();
+  await expect(phone.locator("#notes")).toBeHidden();
+  await expect(phone.locator("#bar-where")).toHaveText("Frame 1/7");
+  const next = (await phone.locator("#next").boundingBox())!;
+  const prev = (await phone.locator("#prev").boundingBox())!;
+  expect(next.height).toBeGreaterThan(200);
+  expect(next.width).toBeGreaterThan(450);
+  expect(prev.height).toBeGreaterThan(200);
+  expect(prev.width).toBeGreaterThan(200);
+  // Nothing spills off the screen.
+  expect(next.y + next.height).toBeLessThanOrEqual(390);
+  expect(next.x + next.width).toBeLessThanOrEqual(844);
+
+  await phone.locator("#next").click();
+  await phone.locator("#next").click();
+  await expect.poll(() => roomPage(room)).toBe(2);
+  await expect(phone.locator("#bar-where")).toHaveText("Frame 3/7 · 1/3");
+  await phone.locator("#prev").click();
+  await expect.poll(() => roomPage(room)).toBe(1);
+  if (process.env["LECTERN_SHOTS"]) await phone.screenshot({ path: `${process.env["LECTERN_SHOTS"]}/phone-landscape.png` });
+
+  // Turned upright again, the slide and notes come back on the right page.
+  await phone.setViewportSize({ width: 390, height: 844 });
+  await expect(phone.locator("#current")).toBeVisible();
+  await expect(phone.locator("#frame-line")).toHaveText("Frame 2 of 7");
+  await expect.poll(() => phone.evaluate(() => (window as unknown as { __remote: { shownPage(): number | null } }).__remote.shownPage())).toBe(1);
+  await phone.context().close();
+  await room.close();
+});
+
 test("only ciphertext crosses the relay", async ({ browser }) => {
   const room = await openRoom(browser);
   const context = await browser.newContext({ viewport: { width: 390, height: 844 } });

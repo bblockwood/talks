@@ -47,8 +47,12 @@ async function fakeTwoScreens(context: BrowserContext, extended = true): Promise
     const real = Element.prototype.requestFullscreen;
     Element.prototype.requestFullscreen = function (options?: FullscreenOptions) {
       (window as unknown as { __askedScreen?: string }).__askedScreen = (options as { screen?: { label: string } } | undefined)?.screen?.label;
+      // Already full screen: this is a move to another screen, which the fake screens can't perform.
+      if (document.fullscreenElement === this) return Promise.resolve();
       return real.call(this, { navigationUI: "hide" });
     };
+    const moves: number[][] = ((window as unknown as { __moves: number[][] }).__moves = []);
+    window.moveTo = (x: number, y: number) => void moves.push([x, y]);
   }, extended);
 }
 
@@ -192,6 +196,17 @@ test("two screens: the presenter window drives the audience window", async ({ br
   await expect(presenter.locator("#debug")).toContainText("input → audience draw");
   await expect(presenter.locator("#debug")).toContainText(/median \d/);
   await presenter.keyboard.press("Control+Shift+D");
+
+  // Swap displays: the button hands its click to the audience window, which moves its full screen
+  // to the other screen; the presenter window moves the opposite way. Ctrl+D does the same.
+  const asked = () => main.evaluate(() => (window as unknown as { __askedScreen?: string }).__askedScreen);
+  await presenter.locator("#swap").click();
+  await expect.poll(asked).toBe("Built-in Display");
+  await expect.poll(() => presenter.evaluate(() => (window as unknown as { __moves: number[][] }).__moves.at(-1))).toEqual([1280, 0]);
+  await presenter.keyboard.press("Control+d");
+  await expect.poll(asked).toBe("Projector");
+  await expect.poll(() => presenter.evaluate(() => (window as unknown as { __moves: number[][] }).__moves.at(-1))).toEqual([0, 0]);
+  await expect(main.locator("#audience")).toBeVisible();
 
   // Keys in the audience window still work, and the presenter view follows.
   const where = await presenter.locator("#where").textContent();

@@ -288,7 +288,7 @@ function start(fullscreen: boolean): void {
     if (presentation) {
       // Mode B: the presenter window opens from the same click, right after full screen is granted.
       // If the browser blocks it, the talk is simply in Mode A.
-      if (placement && forPresenter) new PresenterHost(presentation, forPresenter).open(placement.presenter);
+      if (placement && forPresenter) new PresenterHost(presentation, forPresenter).open(placement.presenter, placement.audience);
       presenterDeck = null;
       entry.hidden = true;
       // The presentation now owns the deck and cache, and wipes them when it ends.

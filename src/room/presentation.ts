@@ -45,6 +45,13 @@ export class Presentation {
   /** Mode B: called after every state change, and when the talk ends. */
   onChange: (() => void) | null = null;
   onEnd: (() => void) | null = null;
+  /** Mode B: Ctrl+D or Cmd+D was pressed in the audience window (swap displays, Native §6.5). */
+  onSwapKey: (() => void) | null = null;
+
+  /** Moves the full-screen audience view to another screen. Needs a user gesture, or one delegated to this window. */
+  async moveToScreen(screen: ScreenDetailed): Promise<void> {
+    await this.root.requestFullscreen({ navigationUI: "hide", screen });
+  }
 
   /**
    * Starts presenting. Must be called synchronously from the Start click, because full screen
@@ -236,6 +243,11 @@ export class Presentation {
 
   private readonly onKeyDown = (ev: KeyboardEvent): void => {
     if (ev.key === "Escape") this.escapeDown = true;
+    if (this.onSwapKey && (ev.ctrlKey || ev.metaKey) && !ev.altKey && !ev.shiftKey && (ev.key === "d" || ev.key === "D")) {
+      ev.preventDefault(); // otherwise the browser bookmarks the page
+      if (!ev.repeat) this.onSwapKey();
+      return;
+    }
     const result = this.keys.interpret(
       {
         key: ev.key,

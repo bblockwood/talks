@@ -231,6 +231,10 @@ export class RemoteConsole {
     $("frame-line").textContent = frame ? `Frame ${frame.label} of ${frames.frameCount}` : "–";
     const builds = frame ? frame.lastPage - frame.firstPage + 1 : 1;
     $("build-line").textContent = builds > 1 ? `Build ${frames.buildIndex(page) + 1} of ${builds}` : "";
+    // Shown in landscape, where the slide and notes are hidden to leave room for the buttons.
+    $("bar-where").textContent = frame
+      ? `Frame ${frame.label}/${frames.frameCount}${builds > 1 ? ` · ${frames.buildIndex(page) + 1}/${builds}` : ""}`
+      : "";
 
     // Notes: text when there is any; otherwise, for a Beamer notes-split deck, the notes half as an image.
     const note = this.notes.noteFor(page, frames);

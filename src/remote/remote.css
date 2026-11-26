@@ -443,3 +443,42 @@ button.wide {
   background: var(--panel);
   touch-action: manipulation;
 }
+
+.bar-where {
+  display: none;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+/*
+ * A phone held sideways: no room for slides and notes, so the screen becomes two very large
+ * buttons with the frame and the clock above them (Ben, 2026-11-26). Tablets in landscape are
+ * tall enough to keep the normal layout.
+ */
+@media (orientation: landscape) and (max-height: 540px) {
+  .console .stage,
+  .console .info,
+  .console .notes,
+  .console .notes-image {
+    display: none !important;
+  }
+  .bar-where {
+    display: inline;
+  }
+  .console {
+    padding-left: max(1rem, env(safe-area-inset-left));
+    padding-right: max(1rem, env(safe-area-inset-right));
+  }
+  .steps {
+    flex: 1;
+    min-height: 0;
+    order: 2;
+  }
+  .tools {
+    order: 1;
+  }
+  .step {
+    height: 100%;
+    font-size: 2.2rem;
+  }
+}

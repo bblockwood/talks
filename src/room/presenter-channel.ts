@@ -27,7 +27,15 @@ export interface PresenterInfo {
 export type ToPresenter =
   | { t: "deck"; deck: PresenterDeck }
   | { t: "state"; state: SessionState; info: PresenterInfo }
+  /** Something the presenter should know, shown briefly in the status bar. Never shown to the audience. */
+  | { t: "notice"; text: string }
   | { t: "end" };
+
+/**
+ * Sent from the presenter window straight to the audience window with `window.opener.postMessage`
+ * and `delegate: "fullscreen"`, so the click in one window lets the other move its full screen.
+ */
+export const SWAP_MESSAGE = "lectern-swap-displays";
 
 export type ToAudience =
   | { t: "ready" }

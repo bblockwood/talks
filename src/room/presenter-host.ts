@@ -3,7 +3,7 @@
 // the talk simply continues as Mode A.
 import { parseCommand } from "../core/protocol";
 import type { Presentation } from "./presentation";
-import { randomChannelName } from "./presenter-channel";
+import { SWAP_MESSAGE, randomChannelName } from "./presenter-channel";
 import type { PresenterDeck, ToAudience, ToPresenter } from "./presenter-channel";
 
 const INFO_EVERY_MS = 1000;
@@ -15,6 +15,8 @@ export class PresenterHost {
   private timer: number | undefined;
   private deck: PresenterDeck | null;
   private closed = false;
+  /** Which screen has the slides and which the presenter window, when the browser told us. */
+  private placement: { audience: ScreenDetailed; presenter: ScreenDetailed } | null = null;
 
   constructor(
     private readonly presentation: Presentation,
@@ -25,6 +27,38 @@ export class PresenterHost {
     this.channel.onmessage = (ev: MessageEvent) => this.onMessage(ev.data as ToAudience);
     presentation.onChange = () => this.sendState();
     presentation.onEnd = () => this.close();
+    presentation.onSwapKey = () => void this.swap();
+    window.addEventListener("message", this.onWindowMessage);
+  }
+
+  /**
+   * The presenter window's Swap button arrives here directly (not over the BroadcastChannel),
+   * because only a direct postMessage can hand over the click's permission to change full screen.
+   */
+  private readonly onWindowMessage = (ev: MessageEvent): void => {
+    if (ev.origin !== window.location.origin || ev.source !== this.popup || ev.data !== SWAP_MESSAGE) return;
+    void this.swap();
+  };
+
+  /** Swap displays (Native §6.1): slides move to the presenter's screen and the presenter window to the other. */
+  async swap(): Promise<void> {
+    const placement = this.placement;
+    if (this.closed || !placement) return;
+    try {
+      await this.presentation.moveToScreen(placement.presenter);
+    } catch {
+      this.post({ t: "notice", text: "Could not swap: click the slides once, then press Ctrl+D (Cmd+D on a Mac) there." });
+      return;
+    }
+    this.placement = { audience: placement.presenter, presenter: placement.audience };
+    const to = placement.audience;
+    try {
+      this.popup?.moveTo(to.availLeft, to.availTop);
+      this.popup?.resizeTo(to.availWidth, to.availHeight);
+      this.popup?.focus();
+    } catch {
+      // The browser would not move the window; it can be dragged across by hand.
+    }
   }
 
   /**
@@ -32,7 +66,8 @@ export class PresenterHost {
    * the Start click, right after full screen was granted: Chromium allows one such companion
    * window from the same gesture. Returns false if the browser blocked it.
    */
-  open(screen: ScreenDetailed | null): boolean {
+  open(screen: ScreenDetailed | null, audience: ScreenDetailed | null = null): boolean {
+    if (screen && audience) this.placement = { audience, presenter: screen };
     const features = screen
       ? `popup,left=${screen.availLeft},top=${screen.availTop},width=${screen.availWidth},height=${screen.availHeight}`
       : "popup,width=1200,height=750";
@@ -94,6 +129,8 @@ export class PresenterHost {
     window.clearInterval(this.timer);
     this.presentation.onChange = null;
     this.presentation.onEnd = null;
+    this.presentation.onSwapKey = null;
+    window.removeEventListener("message", this.onWindowMessage);
     this.deck = null;
     this.channel.close();
     try {

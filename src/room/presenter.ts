@@ -13,7 +13,7 @@ import { openDeck } from "../shared/deck";
 import type { Deck } from "../shared/deck";
 import { SlideSurface } from "../shared/slide-surface";
 import { ThumbGrid } from "../shared/thumbs";
-import { channelNameFromHash } from "./presenter-channel";
+import { SWAP_MESSAGE, channelNameFromHash } from "./presenter-channel";
 import type { PresenterDeck, PresenterInfo, ToAudience, ToPresenter } from "./presenter-channel";
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string): T => {
@@ -47,6 +47,22 @@ let laser = false;
 let overviewOpen = false;
 let notesSize = 22;
 let lastPointerSent = 0;
+let notice = "";
+let noticeUntil = 0;
+
+/**
+ * Swap displays. The click or key press happened in this window, but it is the audience window
+ * that must change its full screen, so the gesture is handed over with `delegate: "fullscreen"`.
+ */
+function swapDisplays(): void {
+  const opener = window.opener as Window | null;
+  if (!opener) return;
+  try {
+    opener.postMessage(SWAP_MESSAGE, { targetOrigin: window.location.origin, delegate: "fullscreen" } as WindowPostMessageOptions);
+  } catch {
+    opener.postMessage(SWAP_MESSAGE, window.location.origin); // a browser without capability delegation
+  }
+}
 const keys = new KeyInterpreter();
 
 const send = (command: Command): void => post({ t: "command", command });
@@ -158,7 +174,7 @@ function tick(): void {
   $("wall").textContent = new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
 
   if (info) {
-    const relay =
+    const relay = performance.now() < noticeUntil ? notice :
       info.relay === "connected"
         ? info.remotes.length === 0
           ? "Phone: none connected"
@@ -274,6 +290,11 @@ function onKeyDown(ev: KeyboardEvent): void {
     $("debug").hidden = !$("debug").hidden;
     return;
   }
+  if ((ev.ctrlKey || ev.metaKey) && !ev.altKey && !ev.shiftKey && (ev.key === "d" || ev.key === "D")) {
+    ev.preventDefault(); // otherwise the browser bookmarks the page
+    if (!ev.repeat) swapDisplays();
+    return;
+  }
   const plain = !ev.ctrlKey && !ev.altKey && !ev.metaKey;
   const inSearch = ev.target === $("search");
 
@@ -365,6 +386,7 @@ function bind(): void {
 
   $("next").addEventListener("click", () => send({ name: "next" }));
   $("laser").addEventListener("click", () => setLaser(!laser));
+  $("swap").addEventListener("click", swapDisplays);
   $("back").addEventListener("click", () => send({ name: "back" }));
   $("forward").addEventListener("click", () => send({ name: "forward" }));
   $("overview-toggle").addEventListener("click", () => setOverview(!overviewOpen));
@@ -425,6 +447,10 @@ if (channel) {
       state = message.state;
       info = message.info;
       render();
+    } else if (message.t === "notice") {
+      notice = message.text;
+      noticeUntil = performance.now() + 8000;
+      tick();
     } else if (message.t === "end") {
       // The talk is over: drop everything decrypted and go.
       wipe();
