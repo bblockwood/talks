@@ -180,3 +180,36 @@ button:disabled {
 .phone-status.ok::before {
   background: #16a34a;
 }
+
+.split-line {
+  font-size: 0.9rem;
+}
+.split-line button {
+  padding: 0.15rem 0.6rem;
+  margin-left: 0.4rem;
+}
+.modes {
+  border: 1px solid color-mix(in srgb, currentColor 25%, transparent);
+  border-radius: 0.4rem;
+  margin: 1rem 0;
+  padding: 0.6rem 0.9rem;
+}
+.modes legend {
+  font-size: 0.85rem;
+  opacity: 0.72;
+  padding: 0 0.3rem;
+}
+.modes label {
+  display: block;
+  padding: 0.2rem 0;
+}
+.mode-b-panel {
+  margin: 0.4rem 0 0 1.5rem;
+  font-size: 0.9rem;
+}
+.mode-b-panel p {
+  margin: 0.4rem 0;
+}
+.mode-b-panel button {
+  padding: 0.25rem 0.7rem;
+}

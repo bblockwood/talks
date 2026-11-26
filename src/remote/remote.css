@@ -434,3 +434,12 @@ button.wide {
 .confirm p {
   margin: 0 0 0.8rem;
 }
+
+.slide.notes-image {
+  flex: 1;
+  min-height: 3rem;
+  max-height: none;
+  aspect-ratio: auto;
+  background: var(--panel);
+  touch-action: manipulation;
+}

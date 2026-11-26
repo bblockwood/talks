@@ -48,6 +48,24 @@
       <section id="ready" hidden>
         <h2 id="deck-title"></h2>
         <p id="deck-summary" class="summary"></p>
+        <p id="split-line" class="split-line" hidden>
+          <span id="split-text"></span>
+          <button id="split-toggle" type="button"></button>
+        </p>
+        <fieldset id="modes" class="modes" hidden>
+          <legend>Screens</legend>
+          <label><input id="mode-a" type="radio" name="mode" value="a" checked /> This screen only</label>
+          <label><input id="mode-b" type="radio" name="mode" value="b" /> Two screens: slides on the projector, notes and controls here</label>
+          <div id="mode-b-panel" class="mode-b-panel" hidden>
+            <p>Your browser will ask to manage windows — click Allow.</p>
+            <p><button id="detect-screens" type="button">Choose screens</button> <span id="screens-status"></span></p>
+            <div id="screens" class="screens"></div>
+          </div>
+        </fieldset>
+        <p id="mirror-note" class="hint" hidden>
+          One screen found. For notes on this screen and slides on the projector, set the displays to “extend” rather
+          than “mirror” and reopen the talk.
+        </p>
         <p>
           <button id="start" class="primary big">Start</button>
         </p>

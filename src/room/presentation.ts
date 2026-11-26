@@ -9,6 +9,7 @@ import type { Command, DeckContext, SessionState } from "../core/session";
 import type { Deck } from "../shared/deck";
 import type { RenderCache } from "../shared/render-cache";
 import { AudienceView } from "./audience";
+import type { PresenterInfo } from "./presenter-channel";
 import type { RoomLink } from "./room-link";
 
 const HEARTBEAT_MS = 5000;
@@ -16,6 +17,8 @@ const HEARTBEAT_MS = 5000;
 export interface PresentationOptions {
   /** False when the user chose to present in the window (full screen was blocked). */
   readonly fullscreen: boolean;
+  /** Mode B: the screen to put the audience view on. Omitted, full screen uses the current screen. */
+  readonly screen?: ScreenDetailed;
   /** Called once everything decrypted has been dropped. */
   readonly onEnded: () => void;
   /** The relay connection, when the deck was opened by code. Null means keyboard and clicker only. */
@@ -36,6 +39,12 @@ export class Presentation {
   private escapeDown = false;
   private ended = false;
   private heartbeat: number | undefined;
+  /** Remotes heard from recently: sender id → device name and when. */
+  private readonly remotes = new Map<string, { device: string; at: number }>();
+
+  /** Mode B: called after every state change, and when the talk ends. */
+  onChange: (() => void) | null = null;
+  onEnd: (() => void) | null = null;
 
   /**
    * Starts presenting. Must be called synchronously from the Start click, because full screen
@@ -50,7 +59,9 @@ export class Presentation {
     root.hidden = false;
     if (options.fullscreen) {
       try {
-        await root.requestFullscreen({ navigationUI: "hide" });
+        await root.requestFullscreen(
+          options.screen ? { navigationUI: "hide", screen: options.screen } : { navigationUI: "hide" },
+        );
       } catch {
         root.hidden = true;
         return null;
@@ -115,6 +126,7 @@ export class Presentation {
       this.state = next;
       this.render(inputTime);
       this.broadcast(ack);
+      this.onChange?.();
     } else if (ack) {
       this.broadcast(ack); // nothing changed (e.g. Next on the last slide), but the sender still gets its answer
     }
@@ -125,12 +137,49 @@ export class Presentation {
     if (this.ended) return;
     this.options.link?.send({
       type: "state",
-      body: stateBody(this.state, this.deck.frames, Date.now(), this.options.deckPublished, ack),
+      body: stateBody(this.state, this.deck.frames, Date.now(), this.options.deckPublished, ack, this.deck.split),
     });
+  }
+
+  get currentState(): SessionState {
+    return this.state;
+  }
+
+  /** The presenter's pointer, from the presenter window or a phone. */
+  pointer(x: number, y: number, visible: boolean): void {
+    if (this.ended || !Number.isFinite(x) || !Number.isFinite(y)) return;
+    this.view.setPointer(Math.min(1, Math.max(0, x)), Math.min(1, Math.max(0, y)), visible);
+  }
+
+  /** Status for the presenter view only; none of it is ever shown to the audience. */
+  info(): PresenterInfo {
+    const now = performance.now();
+    for (const [sid, remote] of this.remotes) if (now - remote.at > 10_000) this.remotes.delete(sid);
+    const draws = performance.getEntriesByName("lectern:input-to-draw").map((e) => e.duration);
+    const sorted = [...draws].sort((a, b) => a - b);
+    return {
+      relay: this.options.link?.status ?? "unavailable",
+      remotes: [...this.remotes.values()].map((r) => r.device || "remote"),
+      draw: {
+        count: draws.length,
+        medianMs: sorted[Math.floor(sorted.length / 2)] ?? null,
+        lastMs: draws.at(-1) ?? null,
+        maxMs: sorted.at(-1) ?? null,
+      },
+      cacheMisses: this.cache.misses,
+    };
   }
 
   private readonly onRelayMessage = (envelope: Envelope): void => {
     if (this.ended) return;
+    const known = this.remotes.get(envelope.sid);
+    if (envelope.type === "hello") {
+      if (envelope.body.role !== "room") this.remotes.set(envelope.sid, { device: envelope.body.device, at: performance.now() });
+    } else if (known) {
+      known.at = performance.now();
+    } else {
+      this.remotes.set(envelope.sid, { device: "", at: performance.now() });
+    }
     switch (envelope.type) {
       case "hello":
         if (envelope.body.role !== "room") this.broadcast(); // late joiners sync
@@ -140,7 +189,7 @@ export class Presentation {
         this.dispatch(envelope.body, performance.now(), { sid: envelope.sid, seq: envelope.seq });
         break;
       case "pointer":
-        this.view.setPointer(envelope.body.x, envelope.body.y, envelope.body.visible);
+        this.pointer(envelope.body.x, envelope.body.y, envelope.body.visible);
         break;
       case "ping":
         this.options.link?.send({ type: "pong", body: { t: envelope.body.t } });
@@ -165,6 +214,7 @@ export class Presentation {
     if (import.meta.env.DEV) delete (window as unknown as { __lectern?: unknown }).__lectern;
 
     window.clearInterval(this.heartbeat);
+    this.onEnd?.();
     this.options.link?.close();
     this.view.wipe();
     this.cache.wipe();

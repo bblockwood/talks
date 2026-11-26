@@ -1,4 +1,4 @@
-// npm run publish -- <file.pdf> [--code <word>] [--name <slug>] [--rotate-code] [--random] [--long] [--wait]
+// npm run publish -- <file.pdf> [--code <word>] [--name <slug>] [--rotate-code] [--random] [--long] [--notes-split <side>] [--wait]
 // Encrypts a deck and puts it on the site (SPEC §4.4). The talk code is printed here and stored in
 // ~/.config/lectern/codes.json, and nowhere else.
 import { randomInt } from "node:crypto";
@@ -20,6 +20,10 @@ const USAGE = `Usage: npm run publish -- <file.pdf> [options]
   --rotate-code    Replace the code (with --code, or a random one) and delete the old deck.
   --random         Use four random words instead of a chosen word.
   --long           With --random or --rotate-code: six random words.
+  --notes-split <side>
+                   For Beamer "show notes on second screen": where the notes panel is
+                   (left, right, top, bottom), or none to show whole pages. Without it,
+                   pages about twice as wide or tall as a slide are split automatically.
   --wait           Wait until the new deck is live, and report how long it took.
 `;
 
@@ -56,6 +60,7 @@ async function main(): Promise<void> {
       random: { type: "boolean", default: false },
       long: { type: "boolean", default: false },
       wait: { type: "boolean", default: false },
+      "notes-split": { type: "string" },
       help: { type: "boolean", short: "h", default: false },
     },
   });
@@ -90,7 +95,11 @@ async function main(): Promise<void> {
   const owner = codeOwner(store, code, key);
   if (owner) fail(`that code is already used by another deck (${owner}). Choose a different one with --code <word>.`);
 
-  const deck = await buildDeck(pdfPath, code);
+  const notesSplit = values["notes-split"]?.toLowerCase();
+  if (notesSplit !== undefined && !["left", "right", "top", "bottom", "none"].includes(notesSplit)) {
+    fail("--notes-split must be one of: left, right, top, bottom, none");
+  }
+  const deck = await buildDeck(pdfPath, code, new Date(), notesSplit !== undefined ? { notesSplit } : {});
   for (const message of deck.messages) console.error(message);
 
   // A changed code means a new deck id: the old deck directory goes away in the same commit.

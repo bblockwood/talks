@@ -330,3 +330,75 @@ You need a published talk (ideally one with notes and an appendix link), your ph
 21. Do the same with the phone on cellular.
 
 Please record results in `docs/spikes/W3.md` (a short list is fine). The things most likely to need fixing are the touch gestures in steps 5–6 and the background behaviour in steps 13–14, since those could only be tested with a mouse in a desktop browser.
+
+---
+
+## W4. Dual-screen mode and notes
+
+### W3 results that shape W4
+
+- Ben ran W3 checklist parts A–C on a real phone: connecting, driving the talk, and the failure cases all worked. Part D (the campus Wi-Fi measurement for the 150 ms acceptance) is still open.
+- **Still missing: any test on two extended screens.** The W0 two-screen check has never been run on real hardware, and it can't be automated. Mode B below is built to the Chromium documentation and tested with faked screens; it must be tried on a real lectern PC with a projector before it is relied on. If window placement misbehaves there, Mode A is unaffected.
+
+### Plan (2026-11-26)
+
+1. **Core:** `split.ts` (Beamer second-screen notes: detection per Native §5.1(4), crop rectangles, link remapping) and `search.ts` (text search grouped by frame, Native §4.4).
+2. **Shared:** crops in the render cache and slide surface, so the audience gets only the slide half and the notes pane the notes half; page text extraction for search.
+3. **Mode B (SPEC §5.2).** Offered when the browser reports an extended display. Choosing it explains the permission prompt, asks for window management, and lists the screens. Start then puts the audience view full screen on the chosen screen and opens the presenter view as a second window on the other one, from the same click. The two windows talk over a `BroadcastChannel`; the audience window stays authoritative and hands the presenter window the decrypted deck in memory. If the second window can't open, the talk carries on as Mode A.
+4. **Presenter view (Native §6.2):** current slide, next slide, notes (text, or the notes half of a split deck), a status bar with frame and build, clock, wall clock, room-screen state, relay status and connected remotes; Back/Forward buttons after jumps; laser pointer mode (L); click to advance; the debug overlay (Ctrl+Shift+D).
+5. **Overview and search (Native §6.3, §4.4):** Tab swaps the right column for a search field and a two-column grid of frames; a click jumps at once and the overview stays open; search results are grouped by frame.
+6. **Phone:** follows the room PC's split, and shows the notes half as an image for split decks.
+7. **Publish tool:** `--notes-split` to record the layout in the deck.
+8. **Tests:** unit tests for split and search; e2e for the presenter window with faked screens.
+
+### Done (2026-11-26)
+
+- **Core:** `split.ts`, `search.ts`.
+- **Shared:** crops in `render-cache.ts` and `slide-surface.ts`; `thumbs.ts` (one thumbnail grid for the phone and the overview); page text for search in `deck.ts`.
+- **Mode B:** `presenter-host.ts`, `presenter-channel.ts`, and the presenter window (`presenter/index.html`, `presenter.ts`). The entry screen offers "Two screens" when the browser reports an extended display, explains the permission prompt, lists the screens with the external one preselected for slides, and starts both windows from the Start click. On a single or mirrored display it shows a one-line note instead.
+- **Presenter view:** current slide (click to advance, links work), next slide, notes with A−/A+, draggable divider, Laser (L), "Back to Frame X" / "Forward to Frame Y", status bar with frame and build, FROZEN/BLACK/WHITE pill, connected phones or relay trouble, clock (click to pause, Reset), wall clock; Tab for the overview with a two-column grid (current frame ringed blue, the audience's frame orange when frozen, build counts, notes marks) and search grouped by frame; Ctrl+Shift+D for the debug overlay (input → audience draw, cache misses, relay, remotes). Esc clears typed digits, then the laser, then the overview, and only then counts towards ending.
+- **Notes sources complete:** Beamer second-screen notes are detected (stored setting, pdfpc hint, page shape), the audience and thumbnails get the slide half, and the notes pane (presenter and phone) shows the notes half when the slide has no text note. The entry screen says so and can turn it off. `npm run publish -- … --notes-split left|right|top|bottom|none` records the layout.
+- **Tests:** 207 unit and 28 e2e, all passing. The W4 e2e tests fake the Window Management API (two screens; full screen ignores which screen) and then exercise the real second window: keys, clicks, jump by number, Back/Forward, overview, frozen rings, search, laser, black, debug overlay, keys in either window, Esc-twice from the presenter window, a phone appearing in the status bar, closing the presenter window mid-talk, and the notes split on and off.
+
+### Known issues and notes
+
+- **Mode B is untested on real two-screen hardware.** Three things could differ there: whether `requestFullscreen({ screen })` lands on the projector, whether the browser allows the presenter window from the same click, and whether it opens on the right screen at the right size. If the presenter window is blocked, the talk runs as Mode A with nothing shown on the PC's own monitor; allowing pop-ups for the site and starting again fixes it.
+- **The presenter window is an ordinary window, not full screen**, so it has a title bar. It fills the screen's available area.
+- **Keyboard focus decides which window gets keys.** Both windows handle every key, so a clicker works whichever has focus; keyboard lock for Esc applies only to the full-screen audience window.
+- **Left out for now:** see the last W4 entry in `docs/decisions.md` (outline, Frames/Builds toggle, countdown editor, swap displays, appendix badge).
+- **Search matches within one page's text**, once per frame; it does not highlight the match on the slide.
+- **Opening a deck now keeps a second in-memory copy of the PDF** until Start (for a possible presenter window); in Mode A it is dropped at Start.
+- Chromium only: Firefox and Safari have no Window Management API, so they get Mode A, as SPEC §5.2 says.
+
+### Ben checklist: W4
+
+Part A needs only your Mac. Part B needs two screens showing different things: a lectern PC with a projector set to extend, or your Mac with any external monitor or TV (System Settings → Displays → "Use as: Extended display"). Use Chrome or Edge. About 15 minutes.
+
+**A. Notes split, on one screen (only if you have a Beamer deck with `show notes on second screen`)**
+
+1. Open `benlockwood.com/talks`, click **open a PDF from this computer**, and pick such a deck.
+   - Expect: "Beamer notes found on the right of each page: the audience will see only the slide part."
+2. Click **Start**: only the slide half should be on screen. Esc twice.
+3. Open it again, click **Show the whole page instead**, Start: the whole page, notes panel included.
+
+**B. Two screens**
+
+4. With the second screen attached and extended, open `benlockwood.com/talks` on your own screen (not the projector) and open a talk by its code.
+   - Expect: a "Screens" box with "This screen only" and "Two screens: slides on the projector, notes and controls here". If you instead see "One screen found…", the displays are mirrored: note that, switch to extend, and reload.
+5. Choose **Two screens**. Click **Choose screens** (or Start). The browser asks "…wants to manage windows on all your displays": click **Allow**.
+   - Expect: both screens listed, with the external one preselected for slides. If the wrong one is selected, pick the other.
+6. Click **Start**.
+   - Expect: slides full screen on the projector, and a dark presenter window filling your own screen, with the current slide, the next slide, notes, and a status bar.
+   - **If no presenter window appears**, look for a blocked pop-up icon at the right of the address bar on the screen with the slides... but that window is full screen, so press Esc twice to end, then allow pop-ups for benlockwood.com (Chrome: Settings → Privacy and security → Site settings → Pop-ups and redirects → Allowed to send pop-ups → add `benlockwood.com`) and try again. Please note that this happened.
+   - Note where each window actually landed and whether the presenter window fills its screen.
+7. In the presenter window: step with → and ←, and with the clicker. Click the current slide (advances). Type a frame number and Enter, then click **Back to Frame N**.
+8. Press **Tab**: the overview. Click a slide (it jumps, the overview stays). Type in the search box, press Enter on a result. Esc clears the search; Esc again closes the overview.
+9. Press **L** and move the mouse over the current slide: a red dot should appear on the projector. Esc turns it off.
+10. Press **B**, **F**, **T**: the status bar should show BLACK, FROZEN, and a paused clock. Press each again.
+11. Press **Ctrl+Shift+D**: a small panel with "input → audience draw" numbers. Note the median. Press it again.
+12. Connect your phone as in W3: the status bar should say "Phone: iPhone". Drive from the phone and check the presenter window follows.
+13. Click on the projector screen's slides, then press →: it should still advance (keys work in either window).
+14. Close the presenter window with its close button: the slides should stay up and → should still work. Esc twice to end.
+15. Start again, and this time end with **Esc twice in the presenter window**: both windows should go, and the first window returns to the code screen.
+
+Please record results in `docs/spikes/W4.md`. Steps 5–6 are the ones I could not test at all, so exact wording of anything unexpected there (permission prompt, blocked pop-up, window on the wrong screen) is the most useful thing to write down.

@@ -18,10 +18,11 @@ export class SlideSurface {
     private readonly host: HTMLElement,
     deck: Deck,
     capacity = 8,
+    part: "slide" | "notes" = "slide",
   ) {
     this.canvas = document.createElement("canvas");
     host.replaceChildren(this.canvas);
-    this.cache = new RenderCache(deck, capacity);
+    this.cache = new RenderCache(deck, capacity, part);
     this.cache.onReady = () => this.paint();
     this.observer = new ResizeObserver(() => this.measure());
     this.observer.observe(host);
@@ -34,6 +35,13 @@ export class SlideSurface {
     this.ahead = [...ahead];
     this.request();
     this.paint();
+  }
+
+  /** Re-renders everything, e.g. after the deck's notes split changed. */
+  refresh(): void {
+    this.drawn = null;
+    this.cache.invalidate();
+    this.request();
   }
 
   /** The page currently drawn, which lags `show` until its render is ready. */

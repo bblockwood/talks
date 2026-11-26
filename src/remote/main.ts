@@ -1,6 +1,9 @@
 // Phone remote entry (SPEC §7): enter the talk code, optionally remember it on this phone, or
 // arrive by a `#c=<code>` link. The hash is never sent to any server.
+import { strFromU8 } from "fflate";
 import { normalizeCode } from "../core/code";
+import { parsePdfpc } from "../core/notes";
+import { chooseSplit } from "../core/split";
 import { DeckError, openDeck } from "../shared/deck";
 import { NetworkError, NoTalkError, fetchDeck } from "../shared/fetch-deck";
 import { RemoteConsole } from "./console";
@@ -79,6 +82,9 @@ async function openTalk(rawCode: string, keep: boolean): Promise<void> {
     );
     setStatus("Opening slides…");
     const deck = await openDeck(payload.pdf.slice().buffer);
+    // The same guess the room PC makes; once connected, the phone follows what the room PC reports.
+    const hint = payload.pdfpc ? (parsePdfpc(strFromU8(payload.pdfpc))?.notePosition ?? null) : null;
+    deck.setSplit(chooseSplit(payload.meta.settings.notesSplit, hint, deck.pageSize.width, deck.pageSize.height));
     if (keep) remember(code, payload.meta.title || code);
 
     active?.destroy();

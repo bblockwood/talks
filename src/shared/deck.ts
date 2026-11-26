@@ -6,6 +6,9 @@ import workerUrl from "pdfjs-dist/build/pdf.worker.min.mjs?url";
 import { FrameIndex } from "../core/frames";
 import { linkFromRaw } from "../core/links";
 import type { PageLink } from "../core/links";
+import type { NormalizedRect } from "../core/links";
+import { cropLinks, splitRects } from "../core/split";
+import type { NotesSplit } from "../core/split";
 import { loadEmbeddedNotes } from "./deck-notes";
 
 GlobalWorkerOptions.workerSrc = workerUrl;
@@ -19,6 +22,7 @@ export class DeckError extends Error {
 
 export interface Deck {
   readonly pageCount: number;
+  /** Frames and builds. For a notes-split deck, every page is its own frame (see `setSplit`). */
   readonly frames: FrameIndex;
   /** The PDF's own title, if it has one. */
   readonly title: string | null;
@@ -26,8 +30,23 @@ export interface Deck {
   /** Links of a page once loaded, in annotation order; undefined until then. */
   linksNow(page: number): readonly PageLink[] | undefined;
   loadLinks(page: number): Promise<readonly PageLink[]>;
-  /** Width divided by height of the first page, for laying out slide boxes before anything is rendered. */
+  /** Width divided by height of the slide part of the first page, for laying out slide boxes. */
   readonly aspect: number;
+  /** Size of the first page in PDF points, whole page. */
+  readonly pageSize: { readonly width: number; readonly height: number };
+  /** Beamer second-screen notes layout in force, or null for an ordinary deck. */
+  readonly split: NotesSplit | null;
+  /** The part of each page that is the slide, and the part that is the notes panel (null without a split). */
+  readonly slideCrop: NormalizedRect;
+  readonly notesCrop: NormalizedRect | null;
+  /**
+   * Sets or clears the notes split. Do this before presenting: it changes the crops, the link
+   * rectangles and the frames. Beamer's page labels are not frame numbers in such decks
+   * (5 frames can be labelled 1,1,2,2,3,3), so each page becomes its own frame.
+   */
+  setSplit(split: NotesSplit | null): void;
+  /** Plain text of a page, for search. */
+  pageText(page: number): Promise<string>;
   /** Notes embedded in the PDF as text annotations, per page. Scans every page once. */
   loadEmbeddedNotes(): Promise<Map<number, string>>;
   /** Drops the document and its worker. The deck is unusable afterwards. */
@@ -68,7 +87,9 @@ export async function openDeck(data: ArrayBuffer): Promise<Deck> {
   } catch {
     // Broken label tree: fall back to one frame per page.
   }
-  const frames = labels ? new FrameIndex(labels) : FrameIndex.unlabelled(pdf.numPages);
+  const labelledFrames = labels ? new FrameIndex(labels) : FrameIndex.unlabelled(pdf.numPages);
+  const pageFrames = FrameIndex.unlabelled(pdf.numPages);
+  let split: NotesSplit | null = null;
 
   let title: string | null = null;
   try {
@@ -78,13 +99,14 @@ export async function openDeck(data: ArrayBuffer): Promise<Deck> {
     // No metadata.
   }
 
-  let aspect = 16 / 9;
+  let pageSize = { width: 1600, height: 900 };
   try {
     const first = (await pdf.getPage(1)).getViewport({ scale: 1 });
-    if (first.width > 0 && first.height > 0) aspect = first.width / first.height;
+    if (first.width > 0 && first.height > 0) pageSize = { width: first.width, height: first.height };
   } catch {
     // Keep the default.
   }
+  const texts = new Map<number, Promise<string>>();
   let embeddedNotes: Promise<Map<number, string>> | null = null;
 
   const links = new Map<number, readonly PageLink[]>();
@@ -145,14 +167,54 @@ export async function openDeck(data: ArrayBuffer): Promise<Deck> {
         }),
       );
     }
-    return out;
+    // Rectangles are relative to the slide part of the page, which is what every surface shows.
+    return cropLinks(out, splitRects(split).slide);
   };
 
   return {
     pageCount: pdf.numPages,
-    frames,
+    get frames() {
+      return split ? pageFrames : labelledFrames;
+    },
     title,
-    aspect,
+    get aspect() {
+      const crop = splitRects(split).slide;
+      return (pageSize.width * crop.width) / (pageSize.height * crop.height);
+    },
+    pageSize,
+    get split() {
+      return split;
+    },
+    get slideCrop() {
+      return splitRects(split).slide;
+    },
+    get notesCrop() {
+      return splitRects(split).notes;
+    },
+    setSplit(next) {
+      if (next === split) return;
+      split = next;
+      links.clear();
+      loading.clear();
+    },
+    pageText(page) {
+      let text = texts.get(page);
+      if (!text) {
+        text = pdf
+          .getPage(page + 1)
+          .then((proxy) => proxy.getTextContent())
+          .then((content) =>
+            (content.items as { str?: string; hasEOL?: boolean }[])
+              .map((item) => (item.str ?? "") + (item.hasEOL ? "\n" : " "))
+              .join("")
+              .replace(/[ \t]+/g, " ")
+              .trim(),
+          )
+          .catch(() => "");
+        texts.set(page, text);
+      }
+      return text;
+    },
     loadEmbeddedNotes: () => (embeddedNotes ??= loadEmbeddedNotes(pdf)),
     getPage: (page) => pdf.getPage(page + 1),
     linksNow: (page) => links.get(page),

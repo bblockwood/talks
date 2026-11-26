@@ -10,7 +10,8 @@ import type { DeckPayload } from "../core/payload";
 import { APP_VERSION } from "../core/protocol";
 import type { Envelope, StateBody } from "../core/protocol";
 import type { Command } from "../core/session";
-import { AnnotationMode } from "pdfjs-dist";
+import { parseSplit } from "../core/split";
+import { ThumbGrid } from "../shared/thumbs";
 import type { Deck } from "../shared/deck";
 import { RelayClient, deviceName } from "../shared/relay-client";
 import type { LinkStatus } from "../shared/relay-client";
@@ -69,9 +70,8 @@ export class RemoteConsole {
   private taps: number[] = [];
   private timers: number[] = [];
   private wakeLock: WakeLockSentinel | null = null;
-  private thumbsBuilt = false;
-  private thumbObserver: IntersectionObserver | null = null;
-  private thumbQueue: Promise<void> = Promise.resolve();
+  private thumbs: ThumbGrid | null = null;
+  private notesImage: SlideSurface | null = null;
   private destroyed = false;
 
   constructor(private readonly options: ConsoleOptions) {
@@ -120,11 +120,12 @@ export class RemoteConsole {
     this.destroyed = true;
     this.abort.abort();
     for (const t of this.timers) window.clearInterval(t);
-    this.thumbObserver?.disconnect();
+    this.thumbs?.destroy();
+    this.thumbs = null;
+    this.notesImage?.destroy();
     this.client.close();
     this.current.destroy();
     this.next.destroy();
-    $("grid").replaceChildren();
     $("notes").replaceChildren();
     delete $("notes").dataset["html"];
     this.resetPanels();
@@ -156,6 +157,7 @@ export class RemoteConsole {
     const now = performance.now();
     switch (envelope.type) {
       case "state": {
+        this.followSplit(envelope.body.split);
         this.room = envelope.body;
         this.roomAt = now;
         this.roomSeenAt = now;
@@ -188,6 +190,25 @@ export class RemoteConsole {
     }
   }
 
+  /**
+   * The room PC decides whether a Beamer notes-split deck is cropped (its entry screen can turn
+   * the crop off), so the phone follows what the room PC reports.
+   */
+  private followSplit(reported: string | null): void {
+    const split = parseSplit(reported);
+    if (split === this.deck.split) return;
+    this.deck.setSplit(split);
+    document.documentElement.style.setProperty("--slide-aspect", String(this.deck.aspect));
+    this.current.refresh();
+    this.next.refresh();
+    this.notesImage?.destroy();
+    this.notesImage = null;
+    this.thumbs?.destroy();
+    this.thumbs = null;
+    this.preview = null;
+    void this.loadNotes();
+  }
+
   // ---------------------------------------------------------------- view
 
   private get page(): number {
@@ -211,13 +232,22 @@ export class RemoteConsole {
     const builds = frame ? frame.lastPage - frame.firstPage + 1 : 1;
     $("build-line").textContent = builds > 1 ? `Build ${frames.buildIndex(page) + 1} of ${builds}` : "";
 
+    // Notes: text when there is any; otherwise, for a Beamer notes-split deck, the notes half as an image.
     const note = this.notes.noteFor(page, frames);
     const notesEl = $("notes");
-    const html = note ? renderNotesHtml(note.text) : `<p class="empty">No notes for this slide.</p>`;
-    if (notesEl.dataset["html"] !== html) {
-      notesEl.dataset["html"] = html;
-      notesEl.innerHTML = html; // every piece of note text is escaped by renderNotesHtml
-      notesEl.scrollTop = 0;
+    const asImage = !note && this.deck.notesCrop !== null;
+    notesEl.hidden = asImage;
+    $("notes-image").hidden = !asImage;
+    if (asImage) {
+      this.notesImage ??= new SlideSurface($("notes-image"), this.deck, 3, "notes");
+      this.notesImage.show(page);
+    } else {
+      const html = note ? renderNotesHtml(note.text) : `<p class="empty">No notes for this slide.</p>`;
+      if (notesEl.dataset["html"] !== html) {
+        notesEl.dataset["html"] = html;
+        notesEl.innerHTML = html; // every piece of note text is escaped by renderNotesHtml
+        notesEl.scrollTop = 0;
+      }
     }
 
     const mode = this.room?.audienceMode.kind ?? "live";
@@ -494,73 +524,20 @@ export class RemoteConsole {
 
   private openSlides(): void {
     $("sheet-slides").hidden = false;
-    if (!this.thumbsBuilt) this.buildThumbs();
-    this.markCurrentThumb(true);
-  }
-
-  private buildThumbs(): void {
-    this.thumbsBuilt = true;
-    const grid = $("grid");
-    this.thumbObserver = new IntersectionObserver(
-      (entries) => {
-        for (const entry of entries) {
-          if (!entry.isIntersecting) continue;
-          this.thumbObserver?.unobserve(entry.target);
-          const canvas = entry.target.querySelector("canvas");
-          const page = Number((entry.target as HTMLElement).dataset["page"]);
-          if (canvas) this.thumbQueue = this.thumbQueue.then(() => this.renderThumb(canvas, page));
-        }
-      },
-      { root: grid, rootMargin: "300px" },
-    );
-    for (const frame of this.deck.frames.frames) {
-      const button = document.createElement("button");
-      button.className = "thumb";
-      button.dataset["frame"] = String(frame.index);
-      // Thumbnails show the frame fully built (Native §4.1); a tap previews its first build.
-      button.dataset["page"] = String(frame.lastPage);
-      const canvas = document.createElement("canvas");
-      const cap = document.createElement("div");
-      cap.className = "cap";
-      const label = document.createElement("span");
-      label.textContent = frame.label;
-      const builds = document.createElement("span");
-      const n = frame.lastPage - frame.firstPage + 1;
-      builds.textContent = n > 1 ? `${n} builds` : "";
-      cap.append(label, builds);
-      button.append(canvas, cap);
-      button.addEventListener("click", () => {
+    // A tap previews the frame's first build on this phone only (SPEC §7).
+    this.thumbs ??= new ThumbGrid($("grid"), this.deck, {
+      onPick: (frame) => {
         this.preview = frame.firstPage;
         $("sheet-slides").hidden = true;
         this.update();
-      });
-      grid.append(button);
-      this.thumbObserver.observe(button);
-    }
-  }
-
-  private async renderThumb(canvas: HTMLCanvasElement, page: number): Promise<void> {
-    if (this.destroyed) return;
-    try {
-      const proxy = await this.deck.getPage(page);
-      const unit = proxy.getViewport({ scale: 1 });
-      const width = Math.max(1, Math.round(canvas.clientWidth * Math.min(window.devicePixelRatio || 1, 2)));
-      const scale = width / unit.width;
-      canvas.width = width;
-      canvas.height = Math.round(unit.height * scale);
-      await proxy.render({ canvas, viewport: proxy.getViewport({ scale }), annotationMode: AnnotationMode.DISABLE }).promise;
-    } catch {
-      // A thumbnail that fails to render stays black.
-    }
+      },
+    });
+    this.markCurrentThumb(true);
   }
 
   private markCurrentThumb(scroll = false): void {
     const frame = this.deck.frames.frameContaining(this.room?.page ?? 0);
-    for (const el of $("grid").children) {
-      const isCurrent = (el as HTMLElement).dataset["frame"] === String(frame?.index);
-      el.classList.toggle("current", isCurrent);
-      if (isCurrent && scroll) el.scrollIntoView({ block: "center" });
-    }
+    this.thumbs?.mark(frame?.index ?? null, null, scroll);
   }
 
   private async requestWakeLock(): Promise<void> {

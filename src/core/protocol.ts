@@ -38,6 +38,8 @@ export interface StateBody {
   readonly timer: TimerSnapshot;
   /** `meta.published` of the deck the room PC has open; a phone with another copy offers to reload. */
   readonly deckPublished: string;
+  /** Beamer notes layout the room PC is cropping to ("left", "right", "top", "bottom"), or null. */
+  readonly split: string | null;
   readonly ack?: Ack;
 }
 
@@ -63,6 +65,7 @@ export function stateBody(
   now: number,
   deckPublished: string,
   ack?: Ack,
+  split: string | null = null,
 ): StateBody {
   const frame = frames.frameContaining(state.committedPage);
   return {
@@ -80,6 +83,7 @@ export function stateBody(
       targetMs: state.timer.targetMs,
     },
     deckPublished,
+    split,
     ...(ack ? { ack } : {}),
   };
 }
@@ -173,6 +177,7 @@ function parseState(v: unknown): StateBody | null {
     forwardHistory,
     timer: { running: t["running"], elapsedMs: t["elapsedMs"], targetMs: t["targetMs"] as number | null },
     deckPublished: v["deckPublished"],
+    split: typeof v["split"] === "string" && v["split"].length <= 8 ? v["split"] : null,
     ...(ack ? { ack } : {}),
   };
 }

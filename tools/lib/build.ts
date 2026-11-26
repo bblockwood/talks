@@ -64,7 +64,17 @@ export function readSidecar(text: string): { settings: DeckSettings; noteOverrid
   return { settings, noteOverrides };
 }
 
-export async function buildDeck(pdfPath: string, code: string, now: Date = new Date()): Promise<BuiltDeck> {
+export interface BuildOptions {
+  /** `left`, `right`, `top`, `bottom` or `none`: where Beamer's second-screen notes sit. Overrides the sidecar. */
+  notesSplit?: string;
+}
+
+export async function buildDeck(
+  pdfPath: string,
+  code: string,
+  now: Date = new Date(),
+  options: BuildOptions = {},
+): Promise<BuiltDeck> {
   const messages: string[] = [];
   const pdf = new Uint8Array(readFileSync(pdfPath));
   let info: { pageCount: number; title: string | null };
@@ -89,6 +99,8 @@ export async function buildDeck(pdfPath: string, code: string, now: Date = new D
       messages.push(`Warning: ${path.basename(sidecarPath)} is not valid and was skipped.`);
     }
   }
+
+  if (options.notesSplit !== undefined) settings.notesSplit = options.notesSplit;
 
   let notes: DeckNotes | null = null;
   const pptxPath = `${base}.pptx`;

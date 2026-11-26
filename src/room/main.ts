@@ -8,6 +8,10 @@ import { parsePdfpc, targetDurationMs } from "../core/notes";
 import { strFromU8 } from "fflate";
 import { RenderCache } from "../shared/render-cache";
 import { Presentation } from "./presentation";
+import { chooseSplit } from "../core/split";
+import type { NotesSplit } from "../core/split";
+import type { PresenterDeck } from "./presenter-channel";
+import { PresenterHost } from "./presenter-host";
 import { RoomLink } from "./room-link";
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string): T => {
@@ -33,6 +37,119 @@ let deckPublished = "";
 let targetMs: number | null = null;
 let starting = false;
 let loading = false;
+/** What the presenter window will need in Mode B. Held in memory only, and dropped at Start in Mode A. */
+let presenterDeck: PresenterDeck | null = null;
+/** The split the deck's own settings and shape suggest; the user can turn it off on this screen. */
+let suggestedSplit: NotesSplit | null = null;
+let screens: ScreenDetails | null = null;
+
+/** What a deck source hands over besides the PDF. */
+interface DeckExtras {
+  storedSplit?: string;
+  pdfpcText: string | null;
+  noteOverrides: PresenterDeck["noteOverrides"];
+  pptxNotes: PresenterDeck["pptxNotes"];
+}
+const NO_EXTRAS: DeckExtras = { pdfpcText: null, noteOverrides: [], pptxNotes: [] };
+
+// ---------------------------------------------------------------- Mode B: two screens (SPEC §5.2)
+
+const modeB = $<HTMLInputElement>("mode-b");
+const twoScreensPossible = (): boolean => typeof window.getScreenDetails === "function" && window.screen.isExtended === true;
+
+function showModes(): void {
+  const possible = twoScreensPossible();
+  $("modes").hidden = !possible;
+  // Mirrored displays look like a single screen to the browser, so only Mode A can be offered.
+  $("mirror-note").hidden = possible || typeof window.getScreenDetails !== "function";
+  if (!possible) {
+    modeB.checked = false;
+    $<HTMLInputElement>("mode-a").checked = true;
+  }
+  $("mode-b-panel").hidden = !modeB.checked;
+}
+
+function listScreens(): void {
+  const box = $("screens");
+  box.replaceChildren();
+  if (!screens) return;
+  // Slides go to the external screen by default; the presenter view stays where this window is.
+  const preferred =
+    screens.screens.find((s) => s !== screens?.currentScreen && !s.isInternal) ??
+    screens.screens.find((s) => s !== screens?.currentScreen) ??
+    screens.screens[0];
+  screens.screens.forEach((s, i) => {
+    const label = document.createElement("label");
+    const radio = document.createElement("input");
+    radio.type = "radio";
+    radio.name = "audience-screen";
+    radio.value = String(i);
+    radio.checked = s === preferred;
+    label.append(radio, ` Slides on “${s.label || `Screen ${i + 1}`}” (${s.width}×${s.height}${s === screens?.currentScreen ? ", this screen" : ""})`);
+    box.append(label);
+  });
+}
+
+async function detectScreens(): Promise<boolean> {
+  if (!window.getScreenDetails) return false;
+  try {
+    screens = await window.getScreenDetails();
+  } catch {
+    screens = null;
+    $("screens-status").textContent = "The browser did not allow window management, so two-screen mode is unavailable. Use “This screen only”.";
+    return false;
+  }
+  if (screens.screens.length < 2) {
+    $("screens-status").textContent = "Only one screen was found. If a projector is attached, it is mirroring this screen.";
+    screens = null;
+    return false;
+  }
+  $("screens-status").textContent = "The notes and controls will open on the other screen.";
+  listScreens();
+  return true;
+}
+
+function chosenScreens(): { audience: ScreenDetailed; presenter: ScreenDetailed | null } | null {
+  if (!screens) return null;
+  const picked = document.querySelector<HTMLInputElement>('input[name="audience-screen"]:checked');
+  const audienceScreen = screens.screens[Number(picked?.value ?? 0)];
+  if (!audienceScreen) return null;
+  const presenter =
+    (audienceScreen !== screens.currentScreen ? screens.currentScreen : screens.screens.find((s) => s !== audienceScreen)) ?? null;
+  return { audience: audienceScreen, presenter };
+}
+
+// ---------------------------------------------------------------- Beamer notes split
+
+function showSplit(): void {
+  const line = $("split-line");
+  line.hidden = suggestedSplit === null;
+  if (!deck || suggestedSplit === null) return;
+  const on = deck.split !== null;
+  $("split-text").textContent = on
+    ? `Beamer notes found on the ${suggestedSplit} of each page: the audience will see only the slide part.`
+    : "Showing whole pages, notes panel included.";
+  $("split-toggle").textContent = on ? "Show the whole page instead" : "Hide the notes panel";
+}
+
+function applySplit(split: NotesSplit | null): void {
+  if (!deck || !cache) return;
+  deck.setSplit(split);
+  if (presenterDeck) presenterDeck.split = split;
+  cache.invalidate();
+  cache.want([0, 1, 2].filter((p) => p < (deck?.pageCount ?? 0)));
+  showSummary();
+  showSplit();
+}
+
+function showSummary(): void {
+  if (!deck) return;
+  const { frameCount } = deck.frames;
+  $("deck-summary").textContent =
+    frameCount === deck.pageCount
+      ? `${deck.pageCount} ${deck.pageCount === 1 ? "page" : "pages"}`
+      : `${frameCount} frames, ${deck.pageCount} pages`;
+}
 
 const phoneStatus = $("phone-status");
 function showPhoneStatus(): void {
@@ -54,6 +171,8 @@ async function dropDeck(): Promise<void> {
   link = null;
   deckPublished = "";
   targetMs = null;
+  presenterDeck = null;
+  suggestedSplit = null;
   cache?.wipe();
   cache = null;
   const old = deck;
@@ -68,8 +187,8 @@ function showChooser(message = "", error = false): void {
   codeInput.focus();
 }
 
-/** `source` yields the PDF bytes and a title; it may set the status line while it works. */
-async function load(source: () => Promise<{ pdf: ArrayBuffer; title: string | null }>): Promise<void> {
+/** `source` yields the PDF bytes, a title and any sidecar data; it may set the status line while it works. */
+async function load(source: () => Promise<{ pdf: ArrayBuffer; title: string | null; extras?: DeckExtras }>): Promise<void> {
   if (loading) return;
   loading = true;
   choose.hidden = true;
@@ -77,22 +196,33 @@ async function load(source: () => Promise<{ pdf: ArrayBuffer; title: string | nu
   fsProblem.hidden = true;
   await dropDeck();
   try {
-    const { pdf, title } = await source();
+    const { pdf, title, extras = NO_EXTRAS } = await source();
     setStatus("Opening slides…");
+    // PDF.js takes the bytes it is given, so the copy for a presenter window is made first.
+    const pdfForPresenter = pdf.slice(0);
     const opened = await openDeck(pdf);
     deck = opened;
+    const pdfpcHint = extras.pdfpcText ? (parsePdfpc(extras.pdfpcText)?.notePosition ?? null) : null;
+    suggestedSplit = chooseSplit(extras.storedSplit, pdfpcHint, opened.pageSize.width, opened.pageSize.height);
+    opened.setSplit(suggestedSplit);
+    presenterDeck = {
+      pdf: pdfForPresenter,
+      title: title ?? opened.title ?? "Untitled",
+      split: suggestedSplit,
+      noteOverrides: extras.noteOverrides,
+      pdfpcText: extras.pdfpcText,
+      pptxNotes: extras.pptxNotes,
+    };
     // Render the opening pages now, at the size full screen will have, so Start shows a slide at once.
     const dpr = window.devicePixelRatio || 1;
     cache = new RenderCache(opened);
     cache.setSurface(window.screen.width * dpr, window.screen.height * dpr);
     cache.want([0, 1, 2].filter((p) => p < opened.pageCount));
 
-    const { frameCount } = opened.frames;
     $("deck-title").textContent = title ?? opened.title ?? "Untitled";
-    $("deck-summary").textContent =
-      frameCount === opened.pageCount
-        ? `${opened.pageCount} ${opened.pageCount === 1 ? "page" : "pages"}`
-        : `${frameCount} frames, ${opened.pageCount} pages`;
+    showSummary();
+    showSplit();
+    showModes();
     setStatus("");
     codeInput.value = "";
     showPhoneStatus();
@@ -118,20 +248,35 @@ function openByCode(code: string): void {
     link = new RoomLink(keys);
     link.onStatus = showPhoneStatus;
     deckPublished = payload.meta.published;
-    const pdfpc = payload.pdfpc ? parsePdfpc(strFromU8(payload.pdfpc)) : null;
-    targetMs = targetDurationMs(pdfpc, payload.meta.settings.targetDuration);
+    const pdfpcText = payload.pdfpc ? strFromU8(payload.pdfpc) : null;
+    targetMs = targetDurationMs(pdfpcText ? parsePdfpc(pdfpcText) : null, payload.meta.settings.targetDuration);
     // Copy the PDF out of the payload so the rest of it can be collected; PDF.js takes the copy.
     const pdf = payload.pdf.slice().buffer;
-    return { pdf, title: payload.meta.title || null };
+    const extras: DeckExtras = {
+      pdfpcText,
+      noteOverrides: payload.meta.noteOverrides,
+      pptxNotes: payload.notes?.pages ?? [],
+      ...(payload.meta.settings.notesSplit !== undefined ? { storedSplit: payload.meta.settings.notesSplit } : {}),
+    };
+    return { pdf, title: payload.meta.title || null, extras };
   });
 }
 
 // Called straight from the click handlers: full screen needs the user gesture.
 function start(fullscreen: boolean): void {
   if (!deck || !cache || starting) return;
+  const twoScreens = fullscreen && modeB.checked && twoScreensPossible();
+  if (twoScreens && !screens) {
+    // The permission prompt uses up the click, so choosing screens and starting are two clicks.
+    void detectScreens().then((ok) => setStatus(ok ? "Screens found. Check the choice above, then click Start." : ""));
+    return;
+  }
+  const placement = twoScreens ? chosenScreens() : null;
+  const forPresenter = placement ? presenterDeck : null;
   starting = true;
   const starter = Presentation.start(deck, cache, audience, {
     fullscreen,
+    ...(placement ? { screen: placement.audience } : {}),
     // Reloading the entry screen guarantees nothing of the talk survives in this tab.
     onEnded: () => window.location.replace(import.meta.env.BASE_URL),
     link,
@@ -141,6 +286,10 @@ function start(fullscreen: boolean): void {
   void starter.then((presentation) => {
     starting = false;
     if (presentation) {
+      // Mode B: the presenter window opens from the same click, right after full screen is granted.
+      // If the browser blocks it, the talk is simply in Mode A.
+      if (placement && forPresenter) new PresenterHost(presentation, forPresenter).open(placement.presenter);
+      presenterDeck = null;
       entry.hidden = true;
       // The presentation now owns the deck and cache, and wipes them when it ends.
       deck = null;
@@ -172,6 +321,10 @@ fileInput.addEventListener("change", () => {
 });
 
 startButton.addEventListener("click", () => start(document.fullscreenEnabled));
+$("mode-a").addEventListener("change", showModes);
+modeB.addEventListener("change", showModes);
+$("detect-screens").addEventListener("click", () => void detectScreens());
+$("split-toggle").addEventListener("click", () => applySplit(deck?.split ? null : suggestedSplit));
 $("start-windowed").addEventListener("click", () => start(false));
 $("another").addEventListener("click", () => {
   void dropDeck();

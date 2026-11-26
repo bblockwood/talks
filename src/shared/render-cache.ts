@@ -26,10 +26,23 @@ export class RenderCache {
   private inFlight: { page: number; task: RenderTask | null } | null = null;
   private wiped = false;
 
+  /**
+   * `part` chooses which part of each page to render: the slide (the whole page for an ordinary
+   * deck) or, for a Beamer notes-split deck, the notes panel.
+   */
   constructor(
     private deck: Deck | null,
     private readonly capacity = 12,
+    private readonly part: "slide" | "notes" = "slide",
   ) {}
+
+  /** Discards everything rendered so far, e.g. after the deck's notes split changed. */
+  invalidate(): void {
+    this.generation += 1;
+    this.discardAll();
+    this.inFlight?.task?.cancel();
+    this.pump();
+  }
 
   /** Surface size in device pixels. Changing it discards every cached page. */
   setSurface(width: number, height: number): void {
@@ -115,7 +128,8 @@ export class RenderCache {
     if (!deck) return null;
     const proxy = await deck.getPage(page);
     const unit = proxy.getViewport({ scale: 1 });
-    const fit = fitPage(unit.width, unit.height, this.surfaceWidth, this.surfaceHeight);
+    const crop = (this.part === "notes" ? deck.notesCrop : null) ?? deck.slideCrop;
+    const fit = fitPage(unit.width * crop.width, unit.height * crop.height, this.surfaceWidth, this.surfaceHeight);
     if (fit.width === 0 || fit.height === 0) return null;
 
     const canvas = document.createElement("canvas");
@@ -125,7 +139,12 @@ export class RenderCache {
     // links get our own hit-testing, so annotation rendering is off (SPEC §6.2).
     const task = proxy.render({
       canvas,
-      viewport: proxy.getViewport({ scale: fit.scale }),
+      // The canvas is exactly the cropped part; the offsets slide the page under it.
+      viewport: proxy.getViewport({
+        scale: fit.scale,
+        offsetX: -crop.x * unit.width * fit.scale,
+        offsetY: -crop.y * unit.height * fit.scale,
+      }),
       annotationMode: AnnotationMode.DISABLE,
       background: "#ffffff",
     });
