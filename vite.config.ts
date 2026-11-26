@@ -1,10 +1,27 @@
 import { loadEnv } from "vite";
-import type { ViteDevServer } from "vite";
+import type { PreviewServer, ViteDevServer } from "vite";
+import type { IncomingMessage, ServerResponse } from "node:http";
+import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { defineConfig } from "vitest/config";
 import { fileURLToPath } from "node:url";
 
 const page = (p: string) => fileURLToPath(new URL(p, import.meta.url));
+
+function serveTestDecks(req: IncomingMessage, res: ServerResponse): void {
+  const rel = decodeURIComponent((req.url ?? "/").split("?")[0] ?? "/");
+  const notFound = (): void => {
+    res.statusCode = 404;
+    res.end("not found");
+  };
+  if (!/^\/[0-9a-f]{32}\/(current\.json|[0-9a-f]{16}\.bin)$/.test(rel)) return notFound();
+  readFile(page(`.e2e/d${rel}`))
+    .then((body) => {
+      res.setHeader("content-type", rel.endsWith(".json") ? "application/json" : "application/octet-stream");
+      res.end(body);
+    })
+    .catch(notFound);
+}
 
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), "VITE_");
@@ -23,6 +40,11 @@ export default defineConfig(({ mode }) => {
           presenter: page("presenter/index.html"),
           w0: page("w0/index.html"),
           w0phone: page("w0/phone/index.html"),
+          sw: page("src/sw/sw.ts"),
+        },
+        output: {
+          // The service worker must sit at the top of the site, under a fixed name, to control /talks/.
+          entryFileNames: (chunk: { name: string }) => (chunk.name === "sw" ? "sw.js" : "assets/[name]-[hash].js"),
         },
       },
     },
@@ -37,24 +59,37 @@ export default defineConfig(({ mode }) => {
         name: "lectern-dev-decks",
         apply: "serve" as const,
         configureServer(server: ViteDevServer) {
-          server.middlewares.use("/talks/d", (req, res, next) => {
-            const rel = decodeURIComponent((req.url ?? "/").split("?")[0] ?? "/");
-            if (!/^\/[0-9a-f]{32}\/(current\.json|[0-9a-f]{16}\.bin)$/.test(rel)) {
-              res.statusCode = 404;
-              res.end("not found");
-              return;
-            }
-            readFile(page(`.e2e/d${rel}`))
-              .then((body) => {
-                res.setHeader("content-type", rel.endsWith(".json") ? "application/json" : "application/octet-stream");
-                res.end(body);
-              })
-              .catch(() => {
-                res.statusCode = 404;
-                res.end("not found");
-              });
-            void next;
-          });
+          server.middlewares.use("/talks/d", serveTestDecks);
+        },
+        configurePreviewServer(server: PreviewServer) {
+          server.middlewares.use("/talks/d", serveTestDecks);
+        },
+      },
+      {
+        // The service worker is built as an ordinary entry (so it shares code with the app), then
+        // told which files to precache. Its version changes whenever any of those files does.
+        name: "lectern-sw-manifest",
+        apply: "build" as const,
+        enforce: "post" as const,
+        generateBundle(_options: unknown, bundle: Record<string, { type: string; fileName: string; code?: string; source?: string | Uint8Array }>) {
+          const worker = bundle["sw.js"];
+          if (!worker || worker.type !== "chunk" || worker.code === undefined) return;
+          const files = Object.values(bundle)
+            .map((f) => f.fileName)
+            // The W0 test pages and the bundled fixture are not part of the app shell.
+            .filter((f) => f !== "sw.js" && !f.endsWith(".map") && !f.endsWith(".pdf") && !/(^|[/-])w0/.test(f))
+            .sort();
+          const pages = files.filter((f) => f.endsWith("index.html")).map((f) => f.replace(/index\.html$/, ""));
+          const assets = files.filter((f) => !f.endsWith(".html"));
+          const hash = createHash("sha256");
+          for (const f of files) {
+            const item = bundle[f];
+            hash.update(f);
+            if (item && f.endsWith(".html") && item.source !== undefined) hash.update(item.source);
+          }
+          worker.code = worker.code
+            .replace("__SW_VERSION__", hash.digest("hex").slice(0, 12))
+            .replace("__SW_PRECACHE__", JSON.stringify([...pages, ...assets]));
         },
       },
     ],

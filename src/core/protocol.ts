@@ -1,7 +1,7 @@
 // Relay protocol (SPEC §8). The relay forwards opaque binary frames; everything here is end to
 // end between devices that know the talk code. WebCrypto only, no DOM.
 import type { AudienceMode, Command, SessionState } from "./session";
-import { elapsedMs } from "./session";
+import { elapsedMs, inkLayer } from "./session";
 import type { FrameIndex } from "./frames";
 
 export const APP_VERSION = "web-w3";
@@ -40,6 +40,8 @@ export interface StateBody {
   readonly deckPublished: string;
   /** Beamer notes layout the room PC is cropping to ("left", "right", "top", "bottom"), or null. */
   readonly split: string | null;
+  /** Number of ink strokes the audience currently sees, so a phone knows when its own copy is stale. */
+  readonly ink: number;
   readonly ack?: Ack;
 }
 
@@ -50,7 +52,35 @@ export type Message =
   | { readonly type: "pointer"; readonly body: { readonly x: number; readonly y: number; readonly visible: boolean } }
   | { readonly type: "ping"; readonly body: { readonly t: number } }
   | { readonly type: "pong"; readonly body: { readonly t: number } }
+  | { readonly type: "ink"; readonly body: InkMessage }
   | { readonly type: "end"; readonly body: Record<string, never> };
+
+/**
+ * Ink from a remote (SPEC §8.2): stroke begin, append and end with normalised points. `id` is
+ * the sender's own stroke number; the room PC prefixes it with the sender id.
+ */
+export type InkMessage =
+  | { readonly op: "begin"; readonly id: number; readonly x: number; readonly y: number; readonly color: number; readonly width: number }
+  | { readonly op: "append"; readonly id: number; readonly points: readonly number[] }
+  | { readonly op: "end"; readonly id: number }
+  | { readonly op: "undo" }
+  | { readonly op: "clear" };
+
+/** The session command an ink message stands for, or null for `end`, which changes nothing. */
+export function inkCommand(sid: string, ink: InkMessage): Command | null {
+  switch (ink.op) {
+    case "begin":
+      return { name: "inkBegin", id: `${sid}:${ink.id}`, x: ink.x, y: ink.y, color: ink.color, width: ink.width };
+    case "append":
+      return { name: "inkAppend", id: `${sid}:${ink.id}`, points: ink.points };
+    case "undo":
+      return { name: "inkUndo" };
+    case "clear":
+      return { name: "inkClear" };
+    default:
+      return null;
+  }
+}
 
 export type Envelope = Message & {
   /** Sender session id: 64 random bits as 16 hex characters. */
@@ -84,6 +114,7 @@ export function stateBody(
     },
     deckPublished,
     split,
+    ink: state.ink[inkLayer(state)].length,
     ...(ack ? { ack } : {}),
   };
 }
@@ -124,6 +155,8 @@ export function parseCommand(v: unknown): Command | null {
     case "timerPause":
     case "timerToggle":
     case "timerReset":
+    case "inkUndo":
+    case "inkClear":
       return { name: v["name"] };
     case "goToPage":
       return isIndex(v["page"]) ? { name: "goToPage", page: v["page"] } : null;
@@ -178,8 +211,33 @@ function parseState(v: unknown): StateBody | null {
     timer: { running: t["running"], elapsedMs: t["elapsedMs"], targetMs: t["targetMs"] as number | null },
     deckPublished: v["deckPublished"],
     split: typeof v["split"] === "string" && v["split"].length <= 8 ? v["split"] : null,
+    ink: isIndex(v["ink"]) ? v["ink"] : 0,
     ...(ack ? { ack } : {}),
   };
+}
+
+function parseInk(v: Record<string, unknown>): InkMessage | null {
+  const id = v["id"];
+  switch (v["op"]) {
+    case "begin":
+      return isIndex(id) && isUnit(v["x"]) && isUnit(v["y"]) && isIndex(v["color"]) && isUnit(v["width"])
+        ? { op: "begin", id, x: v["x"], y: v["y"], color: v["color"], width: v["width"] }
+        : null;
+    case "append": {
+      const points = v["points"];
+      return isIndex(id) && Array.isArray(points) && points.length >= 2 && points.length <= 512 && points.every(isUnit)
+        ? { op: "append", id, points: points as number[] }
+        : null;
+    }
+    case "end":
+      return isIndex(id) ? { op: "end", id } : null;
+    case "undo":
+      return { op: "undo" };
+    case "clear":
+      return { op: "clear" };
+    default:
+      return null;
+  }
 }
 
 export function parseMessage(type: unknown, body: unknown): Message | null {
@@ -212,6 +270,10 @@ export function parseMessage(type: unknown, body: unknown): Message | null {
     case "ping":
     case "pong":
       return isUnit(body["t"]) ? { type, body: { t: body["t"] } } : null;
+    case "ink": {
+      const ink = parseInk(body);
+      return ink ? { type, body: ink } : null;
+    }
     case "end":
       return { type, body: {} };
     default:

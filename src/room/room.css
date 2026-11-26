@@ -115,6 +115,7 @@ button:disabled {
   /* While a resize is being re-rendered, the old picture scales without distortion. */
   object-fit: contain;
 }
+.audience canvas.ink-layer,
 .audience canvas.pointer-layer {
   position: absolute;
   inset: 0;

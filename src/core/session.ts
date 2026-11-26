@@ -2,6 +2,8 @@
 // thing that produces a new SessionState; every view renders from the state. Ported from the
 // native app's SessionReducer so both apps behave the same.
 import type { FrameIndex } from "./frames";
+import { NO_INK, appendToStroke, beginStroke, clearLayer, undoStroke } from "./ink";
+import type { InkLayer, InkState } from "./ink";
 import type { PageLink } from "./links";
 
 export type AudienceMode =
@@ -30,7 +32,12 @@ export type Command =
   | { readonly name: "timerStart" }
   | { readonly name: "timerPause" }
   | { readonly name: "timerToggle" }
-  | { readonly name: "timerReset" };
+  | { readonly name: "timerReset" }
+  // Ink (Native §8). Strokes go on the page, or on the whiteboard while the room screen is white.
+  | { readonly name: "inkBegin"; readonly id: string; readonly x: number; readonly y: number; readonly color: number; readonly width: number }
+  | { readonly name: "inkAppend"; readonly id: string; readonly points: readonly number[] }
+  | { readonly name: "inkUndo" }
+  | { readonly name: "inkClear" };
 
 /** Times are milliseconds on the room PC's clock. */
 export interface TimerState {
@@ -55,6 +62,12 @@ export interface SessionState {
   /** Pages `back` left, for `forward`. Cleared by any new jump. */
   readonly forwardHistory: readonly number[];
   readonly timer: TimerState;
+  readonly ink: InkState;
+}
+
+/** Where new ink goes, and which ink the audience sees: the whiteboard while the screen is white. */
+export function inkLayer(state: SessionState): InkLayer {
+  return state.audienceMode.kind === "white" ? "board" : "page";
 }
 
 export const initialState: SessionState = {
@@ -63,6 +76,7 @@ export const initialState: SessionState = {
   history: [],
   forwardHistory: [],
   timer: { accumulatedMs: 0, runningSince: null, targetMs: null },
+  ink: NO_INK,
 };
 
 /** The page the audience surface shows, or null for black/white. */
@@ -101,7 +115,27 @@ export interface DeckContext {
  * `now` is the room PC's clock in milliseconds; only the timer commands read it.
  */
 export function apply(state: SessionState, command: Command, deck: DeckContext, now = 0): SessionState {
+  const next = applyCommand(state, command, deck, now);
+  // Ink belongs to the page it was drawn on: leaving the page clears it. The whiteboard is kept.
+  if (next.committedPage !== state.committedPage && next.ink.page.length > 0) return { ...next, ink: { ...next.ink, page: [] } };
+  return next;
+}
+
+function applyCommand(state: SessionState, command: Command, deck: DeckContext, now: number): SessionState {
+  const withInk = (ink: InkState): SessionState => (ink === state.ink ? state : { ...state, ink });
   switch (command.name) {
+    case "inkBegin": {
+      // No drawing on a black or frozen screen: the audience would not see where it lands.
+      const mode = state.audienceMode.kind;
+      if (mode === "black" || mode === "frozen") return state;
+      return withInk(beginStroke(state.ink, inkLayer(state), command.id, command.x, command.y, command.color, command.width));
+    }
+    case "inkAppend":
+      return withInk(appendToStroke(state.ink, command.id, command.points));
+    case "inkUndo":
+      return withInk(undoStroke(state.ink, inkLayer(state)));
+    case "inkClear":
+      return withInk(clearLayer(state.ink, inkLayer(state)));
     case "timerStart":
       return state.timer.runningSince !== null ? state : { ...state, timer: { ...state.timer, runningSince: now } };
     case "timerPause":
@@ -109,7 +143,7 @@ export function apply(state: SessionState, command: Command, deck: DeckContext, 
         ? state
         : { ...state, timer: { ...state.timer, accumulatedMs: elapsedMs(state.timer, now), runningSince: null } };
     case "timerToggle":
-      return apply(state, { name: state.timer.runningSince === null ? "timerStart" : "timerPause" }, deck, now);
+      return applyCommand(state, { name: state.timer.runningSince === null ? "timerStart" : "timerPause" }, deck, now);
     case "timerReset":
       // The clock runs whenever a talk is being presented, so a reset restarts it at once.
       return { ...state, timer: { ...state.timer, accumulatedMs: 0, runningSince: now } };

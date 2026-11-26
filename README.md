@@ -1,0 +1,97 @@
+# Lectern Web
+
+Present a PDF slide deck from someone else's lectern computer, using only its browser.
+
+1. On your own computer, publish the deck: `npm run publish -- talk.pdf --code bunching --wait`.
+2. On the room's computer, open `https://benlockwood.com/talks`, type the code, click **Start**.
+3. On your phone, open `https://benlockwood.com/talks/remote` and type the same code. The phone shows your notes, the next slide and a clock, and drives the slides.
+
+A USB clicker or the room's keyboard works too, and keeps working if the network drops.
+
+The slides are encrypted before they leave your computer. The web host and the relay only ever hold ciphertext; the room computer decrypts in memory and stores nothing that is decrypted.
+
+This is the browser companion to the native [Lectern](https://github.com/bblockwood/Lectern) app. The design is in [`docs/SPEC.md`](docs/SPEC.md); decisions made along the way are in [`docs/decisions.md`](docs/decisions.md). One-time account setup is in [`docs/SETUP.md`](docs/SETUP.md).
+
+## Publishing
+
+```
+npm run publish -- talk.pdf [--code word] [--name slug] [--rotate-code] [--random] [--long]
+                            [--notes-split left|right|top|bottom|none] [--wait]
+npm run codes                    # list published decks and their codes
+npm run revoke -- talk.pdf       # take a deck down
+```
+
+- **Code.** `--code` sets it. Without it, the first publish uses the PDF's file name. Republishing the same PDF keeps its code. `--random` generates four random words instead, and `--long` six.
+- **Sidecars** with the same base name are picked up: `talk.pdfpc` (pdfpc notes and duration), `talk.lectern.json` (the native app's notes and settings), `talk.pptx` (PowerPoint speaker notes).
+- **Codes are stored only** in `~/.config/lectern/codes.json` on your computer. A code is remembered by the PDF's full path, so use `--name` for a deck whose file moves around.
+- **`--wait`** reports when the new deck is live, usually about half a minute.
+
+## On the room computer
+
+- Type the code, or use **open a PDF from this computer** for a deck that isn't published (no phone remote in that case).
+- **Keys:** → Space Page Down next; ← Page Up previous; Shift+→/← next/previous frame; a number then Enter jumps to that frame; Delete goes back after a jump; B or `.` black; W white (the whiteboard); F freeze; T pause the clock; C clear ink; Esc twice ends the talk.
+- **Two screens** (Chrome or Edge, displays set to extend): choose "Two screens", allow window management, and Start. Slides go full screen on the projector and a presenter window opens on the other screen with notes, the next slide, an overview (Tab), search, a laser pointer (L) and Swap displays (Ctrl+D or Cmd+D).
+- Ending the talk wipes the slides from memory and returns to the code screen. Use a private window on a shared computer.
+
+## On the phone
+
+Swipe or tap Next/Prev; press and hold then drag for the pointer; tap a link to follow it. **Slides** previews a slide privately before **Show** puts it on the room screen. **Draw** lets you write on the slide or on a whiteboard (**Board**). Held sideways, the phone shows just two very large buttons. Tick **Remember on this device** to reopen a talk with one tap.
+
+## Security: what this does and does not protect
+
+Everything is derived from the talk code: the deck's address, the key that decrypts it, the relay room, and the key for messages between phone and room computer (PBKDF2-SHA256 with 600,000 iterations, then HKDF; AES-256-GCM).
+
+- **It stops casual discovery and a curious host or relay operator.** A published deck sits at an unguessable-looking address and is unreadable without the code. Relay messages are encrypted end to end.
+- **It does not stop a determined attacker**, and with a short code it does not stop a casual one who guesses the word. The default here is one word chosen for the talk, for convenience: treat such a deck as roughly public, and revoke it when it is no longer needed. Anyone who knows the code can also drive or end the talk from the remote page.
+- **For a deck that matters**, publish with `--random` (four words from the EFF short list, about 41 bits) or `--random --long` (six words, about 62 bits). Even those are not a defence against a well-resourced offline attack with GPUs; do not publish confidential material this way.
+- A relay operator could replay commands recorded in an earlier session with the same code. The relay is your own Cloudflare Worker, so this is accepted.
+- The room computer keeps only the encrypted deck file in the browser's cache (so a reload works offline). A private window discards even that when it closes.
+
+## Browser support
+
+Checked at run time; missing features degrade rather than fail. "Tested" means actually tried; the rest follows from which APIs each browser has, and has not been tried.
+
+| | Chrome / Edge (desktop) | Firefox | Safari (macOS) | Safari (iPhone, iPad) |
+|---|---|---|---|---|
+| Present by code or from a file | Tested (Chrome, macOS) | Expected | Expected | n/a |
+| Full screen from Start | Tested | Expected | Expected | n/a |
+| A stray Esc cannot leave full screen (keyboard lock) | Tested | No: one Esc leaves full screen; the talk continues and the next key press re-enters | No: same | n/a |
+| Screen stays awake (wake lock) | Tested | Expected | Expected | Tested on the remote |
+| Two-screen mode and Swap displays | Tested on a Mac with a second display (swap not yet) | No (no Window Management API): one screen only | No: one screen only | n/a |
+| Phone remote | Works (tested at phone size) | Expected | Expected | Tested on Ben's phone |
+| Draw from phone or tablet | Tested with a mouse | Expected | Expected | Not yet tried with a finger or Pencil |
+| Works offline after first use | Tested | Expected | Expected | Expected |
+
+Not yet tried anywhere: a Windows classroom PC, a hardware clicker, and Firefox or Safari as the room browser.
+
+## Development
+
+```
+npm ci && npm --prefix relay ci
+npm run dev                      # http://localhost:5173/talks/
+npm --prefix relay run dev       # local relay on :8787
+npm test                         # unit tests (Vitest)
+npm run e2e                      # end-to-end tests (Playwright, Chromium)
+npm run build
+npm --prefix relay run deploy    # needs CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID
+```
+
+Node 22.18 or newer. The tools are TypeScript run directly by Node and share the crypto code with the browser; `fixtures/crypto-vectors.json` pins the scheme and is checked in both.
+
+```
+src/core/      logic with no DOM: frames, session, links, keys, crypto, protocol, notes, ink, search
+src/room/      entry screen, audience view, presenter view (room computer)
+src/remote/    phone remote
+src/shared/    PDF.js adapter, render cache, relay client
+src/sw/        service worker
+relay/         Cloudflare Worker and Durable Object
+tools/         publish, codes, revoke
+fixtures/      test decks
+docs/          specs, decisions, progress, test results
+```
+
+Pushing to `main` deploys the site with GitHub Actions. Published decks live on the orphan `decks` branch, rewritten as a single commit on each publish.
+
+## Licence
+
+No licence has been chosen for this repository yet. The test decks under `fixtures/` come from the native Lectern app's corpus. PDF.js (Apache-2.0) and fflate (MIT) are bundled.

@@ -402,3 +402,79 @@ Part A needs only your Mac. Part B needs two screens showing different things: a
 15. Start again, and this time end with **Esc twice in the presenter window**: both windows should go, and the first window returns to the code screen.
 
 Please record results in `docs/spikes/W4.md`. Steps 5–6 are the ones I could not test at all, so exact wording of anything unexpected there (permission prompt, blocked pop-up, window on the wrong screen) is the most useful thing to write down.
+
+### After W4 (2026-11-26)
+
+- Ben tried two-screen mode on his Mac with a second display: it worked (`docs/spikes/W4.md`). A classroom PC is still untried.
+- Added at Ben's request: **Swap displays** (button in the presenter window; Ctrl+D or Cmd+D in either window) and the **landscape phone layout** (controls only, very large Prev/Next).
+- The swap is tested only with faked screens, where a move between screens can't really happen. On real hardware the open questions are whether the browser accepts the click handed over from the presenter window, and whether it lets the presenter window be moved to the other screen. Ctrl+D pressed in the audience window needs no hand-over and is the fallback.
+
+---
+
+## W5. Ink and polish
+
+### Plan (2026-11-26)
+
+1. **Ink (SPEC §7, §8.2; Native §8).**
+   - Strokes live in the session state on the room PC, in normalised slide coordinates with width relative to slide height, so they look the same on every display. The audience view redraws vectors; no bitmaps are sent.
+   - Ephemeral only: ink belongs to the page it was drawn on and is cleared by leaving the page, by Clear, or by C on the keyboard. Persistent ink needs somewhere to store it, and the room PC stores nothing.
+   - **Whiteboard:** the white screen becomes a board. Ink drawn while the room screen is white is kept separately for the whole talk, so Ben can go back to the slides and return to the board.
+   - Phone and iPad: a Draw tool with three colours, Undo, Clear and Board. Finger or Pencil. Points are batched and streamed as `ink` messages.
+   - Mode B: the presenter view shows the ink too.
+2. **Service worker (SPEC §9):** caches the app shell and PDF.js so a reload works on bad Wi-Fi, and encrypted `.bin` files so a deck opened once on a device opens again offline. It never sees decrypted data.
+3. **README** with the threat model (SPEC §3) and a **browser-support matrix**.
+4. **Tests:** unit tests for ink and the service worker's routing; e2e for drawing from the phone, and for reloading and reopening a deck offline against the production build.
+
+### Done (2026-11-26)
+
+- **Ink:** `core/ink.ts`, ink in the session state and key map (C clears), `ink` messages in the protocol, `shared/ink-draw.ts`, an ink layer on the audience view, ink and the whiteboard in the presenter view, and the phone's Draw tool (three colours, Undo, Clear, Board; finger, Pencil or mouse; coalesced pointer samples; points sent in batches about 30 times a second).
+- **Whiteboard:** the white screen takes ink that is kept for the whole talk.
+- **Service worker:** `src/sw/sw.ts` with its routing rules in `core/sw-routes.ts`, built as `sw.js` at the top of the site with a precache list injected at build time, registered by the entry screen and the phone remote in production builds.
+- **README.md** with usage, the threat model, a browser-support matrix and development notes.
+- **Tests:** 237 unit and 34 e2e, all passing. New e2e tests draw from a phone page and check the pixels on the audience's ink layer by colour, Undo, clearing on page change, the board surviving a return to the slides, and C on the room keyboard clearing the phone's copy too. The offline tests run against a production build: the page reloads offline, a deck opened earlier opens and presents offline, the caches contain only app files and `LCTW` ciphertext (no PDF, no code), a republished deck replaces the cached file, a revoked deck is forgotten, and the phone remote reopens a remembered talk offline.
+- **A bug the offline test found and fixed:** cached scripts were not matched after an offline reload because of the server's `Vary` header, so the page loaded but never started.
+
+### Known issues and notes
+
+- **Drawing has not been tried with a finger or an Apple Pencil**, only with a mouse in a desktop browser. Palm rejection is whatever the browser gives; two fingers at once draw one stroke.
+- **A phone that joins or reloads mid-talk does not see ink drawn before it joined** (the audience still does). Its Undo and Clear still act on the room screen.
+- **Undo removes the newest stroke on screen**, whoever drew it.
+- **PDF.js's optional files** (character maps, JPEG 2000 and JBIG2 decoders, standard fonts) are cached the first time a deck needs them, not ahead of time. A deck that needs one of them for the first time while offline would show that content wrongly. Opening the deck once online on the same device, as SETUP.md's pre-talk dry run does, avoids this.
+- **The service worker updates on the next visit:** after a deploy, pages are fetched fresh (network first), so a reload always gets the new version when online.
+- **Swap displays is still untried on real hardware** (see the note after W4).
+- **The W0 test pages are still deployed** at `/talks/w0/`. They are the tool for the outstanding classroom checks (clicker key codes on a Windows PC); remove them once those are done.
+- `npm run e2e` now also builds and serves a production copy (`.e2e-dist/`, port 4173), which adds a few seconds.
+
+### Ben checklist: W5
+
+About 15 minutes. A published talk, your phone, an iPad if you have one, and a computer.
+
+**A. Draw from the phone**
+
+1. Start a talk on the computer by code and connect the phone as usual.
+2. Tap **Draw**. A row appears with three colour dots, **Undo**, **Clear** and **Board**, and the slide gets an orange outline.
+3. Draw on the phone's slide with a finger. Expect: the line appears on the room screen as you draw, in the same place, with no visible lag. Try each colour.
+4. Tap **Undo** (the last line goes) and **Clear** (all go).
+5. Draw something, then tap **Next**. Expect: the ink is gone on the new slide, and still gone if you go back.
+6. Tap **Board**. Expect: the room screen turns white. Draw on it. Tap **Board** again to return to the slides, step forward a slide, tap **Board** again: your drawing is still on the board.
+7. Press **C** on the computer's keyboard while ink is showing: it clears on both.
+8. Tap **Draw** again to leave drawing mode, and check that swiping changes slides again.
+9. If you have an iPad and Pencil: open `benlockwood.com/talks/remote` on it, connect, and repeat step 3 with the Pencil. Note whether resting your palm draws stray marks.
+
+**B. Offline**
+
+10. On the phone, with a talk remembered: turn on airplane mode, close the browser tab, and open `benlockwood.com/talks/remote` again. Expect: the page loads, the talk is listed, and tapping it shows the slides and notes (with "Reconnecting…" at the top, since there is no network).
+11. On the computer: open a talk by code once. Then turn Wi-Fi off, reload the page, and type the code again. Expect: it opens and presents, with "Phone unavailable: keyboard and clicker only".
+12. Turn the networks back on.
+
+**C. Swap displays** (with the second display, as in W4)
+
+13. Start in two-screen mode. In the presenter window click **Swap displays**. Expect: the slides move to the screen the presenter window was on, and the presenter window moves to the other. Click it again to swap back.
+14. If the button does nothing or the status bar says "Could not swap…", click once on the slides and press Cmd+D there. Note which of the two worked, and where each window ended up.
+
+**D. Still open from earlier**
+
+15. The campus Wi-Fi measurement (W3 part D): phone's **More** → **Connection** line after about 30 taps.
+16. A Windows classroom PC with your clicker: `benlockwood.com/talks/w0/` for the key codes, then a real talk at `benlockwood.com/talks`.
+
+Results in `docs/spikes/W5.md`, please.

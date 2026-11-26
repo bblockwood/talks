@@ -73,9 +73,21 @@
       <nav id="tools" class="tools">
         <button id="t-slides">Slides</button>
         <button id="t-back" disabled>Back</button>
+        <button id="t-draw">Draw</button>
         <button id="t-black">Black</button>
         <button id="t-freeze">Freeze</button>
         <button id="t-more">More</button>
+      </nav>
+
+      <nav id="drawbar" class="drawbar" hidden>
+        <span class="colors">
+          <button class="ink-color" data-color="0" aria-label="Red"></button>
+          <button class="ink-color" data-color="1" aria-label="Blue"></button>
+          <button class="ink-color" data-color="2" aria-label="Black"></button>
+        </span>
+        <button id="ink-undo">Undo</button>
+        <button id="ink-clear">Clear</button>
+        <button id="ink-board">Board</button>
       </nav>
 
       <nav id="steps" class="steps">

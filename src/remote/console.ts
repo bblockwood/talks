@@ -10,6 +10,8 @@ import type { DeckPayload } from "../core/payload";
 import { APP_VERSION } from "../core/protocol";
 import type { Envelope, StateBody } from "../core/protocol";
 import type { Command } from "../core/session";
+import { DEFAULT_INK_WIDTH } from "../core/ink";
+import type { Stroke } from "../core/ink";
 import { parseSplit } from "../core/split";
 import { ThumbGrid } from "../shared/thumbs";
 import type { Deck } from "../shared/deck";
@@ -23,6 +25,7 @@ const PING_MS = 2000;
 const ROOM_TIMEOUT_MS = 9000;
 const LONG_PRESS_MS = 350;
 const POINTER_INTERVAL_MS = 33; // at most ~30 messages a second, well under the relay's limit
+const INK_FLUSH_MS = 33;
 const SWIPE_MIN_PX = 45;
 const TAP_SLOP_PX = 10;
 
@@ -70,6 +73,14 @@ export class RemoteConsole {
   private taps: number[] = [];
   private timers: number[] = [];
   private wakeLock: WakeLockSentinel | null = null;
+  /** Draw tool (SPEC §7): this phone's own copy of what it has drawn, so ink appears under the finger at once. */
+  private drawMode = false;
+  private inkColor = 0;
+  private localInk: { page: Stroke[]; board: Stroke[] } = { page: [], board: [] };
+  private strokeSeq = 0;
+  private activeStroke: number | null = null;
+  private pendingPoints: number[] = [];
+  private inkFlush: number | undefined;
   private thumbs: ThumbGrid | null = null;
   private notesImage: SlideSurface | null = null;
   private destroyed = false;
@@ -111,6 +122,7 @@ export class RemoteConsole {
         taps: () => this.taps,
         rtts: () => this.rtts,
         dropConnection: () => this.client.dropForTest(),
+        localInk: () => ({ page: this.localInk.page.length, board: this.localInk.board.length }),
       };
     }
   }
@@ -120,6 +132,7 @@ export class RemoteConsole {
     this.destroyed = true;
     this.abort.abort();
     for (const t of this.timers) window.clearInterval(t);
+    window.clearInterval(this.inkFlush);
     this.thumbs?.destroy();
     this.thumbs = null;
     this.notesImage?.destroy();
@@ -158,6 +171,12 @@ export class RemoteConsole {
     switch (envelope.type) {
       case "state": {
         this.followSplit(envelope.body.split);
+        // Ink belongs to its page; and if the room PC has none (cleared with C there), neither do we.
+        if (this.room && envelope.body.page !== this.room.page) this.localInk.page = [];
+        if (envelope.body.ink === 0 && this.activeStroke === null) {
+          if (envelope.body.audienceMode.kind === "white") this.localInk.board = [];
+          else if (envelope.body.audienceMode.kind === "live") this.localInk.page = [];
+        }
         this.room = envelope.body;
         this.roomAt = now;
         this.roomSeenAt = now;
@@ -223,6 +242,18 @@ export class RemoteConsole {
     const previewing = this.preview !== null;
     const live = this.roomLive;
 
+    const board = this.room?.audienceMode.kind === "white" && !previewing;
+    if ((previewing || !live) && this.drawMode) this.drawMode = false;
+    this.current.setBlank(board);
+    this.current.setInk(previewing ? [] : board ? this.localInk.board : this.localInk.page);
+    $("drawbar").hidden = !this.drawMode;
+    $("t-draw").classList.toggle("on", this.drawMode);
+    $<HTMLButtonElement>("t-draw").disabled = !live || previewing;
+    $("ink-board").classList.toggle("on", board);
+    $("current").parentElement?.classList.toggle("drawing", this.drawMode);
+    for (const el of document.querySelectorAll<HTMLElement>(".ink-color")) {
+      el.classList.toggle("on", Number(el.dataset["color"]) === this.inkColor);
+    }
     this.current.show(page, [page + 1, page - 1].filter((p) => p >= 0 && p < pageCount));
     this.next.show(page + 1 < pageCount ? page + 1 : page);
     void this.deck.loadLinks(page);
@@ -257,7 +288,7 @@ export class RemoteConsole {
     const mode = this.room?.audienceMode.kind ?? "live";
     const badge = $("mode-badge");
     badge.hidden = mode === "live" || previewing;
-    badge.textContent = mode === "black" ? "ROOM SCREEN BLACK" : mode === "white" ? "ROOM SCREEN WHITE" : "ROOM SCREEN FROZEN";
+    badge.textContent = mode === "black" ? "ROOM SCREEN BLACK" : mode === "white" ? "WHITEBOARD" : "ROOM SCREEN FROZEN";
     $("preview-badge").hidden = !previewing;
     $("current").parentElement?.classList.toggle("previewing", previewing);
 
@@ -367,6 +398,32 @@ export class RemoteConsole {
     on("clock-toggle", () => this.send({ name: "timerToggle" }));
     on("clock-reset", () => this.send({ name: "timerReset" }));
 
+    on("t-draw", () => {
+      this.drawMode = !this.drawMode;
+      this.update();
+    });
+    on("ink-undo", () => {
+      this.layerInk().pop();
+      this.touchInk();
+      this.client.send({ type: "ink", body: { op: "undo" } });
+    });
+    on("ink-clear", () => {
+      this.layerInk().length = 0;
+      this.touchInk();
+      this.client.send({ type: "ink", body: { op: "clear" } });
+    });
+    on("ink-board", () => toggleMode("white"));
+    for (const el of document.querySelectorAll<HTMLElement>(".ink-color")) {
+      el.addEventListener(
+        "click",
+        () => {
+          this.inkColor = Number(el.dataset["color"]) || 0;
+          this.update();
+        },
+        { signal },
+      );
+    }
+
     on("t-slides", () => this.openSlides());
     on("slides-close", () => ($("sheet-slides").hidden = true));
     on("t-more", () => this.openMore());
@@ -415,6 +472,68 @@ export class RemoteConsole {
     this.bindSlideGestures(signal);
   }
 
+  // ---------------------------------------------------------------- ink
+
+  private layerInk(): Stroke[] {
+    return this.room?.audienceMode.kind === "white" ? this.localInk.board : this.localInk.page;
+  }
+
+  /** The slide surface redraws only when handed a new array. */
+  private touchInk(): void {
+    if (this.room?.audienceMode.kind === "white") this.localInk.board = [...this.localInk.board];
+    else this.localInk.page = [...this.localInk.page];
+    this.update();
+  }
+
+  private beginStroke(clientX: number, clientY: number): void {
+    const point = this.current.pointAt(clientX, clientY, true);
+    const mode = this.room?.audienceMode.kind;
+    if (!point || !this.roomLive || (mode !== "live" && mode !== "white")) return;
+    const id = ++this.strokeSeq;
+    this.activeStroke = id;
+    this.pendingPoints = [];
+    this.layerInk().push({ id: `local:${id}`, color: this.inkColor, width: DEFAULT_INK_WIDTH, points: [point.x, point.y] });
+    this.touchInk();
+    this.client.send({ type: "ink", body: { op: "begin", id, ...point, color: this.inkColor, width: DEFAULT_INK_WIDTH } });
+    this.inkFlush = window.setInterval(() => this.flushInk(), INK_FLUSH_MS);
+  }
+
+  private extendStroke(ev: PointerEvent): void {
+    if (this.activeStroke === null) return;
+    const layer = this.layerInk();
+    const stroke = layer.at(-1);
+    if (!stroke) return;
+    // Coalesced events carry every sample a Pencil or finger produced since the last frame.
+    const samples = typeof ev.getCoalescedEvents === "function" ? ev.getCoalescedEvents() : [];
+    const added: number[] = [];
+    for (const sample of samples.length > 0 ? samples : [ev]) {
+      const point = this.current.pointAt(sample.clientX, sample.clientY, true);
+      if (point) added.push(point.x, point.y);
+    }
+    if (added.length === 0) return;
+    layer[layer.length - 1] = { ...stroke, points: [...stroke.points, ...added] };
+    this.pendingPoints.push(...added);
+    this.touchInk();
+  }
+
+  private flushInk(): void {
+    const id = this.activeStroke;
+    if (id === null) return;
+    // Batches of at most 128 points keep every frame far below the relay's 64 KB limit.
+    while (this.pendingPoints.length > 0) {
+      this.client.send({ type: "ink", body: { op: "append", id, points: this.pendingPoints.splice(0, 256) } });
+    }
+  }
+
+  private endStroke(): void {
+    const id = this.activeStroke;
+    if (id === null) return;
+    this.flushInk();
+    window.clearInterval(this.inkFlush);
+    this.activeStroke = null;
+    this.client.send({ type: "ink", body: { op: "end", id } });
+  }
+
   /** Swipe to step, long-press then drag for the pointer, tap a link to follow it (SPEC §7). */
   private bindSlideGestures(signal: AbortSignal): void {
     const el = $("current");
@@ -445,6 +564,11 @@ export class RemoteConsole {
         if (start) return;
         start = { x: ev.clientX, y: ev.clientY, t: performance.now(), id: ev.pointerId };
         el.setPointerCapture(ev.pointerId);
+        if (this.drawMode) {
+          // In Draw mode every touch on the slide is ink: no swipes, no pointer, no links.
+          this.beginStroke(ev.clientX, ev.clientY);
+          return;
+        }
         window.clearTimeout(pressTimer);
         if (this.preview === null) {
           pressTimer = window.setTimeout(() => {
@@ -461,6 +585,10 @@ export class RemoteConsole {
       "pointermove",
       (ev) => {
         if (!start || ev.pointerId !== start.id) return;
+        if (this.activeStroke !== null) {
+          this.extendStroke(ev);
+          return;
+        }
         if (pointing) {
           sendPointer(ev.clientX, ev.clientY);
         } else if (Math.hypot(ev.clientX - start.x, ev.clientY - start.y) > TAP_SLOP_PX) {
@@ -472,6 +600,11 @@ export class RemoteConsole {
     const finish = (ev: PointerEvent, cancelled: boolean): void => {
       if (!start || ev.pointerId !== start.id) return;
       window.clearTimeout(pressTimer);
+      if (this.activeStroke !== null || this.drawMode) {
+        this.endStroke();
+        start = null;
+        return;
+      }
       const dx = ev.clientX - start.x;
       const dy = ev.clientY - start.y;
       const wasPointing = pointing;

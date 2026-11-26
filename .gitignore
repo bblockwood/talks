@@ -10,3 +10,4 @@ playwright-report/
 .envrc
 .DS_Store
 .e2e/
+.e2e-dist/

@@ -1,6 +1,7 @@
 // Entry screen (SPEC §5.1): type the talk code, the deck is fetched and decrypted in memory,
 // then Start. A PDF from this computer can be opened instead (Ben, 2026-11-26).
 // Codes are never read from the URL on this screen.
+import { registerServiceWorker } from "../shared/register-sw";
 import { DeckError, openDeck } from "../shared/deck";
 import type { Deck } from "../shared/deck";
 import { NetworkError, NoTalkError, fetchDeck } from "../shared/fetch-deck";
@@ -355,6 +356,7 @@ if (import.meta.env.DEV) {
   });
 }
 
+registerServiceWorker();
 $("boot").remove();
 if (typeof crypto === "undefined" || !crypto.subtle || typeof ResizeObserver === "undefined") {
   setStatus("This browser is too old to open talks. Use a current Chrome, Edge, Firefox or Safari.", true);

@@ -1,7 +1,10 @@
 // Audience view (SPEC §5.3, §6.4). One canvas, one draw per change, letterboxed on black.
 // It never shows status, errors or toasts, and hides the cursor after 2 s without movement.
 import { hitTest } from "../core/links";
-import { audiencePage } from "../core/session";
+import { fitPage } from "../core/prefetch";
+import { audiencePage, inkLayer } from "../core/session";
+import type { Stroke } from "../core/ink";
+import { drawStrokes } from "../shared/ink-draw";
 import type { SessionState } from "../core/session";
 import type { Deck } from "../shared/deck";
 import { release } from "../shared/render-cache";
@@ -35,6 +38,8 @@ export class AudienceView {
   /** `performance.now()`-based time of the input that caused the pending change, if any. */
   private pendingInputTime: number | null = null;
   private cursorTimer: number | undefined;
+  private inkCanvas: HTMLCanvasElement | null = null;
+  private inkDrawn: readonly Stroke[] | null = null;
   private pointerLayer: HTMLCanvasElement | null = null;
   private pointerFrame = 0;
   private pointerUntil = 0;
@@ -156,6 +161,9 @@ export class AudienceView {
     this.pointerFrame = 0;
     if (this.pointerLayer) release(this.pointerLayer);
     this.pointerLayer = null;
+    if (this.inkCanvas) release(this.inkCanvas);
+    this.inkCanvas = null;
+    this.inkDrawn = null;
     this.cache.onReady = null;
     this.onLink = null;
     this.state = null;
@@ -184,8 +192,17 @@ export class AudienceView {
     const page = audiencePage(state);
 
     if (page === null) {
-      this.fill(state.audienceMode.kind === "white" ? "#ffffff" : "#000000");
-      this.shown = { page: null, x: 0, y: 0, width: 0, height: 0 };
+      const white = state.audienceMode.kind === "white";
+      this.fill(white ? "#ffffff" : "#000000");
+      // The white screen is the whiteboard. Ink on it is placed as if a slide were there, so
+      // what is drawn on the phone lands in the same place on the projector.
+      const size = this.deck.pageSize;
+      const crop = this.deck.slideCrop;
+      const board = fitPage(size.width * crop.width, size.height * crop.height, this.surfaceWidth, this.surfaceHeight);
+      this.shown = white
+        ? { page: null, x: board.x, y: board.y, width: board.width, height: board.height }
+        : { page: null, x: 0, y: 0, width: 0, height: 0 };
+      this.paintInk();
       this.finish();
       return;
     }
@@ -205,6 +222,7 @@ export class AudienceView {
       this.canvas.width === this.surfaceWidth &&
       this.canvas.height === this.surfaceHeight
     ) {
+      this.paintInk();
       this.finish();
       return;
     }
@@ -212,7 +230,46 @@ export class AudienceView {
     this.fill("#000000");
     this.context.drawImage(source, x, y);
     this.shown = { page, x, y, width: source.width, height: source.height };
+    this.paintInk(true);
     this.finish();
+  }
+
+  /**
+   * Ink sits on its own layer above the slide, redrawn as vectors whenever the strokes or the
+   * slide's place on screen change. While a new page is still rendering, the old slide stays up
+   * and so the layer is cleared rather than showing the new page's (empty) ink over it.
+   */
+  private paintInk(force = false): void {
+    const state = this.state;
+    const shown = this.shown;
+    if (!state || !shown) return;
+    const mode = state.audienceMode.kind;
+    const visible = (mode === "live" && shown.page === state.committedPage) || mode === "white";
+    const strokes = visible ? state.ink[inkLayer(state)] : [];
+    if (!this.inkCanvas && strokes.length === 0) return;
+    let layer = this.inkCanvas;
+    if (!layer) {
+      layer = document.createElement("canvas");
+      layer.className = "ink-layer";
+      this.canvas.after(layer);
+      this.inkCanvas = layer;
+    }
+    const resized = layer.width !== this.surfaceWidth || layer.height !== this.surfaceHeight;
+    if (!force && !resized && strokes === this.inkDrawn) return;
+    if (resized) {
+      layer.width = this.surfaceWidth;
+      layer.height = this.surfaceHeight;
+    }
+    const ctx = layer.getContext("2d");
+    if (!ctx) return;
+    ctx.clearRect(0, 0, layer.width, layer.height);
+    drawStrokes(ctx, strokes, shown);
+    this.inkDrawn = strokes;
+  }
+
+  /** Strokes currently drawn for the audience (development and tests only). */
+  get inkShown(): number {
+    return this.inkDrawn?.length ?? 0;
   }
 
   private fill(color: string): void {

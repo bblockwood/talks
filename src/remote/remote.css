@@ -329,13 +329,46 @@ button.wide {
 }
 .tools {
   display: grid;
-  grid-template-columns: repeat(5, 1fr);
+  grid-template-columns: repeat(6, 1fr);
   gap: 0.4rem;
   flex: none;
 }
 .tools button {
   padding: 0.6rem 0;
-  font-size: 0.9rem;
+  font-size: 0.85rem;
+}
+.drawbar {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  flex: none;
+}
+.drawbar .colors {
+  display: flex;
+  gap: 0.5rem;
+  margin-right: auto;
+}
+.ink-color {
+  width: 2.4rem;
+  height: 2.4rem;
+  padding: 0;
+  border-radius: 50%;
+  border: 3px solid var(--line);
+}
+.ink-color[data-color="0"] {
+  background: #e61919;
+}
+.ink-color[data-color="1"] {
+  background: #1d4ed8;
+}
+.ink-color[data-color="2"] {
+  background: #111111;
+}
+.ink-color.on {
+  border-color: var(--text);
+}
+.stage.drawing .slide {
+  outline: 3px solid var(--warn);
 }
 /* Huge targets, kept clear of the screen edges (SPEC §7). */
 .steps {
@@ -459,7 +492,8 @@ button.wide {
   .console .stage,
   .console .info,
   .console .notes,
-  .console .notes-image {
+  .console .notes-image,
+  .console .drawbar {
     display: none !important;
   }
   .bar-where {

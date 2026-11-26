@@ -2,7 +2,7 @@
 // keys and clicks into Commands, and wipes everything at the end.
 import { KeyInterpreter } from "../core/keys";
 import { prefetchPages } from "../core/prefetch";
-import { stateBody } from "../core/protocol";
+import { inkCommand, stateBody } from "../core/protocol";
 import type { Ack, Envelope } from "../core/protocol";
 import { apply, initialState } from "../core/session";
 import type { Command, DeckContext, SessionState } from "../core/session";
@@ -118,6 +118,7 @@ export class Presentation {
         frames: () => this.deck.frames.frames,
         keyboardLocked: () => this.keyboardLocked,
         pointerVisible: () => this.view.pointerVisible,
+        inkShown: () => this.view.inkShown,
       };
     }
   }
@@ -130,9 +131,15 @@ export class Presentation {
     if (this.ended) return;
     const next = apply(this.state, command, this.context, Date.now());
     if (next !== this.state) {
+      const previous = this.state;
       this.state = next;
       this.render(inputTime);
-      this.broadcast(ack);
+      // Points streaming into a stroke change nothing a phone needs to hear about; everything else does.
+      const onlyPoints =
+        command.name === "inkAppend" &&
+        next.ink.page.length === previous.ink.page.length &&
+        next.ink.board.length === previous.ink.board.length;
+      if (!onlyPoints || ack) this.broadcast(ack);
       this.onChange?.();
     } else if (ack) {
       this.broadcast(ack); // nothing changed (e.g. Next on the last slide), but the sender still gets its answer
@@ -198,6 +205,12 @@ export class Presentation {
       case "pointer":
         this.pointer(envelope.body.x, envelope.body.y, envelope.body.visible);
         break;
+      case "ink": {
+        // Each stroke id is prefixed with its sender, so two devices can draw at once.
+        const command = inkCommand(envelope.sid, envelope.body);
+        if (command) this.dispatch(command, performance.now());
+        break;
+      }
       case "ping":
         this.options.link?.send({ type: "pong", body: { t: envelope.body.t } });
         break;

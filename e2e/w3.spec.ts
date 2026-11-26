@@ -230,6 +230,103 @@ test("a phone held sideways shows two very large buttons that still drive the ta
   await room.close();
 });
 
+test("drawing on the phone appears on the room screen; the white screen is a whiteboard", async ({ browser }) => {
+  const room = await openRoom(browser);
+  await room.locator("#start").click();
+  const phone = await openPhone(browser);
+  await expect(phone.locator("#link")).toContainText("Connected to room PC");
+
+  const inkShown = () => room.evaluate(() => (window as unknown as { __lectern: { inkShown(): number } }).__lectern.inkShown());
+  const local = () => phone.evaluate(() => (window as unknown as { __remote: { localInk(): { page: number; board: number } } }).__remote.localInk());
+  /** Count of painted pixels on the audience's ink layer, by colour. */
+  const inkPixels = () =>
+    room.evaluate(() => {
+      const c = document.querySelector<HTMLCanvasElement>("#audience canvas.ink-layer");
+      if (!c) return { red: 0, blue: 0, any: 0 };
+      const d = c.getContext("2d")!.getImageData(0, 0, c.width, c.height).data;
+      let red = 0, blue = 0, any = 0;
+      for (let i = 0; i < d.length; i += 4) {
+        if (d[i + 3]! < 128) continue;
+        any++;
+        if (d[i]! > 180 && d[i + 2]! < 80) red++;
+        if (d[i + 2]! > 180 && d[i]! < 80) blue++;
+      }
+      return { red, blue, any };
+    });
+  const slide = (await phone.locator("#current").boundingBox())!;
+  const draw = async (from: [number, number], to: [number, number]) => {
+    await phone.mouse.move(slide.x + slide.width * from[0], slide.y + slide.height * from[1]);
+    await phone.mouse.down();
+    await phone.mouse.move(slide.x + slide.width * to[0], slide.y + slide.height * to[1], { steps: 12 });
+    await phone.mouse.up();
+  };
+
+  await expect(phone.locator("#drawbar")).toBeHidden();
+  await phone.locator("#t-draw").click();
+  await expect(phone.locator("#drawbar")).toBeVisible();
+
+  // A stroke in red: it is on the room screen, and it did not swipe to the next slide.
+  await draw([0.2, 0.3], [0.8, 0.6]);
+  await expect.poll(inkShown).toBe(1);
+  expect((await inkPixels()).red).toBeGreaterThan(200);
+  expect(await roomPage(room)).toBe(0);
+
+  // A second stroke in blue, then Undo removes it.
+  await phone.locator('.ink-color[data-color="1"]').click();
+  await draw([0.2, 0.7], [0.8, 0.7]);
+  await expect.poll(inkShown).toBe(2);
+  expect((await inkPixels()).blue).toBeGreaterThan(100);
+  await phone.locator("#ink-undo").click();
+  await expect.poll(inkShown).toBe(1);
+  expect((await inkPixels()).blue).toBe(0);
+  expect(await local()).toEqual({ page: 1, board: 0 });
+
+  // Leaving the page clears its ink, on the room screen and on the phone.
+  await phone.locator("#next").click();
+  await expect.poll(() => roomPage(room)).toBe(1);
+  await expect.poll(inkShown).toBe(0);
+  expect((await inkPixels()).any).toBe(0);
+  await expect.poll(local).toEqual({ page: 0, board: 0 });
+
+  // Board: the room screen goes white and takes ink.
+  await phone.locator("#ink-board").click();
+  await expect.poll(() => roomMode(room)).toBe("white");
+  await expect(phone.locator("#mode-badge")).toHaveText("WHITEBOARD");
+  await draw([0.3, 0.3], [0.7, 0.3]);
+  await draw([0.3, 0.5], [0.7, 0.5]);
+  await expect.poll(inkShown).toBe(2);
+  expect((await inkPixels()).blue).toBeGreaterThan(200);
+
+  // Back to the slides (no ink there), step on, and return: the board is as it was left.
+  await phone.locator("#ink-board").click();
+  await expect.poll(() => roomMode(room)).toBe("live");
+  await expect.poll(inkShown).toBe(0);
+  await phone.locator("#next").click();
+  await phone.locator("#ink-board").click();
+  await expect.poll(inkShown).toBe(2);
+  expect(await local()).toEqual({ page: 0, board: 2 });
+
+  // C on the room keyboard clears the board; the phone's copy follows.
+  await room.keyboard.press("c");
+  await expect.poll(inkShown).toBe(0);
+  await expect.poll(local).toEqual({ page: 0, board: 0 });
+
+  // Clear from the phone, and Draw off restores the normal gestures.
+  await phone.locator("#ink-board").click();
+  await draw([0.2, 0.2], [0.4, 0.4]);
+  await expect.poll(inkShown).toBe(1);
+  await phone.locator("#ink-clear").click();
+  await expect.poll(inkShown).toBe(0);
+  await phone.locator("#t-draw").click();
+  await expect(phone.locator("#drawbar")).toBeHidden();
+  const before = await roomPage(room);
+  await draw([0.8, 0.5], [0.3, 0.5]); // now a swipe again
+  await expect.poll(() => roomPage(room)).toBe((before ?? 0) + 1);
+
+  await phone.context().close();
+  await room.close();
+});
+
 test("only ciphertext crosses the relay", async ({ browser }) => {
   const room = await openRoom(browser);
   const context = await browser.newContext({ viewport: { width: 390, height: 844 } });

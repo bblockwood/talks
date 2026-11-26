@@ -112,6 +112,10 @@ function render(): void {
   current.show(page, [page + 1, page - 1].filter((p) => p >= 0 && p < pageCount));
   next.show(page + 1 < pageCount ? page + 1 : page);
   void deck.loadLinks(page);
+  // Ink drawn from a phone or tablet shows here too; the white screen is the whiteboard.
+  const board = state.audienceMode.kind === "white";
+  current.setBlank(board);
+  current.setInk(board ? state.ink.board : state.ink.page);
 
   const frame = frames.frameContaining(page);
   const builds = frame ? frame.lastPage - frame.firstPage + 1 : 1;

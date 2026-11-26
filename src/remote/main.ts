@@ -1,5 +1,6 @@
 // Phone remote entry (SPEC §7): enter the talk code, optionally remember it on this phone, or
 // arrive by a `#c=<code>` link. The hash is never sent to any server.
+import { registerServiceWorker } from "../shared/register-sw";
 import { strFromU8 } from "fflate";
 import { normalizeCode } from "../core/code";
 import { parsePdfpc } from "../core/notes";
@@ -119,6 +120,7 @@ $<HTMLFormElement>("code-form").addEventListener("submit", (ev) => {
   else void openTalk(codeInput.value, rememberBox.checked);
 });
 
+registerServiceWorker();
 $("boot").remove();
 if (typeof crypto === "undefined" || !crypto.subtle || typeof ResizeObserver === "undefined") {
   setStatus("This browser is too old to use the remote. Update it, or use another phone.", true);

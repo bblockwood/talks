@@ -2,6 +2,9 @@
 // presenter view. Like the audience view it only ever draws finished pages.
 import { release, RenderCache } from "./render-cache";
 import type { Deck } from "./deck";
+import { fitPage } from "../core/prefetch";
+import type { Stroke } from "../core/ink";
+import { drawStrokes } from "./ink-draw";
 
 export class SlideSurface {
   readonly canvas: HTMLCanvasElement;
@@ -13,6 +16,9 @@ export class SlideSurface {
   private height = 0;
   private drawn: { page: number; x: number; y: number; width: number; height: number } | null = null;
   private dot: { x: number; y: number } | null = null;
+  private ink: readonly Stroke[] = [];
+  private blank = false;
+  private readonly deckRef: Deck;
 
   constructor(
     private readonly host: HTMLElement,
@@ -20,6 +26,7 @@ export class SlideSurface {
     capacity = 8,
     part: "slide" | "notes" = "slide",
   ) {
+    this.deckRef = deck;
     this.canvas = document.createElement("canvas");
     host.replaceChildren(this.canvas);
     this.cache = new RenderCache(deck, capacity, part);
@@ -53,6 +60,22 @@ export class SlideSurface {
   setDot(dot: { x: number; y: number } | null): void {
     this.dot = dot;
     this.drawn = null; // force a repaint
+    this.paint();
+  }
+
+  /** Ink to draw over the slide. Pass the same array again and nothing is redrawn. */
+  setInk(strokes: readonly Stroke[]): void {
+    if (strokes === this.ink) return;
+    this.ink = strokes;
+    this.drawn = null;
+    this.paint();
+  }
+
+  /** Shows a blank white board in place of the slide (the whiteboard). */
+  setBlank(blank: boolean): void {
+    if (blank === this.blank) return;
+    this.blank = blank;
+    this.drawn = null;
     this.paint();
   }
 
@@ -97,6 +120,10 @@ export class SlideSurface {
 
   private paint(): void {
     if (this.page === null || this.width === 0) return;
+    if (this.blank) {
+      this.paintBoard();
+      return;
+    }
     const rendered = this.cache.get(this.page);
     if (!rendered) return;
     const source = rendered.canvas;
@@ -115,6 +142,7 @@ export class SlideSurface {
     ctx.fillStyle = "#000";
     ctx.fillRect(0, 0, this.width, this.height);
     ctx.drawImage(source, x, y);
+    drawStrokes(ctx, this.ink, { x, y, width: source.width, height: source.height });
     if (this.dot) {
       const r = Math.max(4, source.height * 0.015);
       ctx.beginPath();
@@ -123,5 +151,25 @@ export class SlideSurface {
       ctx.fill();
     }
     this.drawn = { page: this.page, x, y, width: source.width, height: source.height };
+  }
+
+  /** The whiteboard: a white rectangle where the slide would be, with the board's ink. */
+  private paintBoard(): void {
+    if (this.page === null) return;
+    const size = this.deckRef.pageSize;
+    const crop = this.deckRef.slideCrop;
+    const fit = fitPage(size.width * crop.width, size.height * crop.height, this.width, this.height);
+    if (this.canvas.width !== this.width || this.canvas.height !== this.height) {
+      this.canvas.width = this.width;
+      this.canvas.height = this.height;
+    }
+    const ctx = this.canvas.getContext("2d");
+    if (!ctx) return;
+    ctx.fillStyle = "#000";
+    ctx.fillRect(0, 0, this.width, this.height);
+    ctx.fillStyle = "#fff";
+    ctx.fillRect(fit.x, fit.y, fit.width, fit.height);
+    drawStrokes(ctx, this.ink, fit);
+    this.drawn = { page: this.page, x: fit.x, y: fit.y, width: fit.width, height: fit.height };
   }
 }
