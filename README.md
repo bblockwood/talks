@@ -57,9 +57,9 @@ Checked at run time; missing features degrade rather than fail. "Tested" means a
 | Full screen from Start | Tested | Expected | Expected | n/a |
 | A stray Esc cannot leave full screen (keyboard lock) | Tested | No: one Esc leaves full screen; the talk continues and the next key press re-enters | No: same | n/a |
 | Screen stays awake (wake lock) | Tested | Expected | Expected | Tested on the remote |
-| Two-screen mode and Swap displays | Tested on a Mac with a second display (swap not yet) | No (no Window Management API): one screen only | No: one screen only | n/a |
+| Two-screen mode, Swap displays, drawing from the presenter window | Tested on a Mac with a second display | No (no Window Management API): one screen only | No: one screen only | n/a |
 | Phone remote | Works (tested at phone size) | Expected | Expected | Tested on Ben's phone |
-| Draw from phone or tablet | Tested with a mouse | Expected | Expected | Not yet tried with a finger or Pencil |
+| Draw from phone or tablet | Tested with a mouse | Expected | Expected | Tested with a finger on Ben's phone; not yet with a Pencil |
 | Works offline after first use | Tested | Expected | Expected | Expected |
 
 Not yet tried anywhere: a Windows classroom PC, a hardware clicker, and Firefox or Safari as the room browser.
@@ -92,6 +92,6 @@ docs/          specs, decisions, progress, test results
 
 Pushing to `main` deploys the site with GitHub Actions. Published decks live on the orphan `decks` branch, rewritten as a single commit on each publish.
 
-## Licence
+## License
 
-No licence has been chosen for this repository yet. The test decks under `fixtures/` come from the native Lectern app's corpus. PDF.js (Apache-2.0) and fflate (MIT) are bundled.
+Lectern Web is released under the MIT License; see `LICENSE`. The Lectern name is not part of that grant, so please give a fork its own name. The test decks under `fixtures/` come from the native Lectern app's corpus. PDF.js (Apache-2.0) and fflate (MIT) are bundled under their own licenses.

@@ -507,3 +507,6 @@ W0–W5 are built. SPEC §10 says the next step is Ben's: use it for a real talk
   2. Drag on the current slide. Expect: the line appears on the projector as you draw, and the slide does not advance.
   3. Try a colour, **Undo**, **Clear**, and **Board** (white screen with its own drawing; **Board** again returns).
   4. Press **Esc** once: Draw turns off and the talk does not end. Click the slide: it advances again.
+
+- **Ben's results (2026-11-26):** drawing from the presenter window, Swap displays on real screens, and finger drawing on the phone all work (`docs/spikes/W5.md`). MIT License added at Ben's request.
+- **Remaining hardware checks:** Apple Pencil; the campus Wi-Fi latency number; a Windows classroom PC with a clicker; Firefox or Safari as the room browser.
