@@ -510,3 +510,5 @@ W0–W5 are built. SPEC §10 says the next step is Ben's: use it for a real talk
 
 - **Ben's results (2026-11-26):** drawing from the presenter window, Swap displays on real screens, and finger drawing on the phone all work (`docs/spikes/W5.md`). MIT License added at Ben's request.
 - **Remaining hardware checks:** Apple Pencil; the campus Wi-Fi latency number; a Windows classroom PC with a clicker; Firefox or Safari as the room browser.
+
+- **W0 test pages removed (Ben, 2026-11-26):** `/talks/w0/` and `/talks/w0/phone` are gone from the site and the repo, with their source (`w0/`, `src/w0/`) and tests. Earlier sections of this file that point at those addresses are history. The relay's own checks (origins, room ids) moved into `e2e/w3.spec.ts`. To learn a clicker's key codes on a classroom PC, just present a talk with it: every key the spec lists is handled, and anything that does nothing is worth reporting.

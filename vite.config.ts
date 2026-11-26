@@ -38,8 +38,6 @@ export default defineConfig(({ mode }) => {
           index: page("index.html"),
           remote: page("remote/index.html"),
           presenter: page("presenter/index.html"),
-          w0: page("w0/index.html"),
-          w0phone: page("w0/phone/index.html"),
           sw: page("src/sw/sw.ts"),
         },
         output: {
@@ -76,8 +74,7 @@ export default defineConfig(({ mode }) => {
           if (!worker || worker.type !== "chunk" || worker.code === undefined) return;
           const files = Object.values(bundle)
             .map((f) => f.fileName)
-            // The W0 test pages and the bundled fixture are not part of the app shell.
-            .filter((f) => f !== "sw.js" && !f.endsWith(".map") && !f.endsWith(".pdf") && !/(^|[/-])w0/.test(f))
+            .filter((f) => f !== "sw.js" && !f.endsWith(".map"))
             .sort();
           const pages = files.filter((f) => f.endsWith("index.html")).map((f) => f.replace(/index\.html$/, ""));
           const assets = files.filter((f) => !f.endsWith(".html"));

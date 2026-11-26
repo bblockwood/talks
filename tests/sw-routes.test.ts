@@ -6,7 +6,7 @@ const k = (path: string) => classify(path, "/talks/").kind;
 
 describe("service worker routing", () => {
   it("treats app pages as pages", () => {
-    for (const path of ["/talks/", "/talks", "/talks/remote", "/talks/remote/", "/talks/presenter/", "/talks/index.html", "/talks/w0/phone/"]) {
+    for (const path of ["/talks/", "/talks", "/talks/remote", "/talks/remote/", "/talks/presenter/", "/talks/index.html", "/talks/some/page/"]) {
       expect(k(path)).toBe("page");
     }
   });

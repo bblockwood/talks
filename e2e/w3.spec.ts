@@ -327,6 +327,18 @@ test("drawing on the phone appears on the room screen; the white screen is a whi
   await room.close();
 });
 
+test("relay refuses other origins, bad room ids and non-WebSocket requests", async ({ request }) => {
+  const id = "0123456789abcdef0123456789abcdef";
+  const upgrade = { Upgrade: "websocket", Connection: "Upgrade", "Sec-WebSocket-Version": "13", "Sec-WebSocket-Key": "dGhlIHNhbXBsZSBub25jZQ==" };
+  const relay = "http://localhost:8787";
+
+  expect(await (await request.get(`${relay}/health`)).text()).toBe("ok");
+  expect((await request.get(`${relay}/room/${id}`)).status()).toBe(426);
+  expect((await request.get(`${relay}/room/not-a-room`, { headers: upgrade })).status()).toBe(404);
+  expect((await request.get(`${relay}/room/${id}`, { headers: { ...upgrade, Origin: "https://evil.example" } })).status()).toBe(403);
+  expect((await request.get(`${relay}/room/${id}`, { headers: upgrade })).status()).toBe(403); // no Origin
+});
+
 test("only ciphertext crosses the relay", async ({ browser }) => {
   const room = await openRoom(browser);
   const context = await browser.newContext({ viewport: { width: 390, height: 844 } });
