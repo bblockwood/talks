@@ -234,3 +234,45 @@ All on your Mac; about 10 minutes.
 6. **List and revoke.** `npm run codes` should list the deck. Then `npm run revoke -- ~/path/to/talk.pdf`, wait a minute, and check the code now gives "No talk found".
 7. **Check the code store.** `ls -l ~/.config/lectern/codes.json` should show `-rw-------`. Back the file up as SETUP.md §3 suggests.
 8. **Phone.** Open `benlockwood.com/talks` on your phone and enter a code: it should open and show slides. (The phone remote itself is W3; this only checks that the phone can decrypt a deck.)
+
+---
+
+## W3. Relay and phone remote
+
+### W2 results that shape W3
+
+- Ben ran W2 checklist steps 1–3 and 6–8: publish with a chosen code, open by code, wrong code, list and revoke, code store permissions, and opening a deck on the phone all worked. Steps 4–5 (republish, sidecars) are deferred, not failed.
+- SPEC §12 asks whether the phone should get ink in W3 or W5. Not raised by Ben, so ink stays in W5 as §7 has it.
+
+### Plan (2026-11-26)
+
+1. **Core:**
+   - `protocol.ts`: the §8 wire format. Each frame is `iv || AES-256-GCM(channel-key, iv, JSON)`; messages carry `sid` and `seq`, and receivers drop anything not newer than the last `seq` from that sender. Incoming commands are validated before they reach the reducer.
+   - `session.ts`: the talk timer joins the session state (Native §6.7), with start, pause, toggle and reset commands.
+   - `notes.ts`: the text notes sources and their merge order (SPEC §6.2: sidecar overrides, `.pdfpc`, PDF text annotations, PowerPoint), with the frame fallback of Native §5.2. The Beamer second-screen split is an image, not text, and waits for W4.
+   - `markdown.ts`: the small Markdown subset notes use, rendered to escaped HTML.
+2. **Shared:** `relay-client.ts` (encrypts, orders, reconnects with backoff 0.5–10 s and jitter, measures round trips) and a slide surface the phone and, later, the presenter view both use.
+3. **Room PC:** connects to the relay when a deck is opened by code. Shows "Phone can connect" or "Phone unavailable: keyboard and clicker only" on the entry screen. While presenting it applies commands from the phone, broadcasts `state` after every change and every 5 s, answers pings, draws the phone's pointer, and ends on `end`. It never waits on the relay.
+4. **Phone remote (`/talks/remote`):** code entry, optional "Remember on this device", `#c=` deep link. The phone decrypts the deck itself. Portrait console: current slide with frame and build, next slide, notes, timer, large Prev/Next; swipe to step, long-press and drag for the pointer, tap a link to follow it; thumbnail sheet with private preview and Show; Back, Black, Freeze; End talk with a confirm. Reconnects by itself and resyncs.
+5. **Measurement.** Each command is acknowledged in the `state` that follows it, so the phone can show a measured tap → slide time alongside the ping round trip.
+6. **Tests:** unit tests for protocol, timer, notes and markdown; e2e with a room page and a phone page talking through the local relay, including a dropped connection.
+
+### Done (2026-11-26)
+
+- **Core:** `protocol.ts` (encrypted frames, `sid`/`seq` replay and reorder filtering, strict message validation), the talk clock in `session.ts`, `notes.ts`, `markdown.ts`.
+- **Shared:** `relay-client.ts`, `slide-surface.ts`, `deck-notes.ts`.
+- **Room PC:** `room-link.ts`; the presentation applies phone commands, broadcasts `state` after every change and every 5 s, answers pings, draws the pointer (red dot with glow and a short trail, gone 2 s after it stops), and ends on `end`. The entry screen shows "Phone can connect: benlockwood.com/talks/remote" or "Phone unavailable: keyboard and clicker only".
+- **Phone remote** at `/talks/remote`: everything in the plan above. The "More" sheet also has clock pause/reset, White, Forward, notes size, the measured connection numbers, "Close remote" and "End talk…".
+- **Tests:** 189 unit and 23 e2e, all passing. The W3 e2e tests run a room page and a phone page through the local relay with real encryption: stepping from the phone and from the room keyboard, notes from the PDF and the `.pdfpc` file, the 30-minute countdown, swipe, thumbnail preview then Show, Back, Black, Freeze, the pointer, clock pause, End talk; that only ciphertext crosses the relay; that the phone reconnects and resyncs by itself after a dropped connection; that the room PC presents normally with the relay unreachable; the `#c=` link; the "Slides updated — reload?" banner; and remember/forget on the phone.
+- A bug found by the tests and fixed: sheets left open when a talk was closed stayed open when the next one was opened.
+
+### Known issues and notes
+
+- **Not yet tried on a real phone.** Everything above ran in desktop Chromium at phone size. Touch behaviour on iOS Safari (long-press, swipe, wake lock, returning from the background) is the main thing Ben's checklist tests.
+- **The 150 ms acceptance number needs Ben's phone on campus Wi-Fi.** The phone's More sheet shows "tap → slide" as a running median for exactly this.
+- **Replays across sessions.** `seq` filtering stops replays within a session. A hostile relay operator could still replay frames recorded in an earlier session of the same talk code (for example an old "next"). The relay is Ben's own Worker, so this is accepted for now; fixing it needs a per-session nonce in the protocol.
+- **Anyone with the code can drive the slides** (SPEC §8.2), and codes are one guessable word. A heckler who guesses the word could advance slides or end the talk. `--random` codes close this.
+- **Connected remotes are not listed anywhere yet**; that belongs to the presenter view (W4).
+- **Thumbnails** are rendered at up to 2× and kept while the talk is open; a 300-frame deck would hold on to roughly 100 MB on the phone.
+- **Opening a deck from a file gives no phone remote**, since there is no code to derive a room from.
+- The W0 test pages are still deployed for the outstanding classroom-PC checks.

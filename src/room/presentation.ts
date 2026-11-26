@@ -2,17 +2,28 @@
 // keys and clicks into Commands, and wipes everything at the end.
 import { KeyInterpreter } from "../core/keys";
 import { prefetchPages } from "../core/prefetch";
+import { stateBody } from "../core/protocol";
+import type { Ack, Envelope } from "../core/protocol";
 import { apply, initialState } from "../core/session";
 import type { Command, DeckContext, SessionState } from "../core/session";
 import type { Deck } from "../shared/deck";
 import type { RenderCache } from "../shared/render-cache";
 import { AudienceView } from "./audience";
+import type { RoomLink } from "./room-link";
+
+const HEARTBEAT_MS = 5000;
 
 export interface PresentationOptions {
   /** False when the user chose to present in the window (full screen was blocked). */
   readonly fullscreen: boolean;
   /** Called once everything decrypted has been dropped. */
   readonly onEnded: () => void;
+  /** The relay connection, when the deck was opened by code. Null means keyboard and clicker only. */
+  readonly link: RoomLink | null;
+  /** `meta.published` of the open deck, sent to phones so they can tell their copy is stale. */
+  readonly deckPublished: string;
+  /** Target length of the talk for the clock, if the deck sets one. */
+  readonly targetMs: number | null;
 }
 
 export class Presentation {
@@ -24,6 +35,7 @@ export class Presentation {
   private keyboardLocked = false;
   private escapeDown = false;
   private ended = false;
+  private heartbeat: number | undefined;
 
   /**
    * Starts presenting. Must be called synchronously from the Start click, because full screen
@@ -65,7 +77,19 @@ export class Presentation {
 
     if (document.fullscreenElement === root) void this.lockKeyboard();
     void this.requestWakeLock();
+    // The clock runs while presenting (Native §6.7).
+    this.state = { ...initialState, timer: { accumulatedMs: 0, runningSince: Date.now(), targetMs: options.targetMs } };
     this.render(performance.now());
+
+    const link = options.link;
+    if (link) {
+      link.onMessage = this.onRelayMessage;
+      link.onStatus = (status) => {
+        if (status === "connected") this.broadcast(); // resync whoever is listening after a reconnect
+      };
+      this.heartbeat = window.setInterval(() => this.broadcast(), HEARTBEAT_MS);
+      this.broadcast();
+    }
 
     if (import.meta.env.DEV) {
       // Development and e2e only: lets tests read the state without anything showing on the audience view.
@@ -75,18 +99,59 @@ export class Presentation {
         links: (page: number) => this.deck.linksNow(page),
         frames: () => this.deck.frames.frames,
         keyboardLocked: () => this.keyboardLocked,
+        pointerVisible: () => this.view.pointerVisible,
       };
     }
   }
 
-  /** Applies a command from any input. `inputTime` is a `performance.now()` timestamp. */
-  dispatch(command: Command, inputTime: number): void {
+  /**
+   * Applies a command from any input. `inputTime` is a `performance.now()` timestamp. `ack` names
+   * the relay message that carried the command, so its sender can time the round trip.
+   */
+  dispatch(command: Command, inputTime: number, ack?: Ack): void {
     if (this.ended) return;
-    const next = apply(this.state, command, this.context);
-    if (next === this.state) return;
-    this.state = next;
-    this.render(inputTime);
+    const next = apply(this.state, command, this.context, Date.now());
+    if (next !== this.state) {
+      this.state = next;
+      this.render(inputTime);
+      this.broadcast(ack);
+    } else if (ack) {
+      this.broadcast(ack); // nothing changed (e.g. Next on the last slide), but the sender still gets its answer
+    }
   }
+
+  /** The room PC is authoritative: it sends `state` after every change and as a heartbeat (SPEC §8.2). */
+  private broadcast(ack?: Ack): void {
+    if (this.ended) return;
+    this.options.link?.send({
+      type: "state",
+      body: stateBody(this.state, this.deck.frames, Date.now(), this.options.deckPublished, ack),
+    });
+  }
+
+  private readonly onRelayMessage = (envelope: Envelope): void => {
+    if (this.ended) return;
+    switch (envelope.type) {
+      case "hello":
+        if (envelope.body.role !== "room") this.broadcast(); // late joiners sync
+        break;
+      case "command":
+        // Anyone who can decrypt is authorised: knowing the code is the credential (SPEC §8.2).
+        this.dispatch(envelope.body, performance.now(), { sid: envelope.sid, seq: envelope.seq });
+        break;
+      case "pointer":
+        this.view.setPointer(envelope.body.x, envelope.body.y, envelope.body.visible);
+        break;
+      case "ping":
+        this.options.link?.send({ type: "pong", body: { t: envelope.body.t } });
+        break;
+      case "end":
+        void this.end();
+        break;
+      default:
+        break;
+    }
+  };
 
   /** End (SPEC §5.3): leave full screen, release locks, drop every decrypted byte and pixel. */
   async end(navigate = true): Promise<void> {
@@ -99,6 +164,8 @@ export class Presentation {
     window.removeEventListener("pagehide", this.onPageHide);
     if (import.meta.env.DEV) delete (window as unknown as { __lectern?: unknown }).__lectern;
 
+    window.clearInterval(this.heartbeat);
+    this.options.link?.close();
     this.view.wipe();
     this.cache.wipe();
     this.root.hidden = true;

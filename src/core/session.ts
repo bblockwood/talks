@@ -25,7 +25,26 @@ export type Command =
   | { readonly name: "followLink"; readonly page: number; readonly index: number }
   | { readonly name: "back" }
   | { readonly name: "forward" }
-  | { readonly name: "setAudienceMode"; readonly mode: AudienceMode };
+  | { readonly name: "setAudienceMode"; readonly mode: AudienceMode }
+  // The talk clock (Native §6.7). It starts when presenting starts; these adjust it by hand.
+  | { readonly name: "timerStart" }
+  | { readonly name: "timerPause" }
+  | { readonly name: "timerToggle" }
+  | { readonly name: "timerReset" };
+
+/** Times are milliseconds on the room PC's clock. */
+export interface TimerState {
+  /** Time accumulated before `runningSince`. */
+  readonly accumulatedMs: number;
+  /** Non-null while running. */
+  readonly runningSince: number | null;
+  /** Target length of the talk, if one is set. */
+  readonly targetMs: number | null;
+}
+
+export function elapsedMs(timer: TimerState, now: number): number {
+  return timer.accumulatedMs + (timer.runningSince === null ? 0 : Math.max(0, now - timer.runningSince));
+}
 
 export interface SessionState {
   /** What the audience sees when `audienceMode` is live. 0-based. */
@@ -35,6 +54,7 @@ export interface SessionState {
   readonly history: readonly number[];
   /** Pages `back` left, for `forward`. Cleared by any new jump. */
   readonly forwardHistory: readonly number[];
+  readonly timer: TimerState;
 }
 
 export const initialState: SessionState = {
@@ -42,6 +62,7 @@ export const initialState: SessionState = {
   audienceMode: LIVE,
   history: [],
   forwardHistory: [],
+  timer: { accumulatedMs: 0, runningSince: null, targetMs: null },
 };
 
 /** The page the audience surface shows, or null for black/white. */
@@ -75,8 +96,27 @@ export interface DeckContext {
   linksFor(page: number): readonly PageLink[] | undefined;
 }
 
-/** Applies a command. Returns the same object when nothing changed, so views can skip work. */
-export function apply(state: SessionState, command: Command, deck: DeckContext): SessionState {
+/**
+ * Applies a command. Returns the same object when nothing changed, so views can skip work.
+ * `now` is the room PC's clock in milliseconds; only the timer commands read it.
+ */
+export function apply(state: SessionState, command: Command, deck: DeckContext, now = 0): SessionState {
+  switch (command.name) {
+    case "timerStart":
+      return state.timer.runningSince !== null ? state : { ...state, timer: { ...state.timer, runningSince: now } };
+    case "timerPause":
+      return state.timer.runningSince === null
+        ? state
+        : { ...state, timer: { ...state.timer, accumulatedMs: elapsedMs(state.timer, now), runningSince: null } };
+    case "timerToggle":
+      return apply(state, { name: state.timer.runningSince === null ? "timerStart" : "timerPause" }, deck, now);
+    case "timerReset":
+      // The clock runs whenever a talk is being presented, so a reset restarts it at once.
+      return { ...state, timer: { ...state.timer, accumulatedMs: 0, runningSince: now } };
+    default:
+      break;
+  }
+
   const { frames } = deck;
   if (frames.pageCount === 0) return state;
   const clamp = (page: number): number => frames.clamp(page);
@@ -180,5 +220,7 @@ export function apply(state: SessionState, command: Command, deck: DeckContext):
         (mode.kind !== "frozen" || (state.audienceMode.kind === "frozen" && state.audienceMode.page === mode.page));
       return same ? state : { ...state, audienceMode: mode };
     }
+    default:
+      return state;
   }
 }

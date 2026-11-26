@@ -19,6 +19,7 @@ export default defineConfig(({ mode }) => {
       rollupOptions: {
         input: {
           index: page("index.html"),
+          remote: page("remote/index.html"),
           w0: page("w0/index.html"),
           w0phone: page("w0/phone/index.html"),
         },

@@ -14,6 +14,8 @@ export const buildCount = (frame: Frame): number => frame.lastPage - frame.first
 
 export class FrameIndex {
   readonly frames: readonly Frame[];
+  /** Each page's own label, or null where the PDF defines none. */
+  readonly labels: readonly (string | null)[];
   private readonly frameOfPage: readonly number[];
 
   /** `labels[i]` is page i's label, or null when the PDF defines none for it. */
@@ -37,6 +39,7 @@ export class FrameIndex {
       start = end;
     }
     this.frames = frames;
+    this.labels = labels.map((l) => l ?? null);
     this.frameOfPage = frameOfPage;
   }
 

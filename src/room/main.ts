@@ -4,8 +4,11 @@
 import { DeckError, openDeck } from "../shared/deck";
 import type { Deck } from "../shared/deck";
 import { NetworkError, NoTalkError, fetchDeck } from "../shared/fetch-deck";
+import { parsePdfpc, targetDurationMs } from "../core/notes";
+import { strFromU8 } from "fflate";
 import { RenderCache } from "../shared/render-cache";
 import { Presentation } from "./presentation";
+import { RoomLink } from "./room-link";
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string): T => {
   const el = document.getElementById(id);
@@ -25,8 +28,21 @@ const fsProblem = $("fs-problem");
 
 let deck: Deck | null = null;
 let cache: RenderCache | null = null;
+let link: RoomLink | null = null;
+let deckPublished = "";
+let targetMs: number | null = null;
 let starting = false;
 let loading = false;
+
+const phoneStatus = $("phone-status");
+function showPhoneStatus(): void {
+  const ok = link?.status === "connected";
+  phoneStatus.textContent = ok
+    ? `Phone can connect: ${window.location.host}${import.meta.env.BASE_URL}remote`
+    : "Phone unavailable: keyboard and clicker only";
+  phoneStatus.classList.toggle("ok", ok);
+  phoneStatus.classList.toggle("off", !ok);
+}
 
 function setStatus(text: string, error = false): void {
   status.textContent = text;
@@ -34,6 +50,10 @@ function setStatus(text: string, error = false): void {
 }
 
 async function dropDeck(): Promise<void> {
+  link?.close();
+  link = null;
+  deckPublished = "";
+  targetMs = null;
   cache?.wipe();
   cache = null;
   const old = deck;
@@ -75,6 +95,7 @@ async function load(source: () => Promise<{ pdf: ArrayBuffer; title: string | nu
         : `${frameCount} frames, ${opened.pageCount} pages`;
     setStatus("");
     codeInput.value = "";
+    showPhoneStatus();
     ready.hidden = false;
     startButton.focus();
   } catch (e) {
@@ -90,9 +111,15 @@ async function load(source: () => Promise<{ pdf: ArrayBuffer; title: string | nu
 
 function openByCode(code: string): void {
   void load(async () => {
-    const { payload } = await fetchDeck(code, import.meta.env.BASE_URL, (step) =>
+    const { payload, keys } = await fetchDeck(code, import.meta.env.BASE_URL, (step) =>
       setStatus(step === "unlocking" ? "Unlocking…" : "Loading slides…"),
     );
+    // The room PC never waits on the relay: this connects in the background (SPEC §8.4).
+    link = new RoomLink(keys);
+    link.onStatus = showPhoneStatus;
+    deckPublished = payload.meta.published;
+    const pdfpc = payload.pdfpc ? parsePdfpc(strFromU8(payload.pdfpc)) : null;
+    targetMs = targetDurationMs(pdfpc, payload.meta.settings.targetDuration);
     // Copy the PDF out of the payload so the rest of it can be collected; PDF.js takes the copy.
     const pdf = payload.pdf.slice().buffer;
     return { pdf, title: payload.meta.title || null };
@@ -107,6 +134,9 @@ function start(fullscreen: boolean): void {
     fullscreen,
     // Reloading the entry screen guarantees nothing of the talk survives in this tab.
     onEnded: () => window.location.replace(import.meta.env.BASE_URL),
+    link,
+    deckPublished,
+    targetMs,
   });
   void starter.then((presentation) => {
     starting = false;
@@ -115,6 +145,7 @@ function start(fullscreen: boolean): void {
       // The presentation now owns the deck and cache, and wipes them when it ends.
       deck = null;
       cache = null;
+      link = null;
     } else {
       fsProblem.hidden = false;
     }

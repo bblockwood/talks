@@ -29,7 +29,7 @@ const MAX_DIGITS = 6;
 const NEXT = new Set(["ArrowRight", "ArrowDown", " ", "PageDown", "n", "N"]);
 const PREVIOUS = new Set(["ArrowLeft", "ArrowUp", "PageUp", "p", "P"]);
 /** Keys that belong to later milestones (overview, laser, draw, timer) or would disturb the talk (F5 reloads). */
-const SWALLOWED = new Set(["Tab", "F5", "l", "L", "d", "D", "c", "C", "t", "T", "?"]);
+const SWALLOWED = new Set(["Tab", "F5", "l", "L", "d", "D", "c", "C", "?"]);
 
 const HANDLED: KeyResult = { handled: true };
 const IGNORED: KeyResult = { handled: false };
@@ -111,6 +111,9 @@ export class KeyInterpreter {
         mode: mode === "frozen" ? LIVE : { kind: "frozen", page: state.committedPage },
       });
     }
+
+    // T pauses and resumes the talk clock.
+    if (key === "t" || key === "T") return input.repeat ? HANDLED : run({ name: "timerToggle" });
 
     return SWALLOWED.has(key) ? HANDLED : IGNORED;
   }

@@ -8,6 +8,8 @@ import { release } from "../shared/render-cache";
 import type { RenderCache } from "../shared/render-cache";
 
 const CURSOR_IDLE_MS = 2000;
+const POINTER_IDLE_MS = 2000;
+const POINTER_TRAIL_MS = 300;
 
 interface Shown {
   /** Page on screen, or null for black/white. */
@@ -33,6 +35,11 @@ export class AudienceView {
   /** `performance.now()`-based time of the input that caused the pending change, if any. */
   private pendingInputTime: number | null = null;
   private cursorTimer: number | undefined;
+  private pointerLayer: HTMLCanvasElement | null = null;
+  private pointerFrame = 0;
+  private pointerUntil = 0;
+  private trail: { x: number; y: number; t: number }[] = [];
+  private lastPointer: { x: number; y: number } | null = null;
 
   constructor(
     private readonly root: HTMLElement,
@@ -62,6 +69,78 @@ export class AudienceView {
     this.paint();
   }
 
+  /**
+   * The presenter's pointer, in normalised slide coordinates (SPEC §8.2, Native §6.4): a red dot
+   * about 1.2% of the slide height with a soft glow and a short fading trail. It hides by itself
+   * after two seconds without movement.
+   */
+  setPointer(x: number, y: number, visible: boolean): void {
+    const now = performance.now();
+    if (!visible) {
+      this.pointerUntil = 0;
+    } else {
+      this.trail.push({ x, y, t: now });
+      this.pointerUntil = now + POINTER_IDLE_MS;
+    }
+    if (this.pointerFrame === 0) this.pointerFrame = requestAnimationFrame(this.drawPointer);
+  }
+
+  /** True while the pointer is being drawn (development and tests only). */
+  get pointerVisible(): boolean {
+    return this.pointerFrame !== 0;
+  }
+
+  private readonly drawPointer = (): void => {
+    this.pointerFrame = 0;
+    const shown = this.shown;
+    const now = performance.now();
+    this.trail = this.trail.filter((p) => now - p.t <= POINTER_TRAIL_MS).slice(-64);
+    const last = this.trail.at(-1) ?? this.lastPointer;
+    const live = now < this.pointerUntil && shown !== null && shown.page !== null && shown.width > 0;
+
+    let layer = this.pointerLayer;
+    if (!layer) {
+      if (!live) return;
+      layer = document.createElement("canvas");
+      layer.className = "pointer-layer";
+      this.root.append(layer);
+      this.pointerLayer = layer;
+    }
+    if (layer.width !== this.surfaceWidth || layer.height !== this.surfaceHeight) {
+      layer.width = this.surfaceWidth;
+      layer.height = this.surfaceHeight;
+    }
+    const ctx = layer.getContext("2d");
+    if (!ctx) return;
+    ctx.clearRect(0, 0, layer.width, layer.height);
+    if (!live || !shown || !last) {
+      this.trail = [];
+      this.lastPointer = null;
+      return; // cleared; stop animating until the pointer moves again
+    }
+    this.lastPointer = last;
+    const radius = Math.max(3, shown.height * 0.006);
+    const at = (p: { x: number; y: number }): [number, number] => [shown.x + p.x * shown.width, shown.y + p.y * shown.height];
+    for (const p of this.trail) {
+      const age = (now - p.t) / POINTER_TRAIL_MS;
+      const [px, py] = at(p);
+      ctx.beginPath();
+      ctx.arc(px, py, radius * (1 - age * 0.5), 0, Math.PI * 2);
+      ctx.fillStyle = `rgba(230, 25, 25, ${(0.35 * (1 - age)).toFixed(3)})`;
+      ctx.fill();
+    }
+    const [cx, cy] = at(last);
+    ctx.save();
+    ctx.shadowColor = "rgba(230, 25, 25, 0.9)";
+    ctx.shadowBlur = radius * 2.5;
+    ctx.beginPath();
+    ctx.arc(cx, cy, radius, 0, Math.PI * 2);
+    ctx.fillStyle = "rgb(230, 25, 25)";
+    ctx.fill();
+    ctx.restore();
+    this.pointerFrame = requestAnimationFrame(this.drawPointer);
+  };
+
   /** What is on screen right now (development and tests only). */
   get shownPage(): number | null | undefined {
     return this.shown ? this.shown.page : undefined;
@@ -73,6 +152,10 @@ export class AudienceView {
     this.root.removeEventListener("mousemove", this.onMouseMove);
     this.root.removeEventListener("click", this.onClick);
     window.clearTimeout(this.cursorTimer);
+    cancelAnimationFrame(this.pointerFrame);
+    this.pointerFrame = 0;
+    if (this.pointerLayer) release(this.pointerLayer);
+    this.pointerLayer = null;
     this.cache.onReady = null;
     this.onLink = null;
     this.state = null;

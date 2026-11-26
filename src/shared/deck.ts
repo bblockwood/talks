@@ -6,6 +6,7 @@ import workerUrl from "pdfjs-dist/build/pdf.worker.min.mjs?url";
 import { FrameIndex } from "../core/frames";
 import { linkFromRaw } from "../core/links";
 import type { PageLink } from "../core/links";
+import { loadEmbeddedNotes } from "./deck-notes";
 
 GlobalWorkerOptions.workerSrc = workerUrl;
 
@@ -25,6 +26,10 @@ export interface Deck {
   /** Links of a page once loaded, in annotation order; undefined until then. */
   linksNow(page: number): readonly PageLink[] | undefined;
   loadLinks(page: number): Promise<readonly PageLink[]>;
+  /** Width divided by height of the first page, for laying out slide boxes before anything is rendered. */
+  readonly aspect: number;
+  /** Notes embedded in the PDF as text annotations, per page. Scans every page once. */
+  loadEmbeddedNotes(): Promise<Map<number, string>>;
   /** Drops the document and its worker. The deck is unusable afterwards. */
   destroy(): Promise<void>;
 }
@@ -72,6 +77,15 @@ export async function openDeck(data: ArrayBuffer): Promise<Deck> {
   } catch {
     // No metadata.
   }
+
+  let aspect = 16 / 9;
+  try {
+    const first = (await pdf.getPage(1)).getViewport({ scale: 1 });
+    if (first.width > 0 && first.height > 0) aspect = first.width / first.height;
+  } catch {
+    // Keep the default.
+  }
+  let embeddedNotes: Promise<Map<number, string>> | null = null;
 
   const links = new Map<number, readonly PageLink[]>();
   const loading = new Map<number, Promise<readonly PageLink[]>>();
@@ -138,6 +152,8 @@ export async function openDeck(data: ArrayBuffer): Promise<Deck> {
     pageCount: pdf.numPages,
     frames,
     title,
+    aspect,
+    loadEmbeddedNotes: () => (embeddedNotes ??= loadEmbeddedNotes(pdf)),
     getPage: (page) => pdf.getPage(page + 1),
     linksNow: (page) => links.get(page),
     loadLinks(page) {
