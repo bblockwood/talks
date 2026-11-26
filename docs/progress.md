@@ -603,3 +603,14 @@ About 20 minutes. A published talk, your laptop, your phone, an iPad if handy, a
 20. With a Pencil: it should draw without tapping Draw first, while a finger still swipes.
 
 Results in `docs/spikes/W6.md`, please. Parts A and D repeat things that worked before the rewrite; anything that used to work and now doesn't is the most important thing to report.
+
+### Live check (2026-11-26)
+
+Against `https://benlockwood.com/talks/` and the deployed relay, with a throwaway deck (published, then revoked), in headless Chromium: a room page, a laptop-sized presenter view at `/talks/present`, and a phone-sized one that arrived through the old `/talks/remote` address.
+
+- Both presenter views connected and stayed in step while each drove the room page in turn.
+- A stroke drawn on the laptop view appeared on the room page's ink layer.
+- The laptop's timings panel showed the room page's draw timings (median 0.2 ms) and both devices.
+- Phone: ping 81 ms, tap → slide 28 ms (median of 8), from a home connection.
+- Esc twice on the laptop ended the talk on the room page. The laptop then rehearsed by itself.
+- `/talks/presenter/` (the old second-window page) now returns 404, as intended. No page errors.
