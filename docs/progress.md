@@ -38,10 +38,11 @@ W0 relay messages are unencrypted JSON in binary frames. No deck, code or secret
 - `tools/w0-cachetest.mjs` for the §4.5 check.
 - Tests: 14 unit tests (relay rules), 3 e2e tests (deck renders with no CSP violation and no off-site request; phone pairs through the local relay, measures round trips, drives slides, receives the report; relay refuses bad origins and room ids). The production build was also checked under its CSP in headless Chromium: full screen, keyboard lock and double-Esc exit all work there.
 
-### Not done yet (waiting on Ben)
+### Deployed (2026-11-26)
 
-- Relay deploy and Pages deploy: waiting for Ben to confirm Cloudflare and Pages are set up.
-- §4.5 cache test: needs the deployed site. Fable runs it right after the first deploy.
+- Relay: `https://lectern-relay.bblockwood.workers.dev` (`/health` returns `ok`; other origins get 403).
+- Site: `https://benlockwood.com/talks/w0/` and `https://benlockwood.com/talks/w0/phone`. Checked live with a headless browser: deck renders, phone pairs through the relay, report arrives.
+- §4.5 cache test passed: a republished `current.json` was live 31–36 s after the push. Details in `docs/decisions.md` and `docs/spikes/W0.md`.
 
 ### Known issues and notes
 
