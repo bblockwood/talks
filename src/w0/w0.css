@@ -1,0 +1,150 @@
+:root {
+  color-scheme: light dark;
+  font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+  line-height: 1.45;
+}
+body {
+  margin: 0;
+}
+.page {
+  max-width: 54rem;
+  margin: 0 auto;
+  padding: 1rem 1.25rem 4rem;
+}
+h1 {
+  font-size: 1.5rem;
+}
+h2 {
+  font-size: 1.15rem;
+  margin: 2rem 0 0.5rem;
+  border-top: 1px solid color-mix(in srgb, currentColor 25%, transparent);
+  padding-top: 1rem;
+}
+.muted {
+  opacity: 0.7;
+}
+button {
+  font: inherit;
+  padding: 0.5rem 1rem;
+  border-radius: 0.4rem;
+  border: 1px solid color-mix(in srgb, currentColor 40%, transparent);
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+}
+button.primary {
+  background: #1d4ed8;
+  border-color: #1d4ed8;
+  color: white;
+}
+button:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+.results {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 0.3rem 1rem;
+}
+.results dt {
+  font-weight: 600;
+}
+.results dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+.ok {
+  color: #15803d;
+}
+.bad {
+  color: #b91c1c;
+}
+@media (prefers-color-scheme: dark) {
+  .ok {
+    color: #4ade80;
+  }
+  .bad {
+    color: #f87171;
+  }
+}
+.stage {
+  position: relative;
+  aspect-ratio: 16 / 9;
+  width: 100%;
+  background: black;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  outline: none;
+}
+.stage:fullscreen {
+  width: 100vw;
+  height: 100vh;
+  aspect-ratio: auto;
+}
+.stage canvas {
+  display: block;
+}
+.hud {
+  position: absolute;
+  left: 0.75rem;
+  top: 0.75rem;
+  max-width: 45%;
+  padding: 0.5rem 0.75rem;
+  background: rgb(0 0 0 / 0.72);
+  color: #e5e7eb;
+  font: 0.8rem/1.4 ui-monospace, Menlo, Consolas, monospace;
+  white-space: pre-wrap;
+  border-radius: 0.3rem;
+  pointer-events: none;
+}
+.log {
+  font: 0.8rem/1.4 ui-monospace, Menlo, Consolas, monospace;
+  background: color-mix(in srgb, currentColor 8%, transparent);
+  padding: 0.6rem 0.75rem;
+  border-radius: 0.3rem;
+  max-height: 14rem;
+  overflow: auto;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  min-height: 1.4em;
+}
+.log.tall {
+  max-height: 28rem;
+}
+.pairing {
+  font: 700 1.6rem ui-monospace, Menlo, Consolas, monospace;
+  letter-spacing: 0.15em;
+  margin-left: 0.4rem;
+}
+.screen-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: center;
+  margin: 0.4rem 0;
+}
+
+/* Phone page */
+.phone label {
+  display: block;
+  margin-bottom: 0.4rem;
+}
+.phone input {
+  font: 700 2rem ui-monospace, Menlo, Consolas, monospace;
+  letter-spacing: 0.15em;
+  width: 9ch;
+  padding: 0.3rem 0.5rem;
+  margin-right: 0.5rem;
+}
+.navbuttons {
+  display: grid;
+  grid-template-columns: 1fr 2fr;
+  gap: 0.75rem;
+  margin: 1.25rem 0;
+}
+.navbuttons button {
+  padding: 2.2rem 0;
+  font-size: 1.4rem;
+  touch-action: manipulation;
+}

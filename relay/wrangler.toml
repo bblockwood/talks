@@ -1,0 +1,34 @@
+name = "lectern-relay"
+main = "src/index.ts"
+compatibility_date = "2026-11-01"
+workers_dev = true
+
+# Log counts and errors only (SPEC §8.3). The Worker never logs payloads.
+[observability]
+enabled = true
+
+[vars]
+# Comma-separated list of origins allowed to open a WebSocket.
+ALLOWED_ORIGINS = "https://benlockwood.com"
+
+[[durable_objects.bindings]]
+name = "ROOMS"
+class_name = "Room"
+
+# SQLite-backed class: required for Durable Objects on the Workers Free plan.
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["Room"]
+
+# Local development only (`npm run dev`). Never deployed.
+[env.dev]
+[env.dev.vars]
+ALLOWED_ORIGINS = "http://localhost:5173,http://localhost:4173"
+
+[[env.dev.durable_objects.bindings]]
+name = "ROOMS"
+class_name = "Room"
+
+[[env.dev.migrations]]
+tag = "v1"
+new_sqlite_classes = ["Room"]
