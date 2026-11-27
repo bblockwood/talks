@@ -7,6 +7,7 @@ import { SWAP_MESSAGE, openLocalChannel, randomChannelName } from "../shared/loc
 import type { LocalFrame, PresenterDeck } from "../shared/local-channel";
 import type { Talk } from "../shared/talk";
 import type { Presentation } from "./presentation";
+import { shortcut } from "../shared/device";
 
 export class LocalHub {
 
@@ -123,7 +124,7 @@ export class LocalHub {
     try {
       await this.presentation.moveToScreen(placement.presenter);
     } catch {
-      this.post({ k: "notice", text: "Could not swap: click the slides once, then press Ctrl+D (Cmd+D on a Mac) there." });
+      this.post({ k: "notice", text: `Could not swap: click the slides once, then press ${shortcut("D")} there.` });
       return;
     }
     this.placement = { audience: placement.presenter, presenter: placement.audience };

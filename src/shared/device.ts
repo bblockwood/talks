@@ -8,6 +8,12 @@
 export const APPLE_TOUCH =
   typeof navigator !== "undefined" && (/iPad|iPhone|iPod/.test(navigator.platform) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1));
 
+/** A Mac, iPad or iPhone: the keyboard has ⌘ where Windows and Linux use Ctrl. */
+export const IS_MAC = typeof navigator !== "undefined" && /Mac|iPad|iPhone|iPod/.test(navigator.platform);
+
+/** How a shortcut with the platform's command key is written: "⌘D" on a Mac, "Ctrl+D" elsewhere. */
+export const shortcut = (key: string, mac: boolean = IS_MAC): string => (mac ? `⌘${key}` : `Ctrl+${key}`);
+
 /**
  * While a view of the talk is up, the page behind it is black and can't scroll, so no strip of
  * another colour shows at an edge of the screen and nothing slides under a finger.

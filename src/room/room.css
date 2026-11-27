@@ -303,3 +303,36 @@ kbd {
     display: none;
   }
 }
+
+/* Both views: the dialog that asks which screen the audience sees. One big button per screen. */
+.screen-pick {
+  max-width: 28rem;
+}
+.modal-title {
+  font-size: 1.1rem;
+  font-weight: 600;
+}
+.screen-pick .screens {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  margin-bottom: 0.9rem;
+}
+.screen-pick .screens button {
+  padding: 0.7rem 1rem;
+  font-size: 1.05rem;
+  text-align: left;
+}
+.screen-pick .screens button:focus {
+  outline: 2px solid white;
+  outline-offset: 2px;
+}
+.screen-pick .screens small {
+  display: block;
+  font-size: 0.85rem;
+  opacity: 0.85;
+}
+.screen-pick .hint {
+  font-size: 0.85rem;
+  color: var(--muted);
+}

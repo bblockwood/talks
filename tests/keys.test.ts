@@ -33,6 +33,10 @@ describe("navigation keys", () => {
     expect(press("Backspace").command).toEqual({ name: "back" });
     expect(press("[", { meta: true }).command).toEqual({ name: "back" });
     expect(press("]", { meta: true }).command).toEqual({ name: "forward" });
+    // Windows and Linux: Ctrl in place of Cmd.
+    expect(press("[", { ctrl: true }).command).toEqual({ name: "back" });
+    expect(press("]", { ctrl: true }).command).toEqual({ name: "forward" });
+    expect(press("[", { ctrl: true, meta: true })).toEqual({ handled: false });
   });
   it("held step keys repeat, held back does not", () => {
     expect(press("PageDown", { repeat: true }).command).toEqual({ name: "next" });

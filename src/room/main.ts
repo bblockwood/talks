@@ -12,7 +12,7 @@ import { LocalClient, TalkClient } from "../console/client";
 import { PresenterConsole, layoutFor } from "../console/console";
 import { forget, loadNotesSize, loadSaved, loadSplits, remember, saveNotesSize, saveSplits } from "../console/saved";
 import { DeckError, openDeck } from "../shared/deck";
-import { APPLE_TOUCH } from "../shared/device";
+import { IS_MAC, shortcut, APPLE_TOUCH } from "../shared/device";
 import { makeJoinCode, receiveDeck } from "../shared/deck-share";
 import { NetworkError, NoTalkError, fetchDeck } from "../shared/fetch-deck";
 import { SWAP_MESSAGE, channelNameFromHash } from "../shared/local-channel";
@@ -89,7 +89,6 @@ function showBoth(): void {
   const possible = twoScreensPossible();
   const byHand = (!managed || placeByHand) && canPlaceByHand();
   $<HTMLButtonElement>("both").disabled = !possible && !byHand;
-  $("both-panel").hidden = !possible || !screens || byHand;
   // Under the buttons: what Both views does here. Where it can't be used, the button says why.
   $("both-small").textContent = possible || byHand ? "on two screens" : "(requires two screens)";
   const note = $("both-note");
@@ -99,25 +98,42 @@ function showBoth(): void {
     : "Both views puts the slides full screen on one screen and the presenter view on the other. The browser asks once for permission to place windows.";
 }
 
-function listScreens(): void {
+/** A screen as the dialog describes it: its name and size. */
+const screenInfo = (s: ScreenDetailed, i: number): string => `${s.label || `Screen ${i + 1}`}, ${s.width}×${s.height}`;
+
+/**
+ * The dialog Both views opens: one button per screen the slides could go on. This screen first,
+ * then the others; the likely choice (an external screen that is not this one) has the focus.
+ * Each button starts the talk from its own click, which full screen and the new window need.
+ */
+function pickScreen(): void {
+  const found = screens;
+  if (!found) return;
   const box = $("screens");
   box.replaceChildren();
-  if (!screens) return;
-  // Slides go to the external screen by default; the presenter view stays where this window is.
-  const preferred =
-    screens.screens.find((s) => s !== screens?.currentScreen && !s.isInternal) ??
-    screens.screens.find((s) => s !== screens?.currentScreen) ??
-    screens.screens[0];
-  screens.screens.forEach((s, i) => {
-    const label = document.createElement("label");
-    const radio = document.createElement("input");
-    radio.type = "radio";
-    radio.name = "audience-screen";
-    radio.value = String(i);
-    radio.checked = s === preferred;
-    label.append(radio, ` Slides on “${s.label || `Screen ${i + 1}`}” (${s.width}×${s.height}${s === screens?.currentScreen ? ", this screen" : ""})`);
-    box.append(label);
-  });
+  const here = found.currentScreen;
+  const others = found.screens.filter((s) => s !== here);
+  const preferred = others.find((s) => !s.isInternal) ?? others[0];
+  let focus: HTMLButtonElement | null = null;
+  for (const s of [here, ...others]) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "primary";
+    const strong = document.createElement("strong");
+    strong.textContent = s === here ? "this screen" : others.length > 1 ? "another screen" : "other screen";
+    const info = document.createElement("small");
+    info.textContent = screenInfo(s, found.screens.indexOf(s));
+    button.append("Slides on ", strong, info);
+    button.addEventListener("click", () => {
+      screenPick.hidden = true;
+      start(canFullscreen(), true, s);
+    });
+    box.append(button);
+    if (s === preferred) focus = button;
+  }
+  $("screens-note").textContent = `The presenter view goes on the other screen. Displays can be swapped from the presenter view (Swap displays) or with ${shortcut("D")}.`;
+  screenPick.hidden = false;
+  focus?.focus();
 }
 
 async function detectScreens(): Promise<boolean> {
@@ -137,20 +153,7 @@ async function detectScreens(): Promise<boolean> {
     screens = null;
     return false;
   }
-  $("screens-status").textContent = "The presenter view goes on the screen the slides are not on. Swap displays, in the presenter view, exchanges them.";
-  listScreens();
-  showBoth();
   return true;
-}
-
-function chosenScreens(): { audience: ScreenDetailed; presenter: ScreenDetailed | null } | null {
-  if (!screens) return null;
-  const picked = document.querySelector<HTMLInputElement>('input[name="audience-screen"]:checked');
-  const audienceScreen = screens.screens[Number(picked?.value ?? 0)];
-  if (!audienceScreen) return null;
-  const presenter =
-    (audienceScreen !== screens.currentScreen ? screens.currentScreen : screens.screens.find((s) => s !== audienceScreen)) ?? null;
-  return { audience: audienceScreen, presenter };
 }
 
 // ---------------------------------------------------------------- the choice of views
@@ -500,21 +503,31 @@ function showPresenter(): void {
 // ---------------------------------------------------------------- the slides
 
 // Called straight from the click handlers: full screen and new windows need the user gesture.
-function start(fullscreen: boolean, both = false): void {
+function start(fullscreen: boolean, both = false, audienceScreen: ScreenDetailed | null = null): void {
   const current = talk;
   const pages = cache;
   if (!current || !pages || starting || active || presentation) return;
   const byHand = both && (typeof window.getScreenDetails !== "function" || placeByHand) && canPlaceByHand();
   const twoScreens = fullscreen && both && !byHand && twoScreensPossible();
-  if (twoScreens && !screens) {
-    // The permission prompt uses up the click, so choosing screens and starting are two clicks.
-    setStatus("Your browser asks to manage windows: click Allow.");
+  if (twoScreens && !audienceScreen) {
+    // The screens are asked for each time (they change when a projector is plugged in), then the
+    // dialog's buttons choose one and start. The first time, the browser asks for permission.
+    setStatus(screens ? "" : "If your browser asks to manage windows, click Allow.");
     void detectScreens().then((ok) => {
-      if (ok) setStatus("Screens found. Check the choice above, then click Both views again.");
+      if (!ok) return;
+      setStatus("");
+      if (!ready.hidden) pickScreen();
     });
     return;
   }
-  const placement = twoScreens ? chosenScreens() : null;
+  const found = screens;
+  const placement =
+    twoScreens && audienceScreen && found
+      ? {
+          audience: audienceScreen,
+          presenter: (audienceScreen !== found.currentScreen ? found.currentScreen : found.screens.find((x) => x !== audienceScreen)) ?? null,
+        }
+      : null;
   const forWindow = (): PresenterDeck => ({ pdf: current.source.pdf.slice(0), title: current.source.title, split: current.deck.split, ...current.source.notes });
 
   // By hand: the presenter view opens in a second window at once (a new window must come straight
@@ -646,7 +659,7 @@ $<HTMLFormElement>("code-form").addEventListener("submit", (ev) => {
 fileInput.addEventListener("change", () => {
   const file = fileInput.files?.[0];
   fileInput.value = "";
-  if (file) openPdf(() => file.arrayBuffer(), file.name.replace(/\.pdf$/i, ""));
+  if (file) openPdf(() => file.arrayBuffer(), file.name);
 });
 // On an iPad or iPhone the slides fill the page rather than Safari's full screen (see device.ts).
 const canFullscreen = (): boolean => document.fullscreenEnabled && !APPLE_TOUCH;
@@ -656,6 +669,19 @@ $("start-windowed").addEventListener("click", () => start(false));
 $("both").addEventListener("click", () => start(canFullscreen(), true));
 $("split-toggle").addEventListener("click", () => applySplit(talk?.deck.split ? null : suggestedSplit));
 $("another").addEventListener("click", leave);
+
+// The browser's own full-screen key, for when the page is refused: F11 on Windows and Linux.
+if (IS_MAC) $("fs-key").textContent = "⌃⌘F";
+
+// The screen dialog: Cancel, a click outside it, or Esc puts it away.
+const screenPick = $("screen-pick");
+$("screen-cancel").addEventListener("click", () => (screenPick.hidden = true));
+screenPick.addEventListener("click", (ev) => {
+  if (ev.target === ev.currentTarget) screenPick.hidden = true;
+});
+window.addEventListener("keydown", (ev) => {
+  if (!screenPick.hidden && ev.key === "Escape") screenPick.hidden = true;
+});
 
 // End talk on every device: asked first, in a pop-up that Enter never confirms.
 const endConfirm = $("end-confirm");
@@ -713,7 +739,7 @@ window.addEventListener("drop", (ev) => {
     setStatus("That is not a PDF. Export the slides as a PDF and drop that.", true);
     return;
   }
-  openPdf(() => file.arrayBuffer(), file.name.replace(/\.pdf$/i, ""));
+  openPdf(() => file.arrayBuffer(), file.name);
 });
 // The box is also a button: a click opens the file picker.
 dropBox.addEventListener("click", () => fileInput.click());

@@ -367,7 +367,9 @@ test("a laptop joined by code gets the full presenter view and drives the room P
   await expect(laptop.locator("#digits")).toContainText("Go to frame 6");
   await laptop.keyboard.press("Enter");
   await expect.poll(() => roomPage(room)).toBe(8);
-  await expect(laptop.locator("#t-back")).toHaveText(/^Back to Frame 3/);
+  await expect(laptop.locator("#t-back")).toHaveText("←3.3"); // an arrow, then frame.build
+  await expect(laptop.locator("#t-back")).toHaveAttribute("aria-label", "Back to Frame 3");
+  if (process.env["LECTERN_SHOTS"]) await laptop.screenshot({ path: `${process.env["LECTERN_SHOTS"]}/back.png` });
   await expect(laptop.locator("#t-back")).toHaveAttribute("title", /Back to Frame 3/);
   await laptop.locator("#t-back").click();
   await expect.poll(() => roomPage(room)).toBe(4);
@@ -824,6 +826,16 @@ test("the layout follows the window: phone, tablet upright, tablet on its side, 
       await view.waitForTimeout(300);
       await view.screenshot({ path: `${shots}/view-${layout}-${width}.png` });
     }
+    // The clock's pop-up fits on every screen: where it is taller than the screen, it scrolls.
+    await view.locator("#timer").click();
+    const pop = (await view.locator("#clock-pop .pop-panel").boundingBox())!;
+    expect(pop.y).toBeGreaterThanOrEqual(0);
+    expect(pop.x).toBeGreaterThanOrEqual(0);
+    expect(pop.y + pop.height).toBeLessThanOrEqual(height);
+    expect(pop.x + pop.width).toBeLessThanOrEqual(width);
+    if (shots) await view.screenshot({ path: `${shots}/clock-${layout}-${width}.png` });
+    await view.keyboard.press("Escape");
+    await expect(view.locator("#clock-pop")).toBeHidden();
   }
   await view.context().close();
   await room.close();

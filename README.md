@@ -33,7 +33,7 @@ npm run revoke -- talk.pdf       # take a deck down
 - **Open a PDF from this device**, or drop one on the page. The talk is given a one-word code, shown under its first slide; a device that enters that code is sent the slides, encrypted, through the relay. A published talk opens by typing its code.
 - Then choose **Audience view**, **Presenter view**, or **Both views** (two screens). The line under the buttons says what Both views does on this device, or why it can't. The talk code sits under the preview: in full where it was made, as dots with **Display code** where it was typed in or where the slides have been showing.
 - **Keys:** → Space Page Down next; ← Page Up previous; Shift+→/← next/previous frame; a number then Enter jumps to that frame; Delete goes back after a jump; B or `.` black; W white (to draw on); T pause the clock; C clear ink; Esc twice takes the slides off the screen and returns to the choice of views, one click from showing them again.
-- **Both views** (Chrome or Edge, displays set to extend): click it, allow window management, check the screens, click it again. Slides go full screen on the projector and the presenter view opens in a second window on the other screen, with **Swap displays** (Ctrl+D or Cmd+D) at its bottom right.
+- **Both views** (Chrome or Edge, displays set to extend): click it, allow window management the first time, and choose in the dialog which screen the audience sees. Slides go full screen there and the presenter view opens in a second window on the other screen, with **Swap displays** (Ctrl+D, or ⌘D on a Mac) at its bottom right, beside **Exit**.
 - In Safari or Firefox, which can't place windows on screens, **Both views** opens the two windows and you drag the slides to the projector and click **Full screen** there. No Swap displays in that case.
 - If the slides drop out of full screen they stay in the window and keys still drive them; move the mouse for a **Full screen** button.
 - The code is hidden as you type it, in case the screen is already on the projector: anyone who reads it could drive the talk.
@@ -51,7 +51,7 @@ One view for you, on whatever you have: your laptop or tablet on the lectern, yo
 - **Outline**, beside Notes, lists the PDF's sections with the one you are in lit; click one to jump. The **i** beside each says where notes and outlines come from.
 - **Pointer:** press and hold on the slide, then drag. With a mouse, **Laser** (L) points wherever the mouse goes.
 - **Draw** (D) writes on the slide in three colours, or on a whiteboard (**Board**). A pen always draws, without turning Draw on. Everyone's ink shows on every presenter view.
-- **Back** appears under the slide after a jump and says where it goes ("Back to Frame 12").
+- **Back** appears under the slide after a jump and says where it goes: "← 8.2" is frame 8, build 2. Backspace, or Ctrl+[ (⌘[ on a Mac); Ctrl+] or ⌘] goes forward again.
 - **Click the clock** to pause or reset it, and to choose between time elapsed and time left. For time left, type the talk's length and press Set (or Enter), or tap one of the preset lengths; nothing changes while you type.
 - **?** shows the keyboard shortcuts.
 - **Black** and **White** sit under the slide; your own slide goes black or white too, so you see what the audience sees. Draw on the white screen as on a whiteboard.

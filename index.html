@@ -107,12 +107,8 @@
           <button id="both" class="primary">Both views<small id="both-small">on two screens</small></button>
         </div>
         <p id="both-note" class="hint both-note"></p>
-        <div id="both-panel" class="modes" hidden>
-          <p id="screens-status"></p>
-          <div id="screens" class="screens"></div>
-        </div>
         <p id="fs-problem" class="problem" hidden>
-          This browser refused full screen. Press <kbd>F11</kbd> to make the browser full screen yourself, then:
+          This browser refused full screen. Press <kbd id="fs-key">F11</kbd> to make the browser full screen yourself, then:
           <button id="start-windowed">Audience view in this window</button>
         </p>
 
@@ -150,9 +146,9 @@
         <div class="bar-right">
           <button id="link" class="linkstate" aria-live="polite" title="Devices in this talk, how others join, leaving and ending">Connecting…</button>
           <button id="fs" class="fs" hidden>Full screen</button>
-          <button id="exit" class="exit" title="Back to the page where a view is chosen, still in the talk (Esc twice)" hidden>Exit</button>
-          <!-- Last, so it is always at the bottom right corner of a laptop's presenter view. -->
-          <button id="swap" class="swap" title="Slides to the other screen, this view to that one (Ctrl+D, or Cmd+D on a Mac)" hidden>Swap displays</button>
+          <button id="swap" class="swap" hidden>Swap displays</button>
+          <!-- Last, so it is always at the bottom right corner. -->
+          <button id="exit" class="exit dangerous" title="Back to the page where a view is chosen, still in the talk (Esc twice)" hidden>Exit</button>
         </div>
       </header>
 
@@ -187,8 +183,8 @@
                 <button id="t-white" class="tool" title="White screen to draw on (W)">White <kbd>W</kbd></button>
                 <span id="mode-hint" class="mode-hint"></span>
                 <span class="spacer"></span>
-                <button id="t-back" class="tool" hidden>Back<span class="dest" id="back-dest"></span> <kbd>⌫</kbd></button>
-                <button id="t-forward" class="tool" hidden>Forward<span class="dest" id="forward-dest"></span></button>
+                <button id="t-back" class="tool" hidden><span class="arrow" aria-hidden="true">←</span><span class="dest" id="back-dest"></span></button>
+                <button id="t-forward" class="tool" hidden><span class="dest" id="forward-dest"></span><span class="arrow" aria-hidden="true">→</span></button>
               </nav>
             </div>
           </div>
@@ -357,6 +353,17 @@
         <p class="modal-actions">
           <button id="end-cancel">Cancel</button>
           <button id="end-yes" class="dangerous solid">End talk</button>
+        </p>
+      </div>
+    </div>
+    <!-- Both views, where the browser can place windows: which screen the audience sees. -->
+    <div id="screen-pick" class="modal" role="dialog" aria-modal="true" aria-labelledby="screen-pick-title" hidden>
+      <div class="modal-panel screen-pick">
+        <p id="screen-pick-title" class="modal-title">Which screen does the audience see?</p>
+        <div id="screens" class="screens"></div>
+        <p id="screens-note" class="hint"></p>
+        <p class="modal-actions">
+          <button id="screen-cancel">Cancel</button>
         </p>
       </div>
     </div>

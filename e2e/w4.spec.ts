@@ -63,12 +63,23 @@ async function startTwoScreens(context: BrowserContext, open: (page: Page) => Pr
   await expect(main.locator("#ready")).toBeVisible();
   await expect(main.locator("#both")).toBeEnabled();
 
-  // First click asks for the screens (the permission prompt uses up the click); second click starts.
+  // Both views asks for the screens, then a dialog offers one button per screen; the button starts.
   await main.locator("#both").click();
-  await expect(main.locator("#status")).toHaveText("Screens found. Check the choice above, then click Both views again.");
-  await expect(main.locator("#screens label")).toHaveCount(2);
-  await expect(main.locator('#screens input[value="1"]')).toBeChecked(); // the projector is the default for slides
-  const [presenter] = await Promise.all([context.waitForEvent("page"), main.locator("#both").click()]);
+  await expect(main.locator("#screen-pick")).toBeVisible();
+  const choices = main.locator("#screens button");
+  await expect(choices).toHaveCount(2);
+  await expect(choices.nth(0)).toHaveText(/^Slides on this screenBuilt-in Display, 1280×720$/);
+  await expect(choices.nth(1)).toHaveText(/^Slides on other screenProjector, /);
+  await expect(choices.nth(1)).toBeFocused(); // the projector is the likely choice
+  await expect(main.locator("#screens-note")).toContainText("Displays can be swapped");
+  if (process.env["LECTERN_SHOTS"]) await main.screenshot({ path: `${process.env["LECTERN_SHOTS"]}/screen-pick.png` });
+  // Esc puts the dialog away without starting anything.
+  await main.keyboard.press("Escape");
+  await expect(main.locator("#screen-pick")).toBeHidden();
+  await expect(main.locator("#ready")).toBeVisible();
+  await main.locator("#both").click();
+  const [presenter] = await Promise.all([context.waitForEvent("page"), choices.nth(1).click()]);
+  await expect(main.locator("#screen-pick")).toBeHidden();
   await expect(presenter.locator("#console")).toBeVisible({ timeout: 15_000 });
   return { main, presenter };
 }
@@ -170,10 +181,14 @@ test("two screens: the presenter view in a second window drives the audience win
   await expect(presenter.locator("#row-join")).toBeHidden(); // this window is not a device of its own
   await expect(presenter.locator("#row-code")).toBeHidden();
   await presenter.locator("#more-close").click();
-  // Swap displays is always in view, at the bottom right, not under More.
+  // Exit is at the bottom right corner, Swap displays just left of it; neither is under a menu.
   const swap = (await presenter.locator("#swap").boundingBox())!;
-  expect(swap.x + swap.width).toBeGreaterThan(1280 - 40);
+  const exit = (await presenter.locator("#exit").boundingBox())!;
+  expect(exit.x + exit.width).toBeGreaterThan(1280 - 40);
+  expect(swap.x + swap.width).toBeLessThanOrEqual(exit.x);
+  expect(swap.x).toBeGreaterThan(1280 - 260);
   expect(swap.y).toBeGreaterThan(720 - 80);
+  await expect(presenter.locator("#swap")).toHaveAttribute("title", /\((⌘D|Ctrl\+D)\)$/);
   await presenter.locator("#swap").click();
   await expect.poll(asked).toBe("Built-in Display");
   await expect.poll(() => presenter.evaluate(() => (window as unknown as { __moves: number[][] }).__moves.at(-1))).toEqual([1280, 0]);

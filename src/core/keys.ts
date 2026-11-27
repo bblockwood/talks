@@ -49,9 +49,10 @@ export class KeyInterpreter {
   interpret(input: KeyInput, state: SessionState): KeyResult {
     const { key } = input;
 
-    // Back / forward across jumps: Cmd+[ and Cmd+] (Native §6.5). Every other shortcut with
-    // Ctrl, Alt or Cmd belongs to the browser or the OS.
-    if (input.meta && !input.ctrl && !input.alt && (key === "[" || key === "]")) {
+    // Back / forward across jumps: Cmd+[ and Cmd+] (Native §6.5), Ctrl+[ and Ctrl+] on Windows
+    // and Linux, where no browser uses them. Every other shortcut with Ctrl, Alt or Cmd belongs
+    // to the browser or the OS.
+    if (input.meta !== input.ctrl && !input.alt && (key === "[" || key === "]")) {
       this.digits = "";
       return input.repeat ? HANDLED : run({ name: key === "[" ? "back" : "forward" });
     }

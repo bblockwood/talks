@@ -4,6 +4,7 @@
 // one (see client.ts and core/peer.ts). It shows what the host last reported, never what it
 // merely asked for.
 import { parseDuration } from "../core/duration";
+import { buildCount } from "../core/frames";
 import { DEFAULT_INK_WIDTH, NO_INK, appendToStroke, beginStroke, clearLayer, undoStroke } from "../core/ink";
 import type { InkLayer, InkState } from "../core/ink";
 import { KeyInterpreter } from "../core/keys";
@@ -20,7 +21,7 @@ import { initialState } from "../core/session";
 import type { Command, SessionState } from "../core/session";
 import { parseSplit } from "../core/split";
 import type { Deck } from "../shared/deck";
-import { APPLE_TOUCH, setStage } from "../shared/device";
+import { APPLE_TOUCH, IS_MAC, setStage, shortcut } from "../shared/device";
 import type { PresenterDeck } from "../shared/local-channel";
 import { deviceName } from "../shared/relay-client";
 import type { LinkStatus } from "../shared/relay-client";
@@ -28,7 +29,7 @@ import { SlideSurface } from "../shared/slide-surface";
 import { ThumbGrid } from "../shared/thumbs";
 import type { ThumbMode } from "../shared/thumbs";
 import type { ConsoleClient } from "./client";
-import { KEYS_INFO, NOTES_INFO, outlineInfo } from "./info";
+import { NOTES_INFO, keysInfo, outlineInfo } from "./info";
 
 const PING_MS = 2000;
 /** The host sends state every 2.5 s; past this it is treated as gone (and a successor takes over). */
@@ -520,6 +521,12 @@ export class PresenterConsole {
       const to = frames.frameContaining(p);
       return to && frame && to.index === frame.index ? `build ${frames.buildIndex(p) + 1}` : `Frame ${to?.label ?? ""}`;
     };
+    // On the buttons: "8", or "8.2" for the second build of a frame that has several.
+    const short = (p: number): string => {
+      const to = frames.frameContaining(p);
+      if (!to) return "";
+      return buildCount(to) > 1 ? `${to.label}.${frames.buildIndex(p) + 1}` : to.label;
+    };
     // They appear only when there is somewhere to go, and say where.
     const backButton = $<HTMLButtonElement>("t-back");
     const forwardButton = $<HTMLButtonElement>("t-forward");
@@ -528,12 +535,14 @@ export class PresenterConsole {
     backButton.disabled = !live;
     forwardButton.disabled = !live;
     if (back !== null) {
-      $("back-dest").textContent = ` to ${destination(back)}`;
-      backButton.title = `Back to ${destination(back)}, where the last jump started (Delete)`;
+      $("back-dest").textContent = short(back);
+      backButton.title = `Back to ${destination(back)}, where the last jump started (${IS_MAC ? "Delete" : "Backspace"})`;
+      backButton.setAttribute("aria-label", `Back to ${destination(back)}`);
     }
     if (forward !== null) {
-      $("forward-dest").textContent = ` to ${destination(forward)}`;
-      forwardButton.title = `Forward to ${destination(forward)}, where Back came from`;
+      $("forward-dest").textContent = short(forward);
+      forwardButton.title = `Forward to ${destination(forward)}, where Back came from (${shortcut("]")})`;
+      forwardButton.setAttribute("aria-label", `Forward to ${destination(forward)}`);
     }
     const countdown = view?.timer.targetMs ?? null;
     // Before the first slide change the clock has not started, and starts by itself.
@@ -547,6 +556,7 @@ export class PresenterConsole {
     this.showDevices();
 
     $("swap").hidden = !this.options.onSwap;
+    $("swap").title = `Slides to the other screen, this view to that one (${shortcut("D")})`;
     $("exit").hidden = !this.options.onChangeView;
     $("row-join").hidden = this.client.kind === "local";
     const where = `${window.location.host}${import.meta.env.BASE_URL.replace(/\/$/, "")}`;
@@ -1098,7 +1108,7 @@ export class PresenterConsole {
     // The shortcut card (?), and Ctrl+F or Cmd+F for the overview's search instead of the browser's.
     if (!ev.ctrlKey && !ev.altKey && !ev.metaKey && ev.key === "?") {
       ev.preventDefault();
-      if (!ev.repeat) this.showInfo("Keyboard shortcuts", KEYS_INFO);
+      if (!ev.repeat) this.showInfo("Keyboard shortcuts", keysInfo(IS_MAC));
       return;
     }
     if ((ev.ctrlKey || ev.metaKey) && !ev.altKey && !ev.shiftKey && (ev.key === "f" || ev.key === "F") && this.layout !== "buttons") {

@@ -924,3 +924,30 @@ Known issues: items 3, 4 and 7 can only be judged on the iPad. If the grey bar i
 Verification: build; 295 unit tests; 44 e2e tests.
 
 Known issues: the 230 ms wait on a tap is the price of double tap; say if it feels slow on the iPad and I will swap it for a different gesture. The connection text in the slides' bar is a label, not a button.
+
+### W9.5. Seven more, and Windows (2026-11-27)
+
+1. A PDF opened from this device with no title of its own is shown by its file name, ".pdf" included.
+2. The clock's pop-up starts below a phone's notch or status bar and is never taller than the screen (it scrolls instead).
+3. The blue of the buttons is the app icon's (#0736a8). Thin lines on black (the lit tab, the current thumbnail) use a lighter tint of it, as the icon's blue is too dark for a 2 px line.
+4. **Exit** is red-rimmed, and at the far right; **Swap displays** is to its left.
+5. Back and Forward are an arrow and a place: "← 8.2", "9 →". The full wording is in the tooltip.
+6. **Both views** opens a dialog with one button per screen ("Slides on **this screen**", "Slides on **other screen**", each with the screen's name and size); the button starts the talk. Esc or Cancel puts it away.
+7. **Windows.** Read through every key, label and style:
+   - Back and Forward after a jump had only ⌘[ and ⌘]: Ctrl+[ and Ctrl+] now do the same. Backspace and Delete already went back.
+   - Shortcuts are written for the keyboard in front of you: "Ctrl+D" on Windows, "⌘D" on a Mac (the `?` card, tooltips, the dialog, the swap notice). The full-screen fallback says F11 on Windows, ⌃⌘F on a Mac.
+   - Already fine: Ctrl+D, Ctrl+F and Ctrl+Shift+D are taken from the browser (Chrome and Edge allow it); clicker keys (Page Up/Down, B, `.`); fonts fall back to Segoe UI and Consolas; scroll bars are dark; window placement, keyboard lock and wake lock are Chrome/Edge features and are checked at run time.
+
+Verification: build; 295 unit tests; 44 e2e tests (the layout test now opens the clock's pop-up at every size and checks it is on screen).
+
+Known issues:
+- Nothing here was run on a Windows machine; the assessment is from the code and the browsers' documented behaviour.
+- A small Windows laptop at high display scaling (for example 1366×768 at 150 %) gives the page under 540 px of height, which selects the two-big-buttons layout meant for a phone on its side. Full screen (F11, or the Full screen button) usually clears it. Say if you meet this and I will make that layout touch-only.
+- The notch fix (item 2) can't be reproduced in the test browser.
+- The publish, codes and revoke tools are not assessed for Windows; they are run from your Mac.
+
+### Ben checklist: W9.5
+
+1. iPhone, presenter view, tap the clock, upright and sideways, in Safari and from the Home Screen: the whole pop-up is reachable.
+2. Laptop with a projector (extend, Chrome): **Both views**, pick a screen in the dialog; then **Swap displays** and ⌘D.
+3. On a Windows lectern PC (Chrome or Edge): open a PDF, Audience view, clicker; presenter view: `?` shows Ctrl shortcuts; jump to a frame by number, Backspace, then Ctrl+]; Ctrl+F; Ctrl+D with two screens.
