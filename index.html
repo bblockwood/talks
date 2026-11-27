@@ -103,7 +103,7 @@
         <p class="views-head">On this device, show…</p>
         <div class="views">
           <button id="start" class="primary">Audience view<small>the slides, full screen</small></button>
-          <button id="presenter" class="primary">Presenter view<small>notes, next slide, clock, controls</small></button>
+          <button id="presenter" class="primary">Presenter view<small>notes, controls</small></button>
           <button id="both" class="primary">Both views<small>on two screens</small></button>
         </div>
         <p id="both-note" class="hint both-note"></p>
@@ -174,7 +174,9 @@
                     <button class="ink-color" data-color="1" aria-label="Blue"></button>
                     <button class="ink-color" data-color="2" aria-label="Black"></button>
                   </span>
-                  <button id="ink-undo" class="tool">Undo</button>
+                  <button id="ink-undo" class="tool icon" aria-label="Undo the last stroke" title="Undo the last stroke">
+                    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 14 4 9l5-5" /><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11" /></svg>
+                  </button>
                   <button id="ink-clear" class="tool">Clear <kbd>C</kbd></button>
                 </span>
                 <button id="t-black" class="tool" title="Black screen (B)">Black <kbd>B</kbd></button>

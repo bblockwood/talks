@@ -614,6 +614,7 @@ export class PresenterConsole {
     const t = view?.timer;
     if (!t) {
       timer.textContent = "0:00";
+      delete timer.dataset["text"];
       timer.className = "timer paused";
       $("clock-now").textContent = "";
       $("clock-sub").textContent = "";
@@ -626,7 +627,21 @@ export class PresenterConsole {
       const shown = left === null ? formatClock(elapsed) : `${over ? "−" : ""}${formatClock(Math.abs(left))}`;
       // Before the first slide change the clock has not started: it shows where it will run from.
       const waiting = !t.running && t.elapsedMs === 0;
-      timer.textContent = `${shown} ${!t.running && !waiting ? "⏸" : left === null ? "↑" : "↓"}`;
+      // A paused clock shows two plain bars, drawn in CSS: the pause character turns into a
+      // coloured emoji on an iPad.
+      const paused = !t.running && !waiting;
+      const text = paused ? shown : `${shown} ${left === null ? "↑" : "↓"}`;
+      if (timer.dataset["text"] !== text || (timer.dataset["paused"] === "1") !== paused) {
+        timer.dataset["text"] = text;
+        timer.dataset["paused"] = paused ? "1" : "0";
+        timer.textContent = text;
+        if (paused) {
+          const mark = document.createElement("span");
+          mark.className = "pause-mark";
+          mark.setAttribute("aria-label", "paused");
+          timer.append(mark);
+        }
+      }
       timer.className = `timer${!t.running ? " paused" : left === null ? "" : over ? " over" : " good"}`;
       // Beside the clock's controls: the same value in words, and the elapsed time under a countdown.
       $("clock-now").textContent = left === null ? formatClock(elapsed) : `${formatClock(Math.abs(left))} ${over ? "over" : "left"}`;
@@ -1395,7 +1410,8 @@ export class PresenterConsole {
         const index = point && links && this.current.shownPage === page ? hitTest(links, point.x, point.y) : -1;
         // Whoever runs the talk resolves the link from its own copy of the same PDF, so page and index are enough.
         if (index >= 0) this.send({ name: "followLink", page, index });
-        else if (down.type === "mouse") this.send({ name: "next" }); // a click anywhere else advances (Native §6.5)
+        // A click or a tap anywhere else advances (Native §6.5; taps too since Ben, 2026-11-27).
+        else this.send({ name: "next" });
       }
     };
     el.addEventListener("pointerup", (ev) => finish(ev, false), { signal });

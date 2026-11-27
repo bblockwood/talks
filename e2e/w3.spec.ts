@@ -636,21 +636,31 @@ test("on a touch screen the Laser button makes a finger on the slide point, and 
   await pad.locator("#next").click();
   await expect.poll(() => roomPage(room)).toBe(1);
 
-  await pad.locator("#t-laser").click();
-  await expect(pad.locator("#t-laser")).toHaveClass(/on/);
   const box = (await pad.locator("#current").boundingBox())!;
   const touch = await context.newCDPSession(pad);
   const at = (dx: number) => [{ x: Math.round(box.x + box.width / 2 + dx), y: Math.round(box.y + box.height / 2) }];
+  // A tap on the current slide advances, as a click does.
+  await touch.send("Input.dispatchTouchEvent", { type: "touchStart", touchPoints: at(0) });
+  await touch.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
+  await expect.poll(() => roomPage(room)).toBe(2);
+
+  await pad.locator("#t-laser").click();
+  await expect(pad.locator("#t-laser")).toHaveClass(/on/);
   await touch.send("Input.dispatchTouchEvent", { type: "touchStart", touchPoints: at(0) });
   await expect.poll(() => roomHook(room, (h) => h.pointerVisible())).toBe(true); // at once, no press-and-hold
   // A long sideways drag would be a swipe to the next slide; with Laser on it only moves the dot.
   for (const dx of [-40, -90, -140, -190]) await touch.send("Input.dispatchTouchEvent", { type: "touchMove", touchPoints: at(dx) });
   await touch.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
   await expect.poll(() => roomHook(room, (h) => h.pointerVisible()), { timeout: 3000 }).toBe(false);
-  expect(await roomPage(room)).toBe(1);
+  expect(await roomPage(room)).toBe(2);
   // The buttons still step while Laser is on.
   await pad.locator("#next").click();
-  await expect.poll(() => roomPage(room)).toBe(2);
+  await expect.poll(() => roomPage(room)).toBe(3);
+  // A paused clock shows plain bars, not the pause emoji; the empty-notes line follows A+.
+  await pad.locator("#timer").click();
+  await pad.locator("#clock-toggle").click();
+  await expect(pad.locator("#timer .pause-mark")).toBeVisible();
+  await expect(pad.locator("#timer")).not.toContainText("⏸");
   await context.close();
   await room.close();
 });

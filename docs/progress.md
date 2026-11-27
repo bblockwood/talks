@@ -895,3 +895,7 @@ Verification: build; 295 unit tests; 43 e2e tests (new: the touch laser, driven 
 4. Tap **Laser**, touch and drag on the slide, lift. Tap Next while Laser is on.
 5. **Black**, then **White**: your slide follows. Draw on the white screen.
 6. Tap the status line: the sheet has no clock and no whiteboard row. Tap the clock: its controls are there.
+
+### W9.2. Six small things (2026-11-27)
+
+Ben: "Everything worked." Then: more room at the top of the Home Screen version (the iPad's status bar fades over it); no orange rim on the slide in Draw mode; Undo as an icon; a plain pause mark on the clock in place of the emoji; A−/A+ also size "No notes for this slide"; "notes, controls" under Presenter view; a tap on the current slide advances. All done. The top padding is about 18 px beyond the safe area and can only be judged on the iPad.
