@@ -551,6 +551,11 @@ button.wide {
   display: flex;
   margin-left: auto;
 }
+/* The same weight lit or not, so the lit one is no wider. */
+.seg button,
+.seg button.on {
+  font-weight: 500;
+}
 .seg button {
   padding: 0.25rem 0.7rem;
   font-size: 0.85rem;
@@ -567,7 +572,6 @@ button.wide {
   background: var(--accent);
   border-color: var(--accent);
   color: white;
-  font-weight: 500;
 }
 .overview {
   flex: 1;

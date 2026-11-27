@@ -23,7 +23,8 @@ export interface HostHooks {
   send(message: Message): void;
   /** The state changed: draw it. `inputTime` is when the causing input arrived, for timing. */
   applied(state: SessionState, inputTime: number | undefined): void;
-  pointer(x: number, y: number, visible: boolean): void;
+  /** The laser pointer moved. `from` is the sender id of the view that moved it. */
+  pointer(x: number, y: number, visible: boolean, from: string): void;
   /** A presenter view asked to end the talk. */
   end(): void;
   /** Status that only the caller knows: relay connection, draw timings. */
@@ -155,7 +156,7 @@ export class SessionHost {
         break;
       }
       case "pointer":
-        this.hooks.pointer(envelope.body.x, envelope.body.y, envelope.body.visible);
+        this.hooks.pointer(envelope.body.x, envelope.body.y, envelope.body.visible, envelope.sid);
         break;
       case "end":
         this.hooks.end();

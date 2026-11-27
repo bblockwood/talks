@@ -24,6 +24,9 @@ interface Shown {
   height: number;
 }
 
+/** What the mouse or a finger does on the slides: step (none), point, or draw. */
+export type StageTool = "none" | "laser" | "draw";
+
 /** How long a tap waits for a second one before it counts as a single tap. */
 const DOUBLE_TAP_MS = 230;
 const SWIPE_MIN_PX = 45;
@@ -38,6 +41,14 @@ export class AudienceView {
   onDoubleTap: (() => void) | null = null;
   /** Asked before a tap acts: true means the tap was used for something else. */
   intercept: (() => boolean) | null = null;
+  /** With the laser on: where the mouse or finger points, in normalised slide coordinates. */
+  onPoint: ((x: number, y: number, visible: boolean) => void) | null = null;
+  /** With Draw on (or a pen at any time): a stroke begins, grows, ends. */
+  onInk: ((op: { kind: "begin" | "move"; x: number; y: number } | { kind: "end" }) => void) | null = null;
+  private currentTool: StageTool = "none";
+  /** The pointer now drawing a stroke, or pointing with a finger. */
+  private drawing: number | null = null;
+  private pointing: number | null = null;
   private touch: { id: number; x: number; y: number; t: number } | null = null;
   private tapTimer: number | undefined;
   private lastTouchAt = -Infinity;
@@ -77,12 +88,45 @@ export class AudienceView {
     this.measure();
 
     root.addEventListener("mousemove", this.onMouseMove);
+    root.addEventListener("mouseleave", this.onMouseLeave);
     root.addEventListener("click", this.onClick);
     root.addEventListener("pointerdown", this.onPointerDown);
     root.addEventListener("pointermove", this.onPointerMove);
     root.addEventListener("pointerup", this.onPointerUp);
     root.addEventListener("pointercancel", this.onPointerCancel);
     root.classList.add("cursor-hidden");
+  }
+
+  get tool(): StageTool {
+    return this.currentTool;
+  }
+
+  /** Laser: the mouse (or a finger) points. Draw: it draws. Neither: clicks and taps step. */
+  setTool(tool: StageTool): void {
+    if (tool === this.currentTool) return;
+    if (this.drawing !== null) this.onInk?.({ kind: "end" });
+    if (this.currentTool === "laser") this.onPoint?.(0, 0, false);
+    this.drawing = null;
+    this.pointing = null;
+    this.currentTool = tool;
+    this.root.classList.toggle("tool-laser", tool === "laser");
+    this.root.classList.toggle("tool-draw", tool === "draw");
+  }
+
+  /** Normalised position within the slide (or the whiteboard) of a mouse or pointer event, clamped to it. */
+  private pointAt(ev: MouseEvent): { x: number; y: number } | null {
+    const shown = this.shown;
+    const box = this.canvas.getBoundingClientRect();
+    if (!shown || shown.width === 0 || box.width === 0 || box.height === 0) return null;
+    const px = ((ev.clientX - box.left) / box.width) * this.canvas.width;
+    const py = ((ev.clientY - box.top) / box.height) * this.canvas.height;
+    const clamp = (v: number): number => Math.min(1, Math.max(0, v));
+    return { x: clamp((px - shown.x) / shown.width), y: clamp((py - shown.y) / shown.height) };
+  }
+
+  /** Not the slide: a button, the bar, or anything laid over the slides. */
+  private static onControls(ev: Event): boolean {
+    return ev.target instanceof Element && ev.target.closest("button, input, .aud-bar, .aud-overlay") !== null;
   }
 
   /** Renders from the state. `inputTime` is when the causing key or command arrived. */
@@ -173,7 +217,13 @@ export class AudienceView {
   wipe(): void {
     this.resizeObserver.disconnect();
     this.root.removeEventListener("mousemove", this.onMouseMove);
+    this.root.removeEventListener("mouseleave", this.onMouseLeave);
     this.root.removeEventListener("click", this.onClick);
+    this.onPoint = null;
+    this.onInk = null;
+    this.drawing = null;
+    this.pointing = null;
+    this.root.classList.remove("tool-laser", "tool-draw");
     window.clearTimeout(this.cursorTimer);
     cancelAnimationFrame(this.pointerFrame);
     this.pointerFrame = 0;
@@ -343,20 +393,72 @@ export class AudienceView {
 
   private readonly onMouseMove = (ev: MouseEvent): void => {
     this.wake();
-    this.root.classList.toggle("cursor-link", this.linkAt(ev) !== null);
+    this.root.classList.toggle("cursor-link", this.currentTool === "none" && this.linkAt(ev) !== null);
+  };
+
+  private readonly onMouseLeave = (): void => {
+    if (this.currentTool === "laser" && this.pointing === null) this.onPoint?.(0, 0, false);
   };
 
   // Touch (Ben, 2026-11-27): a tap follows a link or else advances; a sideways swipe steps either
   // way; two quick taps bring up the bar with Exit. A single tap therefore waits a moment to see
   // whether a second one follows; a swipe never waits.
   private readonly onPointerDown = (ev: PointerEvent): void => {
-    if (ev.pointerType === "mouse" || this.touch || (ev.target instanceof Element && ev.target.closest("button, .aud-bar"))) return;
+    if (AudienceView.onControls(ev) || this.drawing !== null || this.pointing !== null) return;
+    // A pen always draws, and so does anything while Draw is on (as in the presenter view).
+    if ((this.currentTool === "draw" && (ev.pointerType !== "mouse" || ev.button === 0)) || ev.pointerType === "pen") {
+      const point = this.pointAt(ev);
+      if (!point) return;
+      ev.preventDefault();
+      this.drawing = ev.pointerId;
+      this.root.setPointerCapture(ev.pointerId);
+      this.onInk?.({ kind: "begin", ...point });
+      return;
+    }
+    // With the laser on, a finger points at once and nothing it does steps.
+    if (this.currentTool === "laser" && ev.pointerType !== "mouse") {
+      const point = this.pointAt(ev);
+      if (!point) return;
+      ev.preventDefault();
+      this.pointing = ev.pointerId;
+      this.root.setPointerCapture(ev.pointerId);
+      this.onPoint?.(point.x, point.y, true);
+      return;
+    }
+    if (ev.pointerType === "mouse" || this.touch) return;
     this.touch = { id: ev.pointerId, x: ev.clientX, y: ev.clientY, t: performance.now() };
   };
 
-  private readonly onPointerMove = (): void => {};
+  private readonly onPointerMove = (ev: PointerEvent): void => {
+    if (ev.pointerId === this.drawing || ev.pointerId === this.pointing) {
+      const point = this.pointAt(ev);
+      if (!point) return;
+      if (ev.pointerId === this.drawing) this.onInk?.({ kind: "move", ...point });
+      else this.onPoint?.(point.x, point.y, true);
+      return;
+    }
+    // A mouse moving with no button down: the laser, when it is on.
+    if (this.currentTool === "laser" && ev.pointerType === "mouse" && this.pointing === null && !AudienceView.onControls(ev)) {
+      const point = this.pointAt(ev);
+      if (point) this.onPoint?.(point.x, point.y, true);
+    }
+  };
+
+  /** Ends a stroke or a finger's pointing. True if the pointer was doing either. */
+  private release(ev: PointerEvent): boolean {
+    if (ev.pointerId === this.drawing) {
+      this.drawing = null;
+      this.onInk?.({ kind: "end" });
+    } else if (ev.pointerId === this.pointing) {
+      this.pointing = null;
+      this.onPoint?.(0, 0, false);
+    } else return false;
+    this.lastTouchAt = performance.now(); // the click that follows is not a step
+    return true;
+  }
 
   private readonly onPointerUp = (ev: PointerEvent): void => {
+    if (this.release(ev)) return;
     const start = this.touch;
     if (!start || ev.pointerId !== start.id) return;
     this.touch = null;
@@ -383,13 +485,18 @@ export class AudienceView {
   };
 
   private readonly onPointerCancel = (ev: PointerEvent): void => {
+    if (this.release(ev)) return;
     if (this.touch && ev.pointerId === this.touch.id) this.touch = null;
   };
 
   private readonly onClick = (ev: MouseEvent): void => {
-    if (performance.now() - this.lastTouchAt < 700) return; // already handled as a touch
-    // Clicks on link areas follow links; clicks elsewhere do nothing (SPEC §5.3).
+    if (performance.now() - this.lastTouchAt < 700) return; // already handled as a touch, or the end of a stroke
+    if (AudienceView.onControls(ev) || this.currentTool === "draw" || ev.button !== 0) return;
+    if (this.intercept?.()) return;
+    // A click on a link follows it; a click anywhere else advances, as in the presenter view
+    // (Ben, 2026-11-27; SPEC §5.3 had clicks elsewhere do nothing).
     const hit = this.linkAt(ev);
     if (hit) this.onLink?.(hit.page, hit.index);
+    else this.onStep?.("next");
   };
 }

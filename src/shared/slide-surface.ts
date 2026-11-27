@@ -63,6 +63,11 @@ export class SlideSurface {
     this.paint();
   }
 
+  /** True while a pointer dot is drawn (development and tests only). */
+  get dotShown(): boolean {
+    return this.dot !== null;
+  }
+
   /** Ink to draw over the slide. Pass the same array again and nothing is redrawn. */
   setInk(strokes: readonly Stroke[]): void {
     if (strokes === this.ink) return;

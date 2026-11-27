@@ -35,6 +35,8 @@ const PING_MS = 2000;
 /** The host sends state every 2.5 s; past this it is treated as gone (and a successor takes over). */
 const ROOM_TIMEOUT_MS = 9000;
 const LONG_PRESS_MS = 350;
+/** Another device's laser goes from this view when it has not moved for this long, as on the slides. */
+const REMOTE_POINTER_IDLE_MS = 2000;
 const POINTER_INTERVAL_MS = 33; // at most ~30 messages a second, well under the relay's limit
 const SWIPE_MIN_PX = 45;
 const TAP_SLOP_PX = 10;
@@ -122,6 +124,7 @@ export class PresenterConsole {
   private ink: InkState = NO_INK;
   private drawMode = false;
   private laserMode = false;
+  private remoteDotTimer: number | undefined;
   private inkColor = 0;
   private strokeSeq = 0;
   private activeStroke: string | null = null;
@@ -202,6 +205,7 @@ export class PresenterConsole {
         rtts: () => this.rtts,
         ink: () => ({ page: this.ink.page.length, board: this.ink.board.length }),
         hits: () => this.hits,
+        dot: () => this.current.dotShown,
         outline: () => this.outline,
         kind: () => this.client.kind,
         hosting: () => this.client.hosting,
@@ -242,6 +246,15 @@ export class PresenterConsole {
         break;
       case "hello":
         if (envelope.body.role === "room") this.roomSeenAt = now; // the host, (re)announcing itself
+        break;
+      case "pointer":
+        // Someone else's laser, shown here as on the slides. This view's own is drawn as it moves.
+        if (envelope.sid === this.client.sid) break;
+        window.clearTimeout(this.remoteDotTimer);
+        if (envelope.body.visible && this.view?.audienceMode.kind === "live") {
+          this.current.setDot({ x: envelope.body.x, y: envelope.body.y });
+          this.remoteDotTimer = window.setTimeout(() => this.current.setDot(null), REMOTE_POINTER_IDLE_MS);
+        } else this.current.setDot(null);
         break;
       case "pong":
         // Every presenter view hears every pong; only the answer to our own ping is a measurement.

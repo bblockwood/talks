@@ -73,7 +73,8 @@ export interface PeerHooks {
   deliver(envelope: Envelope): void;
   /** What the slides screen should show changed. `inputTime` is set when a local input caused it. */
   changed(inputTime: number | undefined): void;
-  pointer(x: number, y: number, visible: boolean): void;
+  /** The laser pointer moved, for every view on this device. `from` is the sender id of the view that moved it. */
+  pointer(x: number, y: number, visible: boolean, from: string): void;
   /** The talk was ended for everyone. */
   end(): void;
   status(): Omit<RoomInfo, "devices" | "views" | "audiences">;
@@ -230,10 +231,15 @@ export class Peer {
       const host = this.sessionHost;
       const seq = ++this.localSeq;
       host.receive({ sid: this.options.sid, seq, to: host.session, ...message }, true);
+      // The pointer is not part of the state the host sends out: pass it on as it is, so every
+      // other screen and presenter view shows it too.
+      if (message.type === "pointer") this.hooks.transmit(message, host.session);
       return seq;
     }
     if (!this.followed) return 0;
     if (message.type === "hello") return this.hello();
+    // This device's other views (slides in the first window, say) show the pointer as well.
+    if (message.type === "pointer") this.hooks.pointer(message.body.x, message.body.y, message.body.visible, this.options.sid);
     return this.hooks.transmit(message, this.followed.session);
   }
 
@@ -246,6 +252,7 @@ export class Peer {
     }
     if (this.sessionHost) {
       this.sessionHost.receive({ ...envelope, to: this.sessionHost.session }, true);
+      if (envelope.type === "pointer") this.hooks.transmit({ type: "pointer", body: envelope.body }, this.sessionHost.session);
       return;
     }
     if (!this.followed) return;
@@ -253,8 +260,11 @@ export class Peer {
       case "hello":
         this.hello(); // the host's answer reaches the window like every other message
         break;
-      case "command":
       case "pointer":
+        this.hooks.pointer(envelope.body.x, envelope.body.y, envelope.body.visible, envelope.sid);
+        this.hooks.transmit({ type: "pointer", body: envelope.body }, this.followed.session);
+        break;
+      case "command":
       case "ping":
         this.hooks.transmit({ type: envelope.type, body: envelope.body } as Message, this.followed.session);
         break;
@@ -358,7 +368,7 @@ export class Peer {
         break;
       case "pointer":
         // Every slides screen shows the pointer, not only the host's.
-        if (envelope.to === followed.session) this.hooks.pointer(envelope.body.x, envelope.body.y, envelope.body.visible);
+        if (envelope.to === followed.session) this.hooks.pointer(envelope.body.x, envelope.body.y, envelope.body.visible, envelope.sid);
         break;
       case "end":
         if (envelope.to === followed.session) this.hooks.end();

@@ -951,3 +951,22 @@ Known issues:
 1. iPhone, presenter view, tap the clock, upright and sideways, in Safari and from the Home Screen: the whole pop-up is reachable.
 2. Laptop with a projector (extend, Chrome): **Both views**, pick a screen in the dialog; then **Swap displays** and ⌘D.
 3. On a Windows lectern PC (Chrome or Edge): open a PDF, Audience view, clicker; presenter view: `?` shows Ctrl shortcuts; jump to a frame by number, Backspace, then Ctrl+]; Ctrl+F; Ctrl+D with two screens.
+
+### W9.6. Laser everywhere; the slides as a presenter in their own right (2026-11-27)
+
+1. **The laser shows on every screen**: every slides screen and the current slide of every presenter view, whoever moves it. (Before, a laser moved on the device running the talk never left that device, and presenter views never showed anyone else's.)
+2. **Overview: Frames | Builds** are the same size lit or not.
+3. **The slides are run from the slides** when there is one device and one screen. On the audience view:
+   - Keys as in the presenter view: arrows, Shift+arrows, a number then Enter (shown as "Go to frame N" while typed), Backspace and Ctrl/⌘+[ ] for Back and Forward, B, W, C, T, and now `?` (shortcut card), `Tab` (overview), `L` (laser), `D` (draw). One Esc closes what is open or puts the tool down; Esc twice still leaves.
+   - A click on the slide advances (it did nothing before, except on links).
+   - Laser: the mouse, or a finger, points. Draw: the mouse, a finger or a pen draws; a pen always draws.
+   - Overview: every frame over the slides, Frames | Builds; a click goes there and closes it.
+   - The bar (two quick taps, or the mouse at the bottom edge of the screen) now has the tools: Overview, Laser, Draw with colours, Undo and Clear, Black, White, Back and Forward when there is somewhere to go, `?`, and the frame, clock, connection and Exit as before. It stays while the mouse is on it; a tool chosen on it by touch keeps it up, since a tap then no longer brings it back.
+
+Verification: build; 295 unit tests; 46 e2e tests (new: the slides run from the slides; a laser from the slides screen and from a presenter view reaching every other view).
+
+Known issues:
+- No search in the slides' overview (the presenter view has it).
+- The clock on the slides' bar can be paused with T but not set; setting it needs a presenter view.
+- The click that advances is a change for a room PC: a stray click on the slides now steps.
+- Touch behaviour is tested with emulated touch only.

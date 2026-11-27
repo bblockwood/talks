@@ -186,6 +186,12 @@ describe("a talk across devices", () => {
     phone.peer.send({ type: "pointer", body: { x: 0.5, y: 0.5, visible: true } });
     expect(room.pointers).toEqual([true]);
     expect(overflow.pointers).toEqual([true]);
+    expect(phone.pointers).toEqual([true]); // and the sender's own other views
+    // A laser moved on the device that runs the talk reaches every other device too.
+    room.peer.send({ type: "pointer", body: { x: 0.2, y: 0.2, visible: false } });
+    expect(room.pointers).toEqual([true, false]);
+    expect(overflow.pointers).toEqual([true, false]);
+    expect(phone.pointers).toEqual([true, false]);
     t.wait(HEARTBEAT_MS);
     expect(phone.state()?.room?.audiences).toBe(2);
     // Keys on the second screen drive the talk through the first.

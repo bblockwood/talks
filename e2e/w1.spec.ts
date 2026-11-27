@@ -165,10 +165,11 @@ test("clicking a link follows it, Delete goes back, clicks elsewhere do nothing"
   const top = box.y + (box.height - slideHeight) / 2;
   expect(slide.cw).toBeGreaterThan(0);
 
-  // A click on plain slide area does nothing.
+  // A click on plain slide area advances, as in the presenter view.
   await page.mouse.click(left + slideWidth * 0.5, top + slideHeight * 0.02);
-  await page.waitForTimeout(200);
-  expect(await committed(page)).toBe(from);
+  await expect.poll(() => committed(page)).toBe(from + 1);
+  await page.keyboard.press("ArrowLeft");
+  await expect.poll(() => shown(page)).toBe(from);
 
   await page.mouse.click(left + slideWidth * (rect.x + rect.width / 2), top + slideHeight * (rect.y + rect.height / 2));
   await expect.poll(() => shown(page)).toBe(target);

@@ -86,7 +86,12 @@ export class Talk {
           if (envelope.type === "state") this.onNews?.();
         },
         changed: (inputTime) => this.audience?.changed(inputTime),
-        pointer: (x, y, visible) => this.audience?.pointer(x, y, visible),
+        pointer: (x, y, visible, from) => {
+          this.audience?.pointer(x, y, visible);
+          // Presenter views on this device show it on their current slide (Ben, 2026-11-27).
+          const envelope: Envelope = { sid: from, seq: 0, type: "pointer", body: { x, y, visible } };
+          for (const listener of [...this.listeners]) listener(envelope);
+        },
         end: () => this.onEnd?.(),
         status: () => ({ relay: this.relayStatus, ...(this.audience?.status() ?? { draw: NO_DRAWS, cacheMisses: 0 }) }),
       },

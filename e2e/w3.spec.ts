@@ -18,6 +18,7 @@ interface RoomHook {
   shownPage(): number | null | undefined;
   pointerVisible(): boolean;
   inkShown(): number;
+  tool(): string;
 }
 interface ViewHook {
   taps(): number[];
@@ -29,6 +30,7 @@ interface ViewHook {
   shownPage(): number | null;
   ink(): { page: number; board: number };
   hits(): { page: number }[];
+  dot(): boolean;
 }
 const roomHook = <T>(page: Page, pick: (h: RoomHook) => T): Promise<T> =>
   page.evaluate((src) => (0, eval)(`(${src})`)((window as unknown as { __lectern: RoomHook }).__lectern) as T, pick.toString());
@@ -753,6 +755,130 @@ test("slides shown on a touch screen are run by touch: tap, swipe either way, li
   await expect(pad.locator("#ready")).toBeVisible();
   await expect(pad.locator("#end-all")).toBeVisible();
   await context.close();
+});
+
+test("one device, one screen: the slides are run from the slides, with the presenter view's keys and tools", async ({ browser }) => {
+  const page = await browser.newPage({ viewport: LAPTOP });
+  await page.goto("./");
+  await page.locator("#file").setInputFiles("fixtures/pdfpc-notes.pdf");
+  await page.locator("#start").click();
+  await expect.poll(() => roomPage(page)).toBe(0);
+  const shots = process.env["LECTERN_SHOTS"];
+  // Nothing is on the slides until asked for.
+  await expect(page.locator(".aud-bar")).toBeHidden();
+  await expect(page.locator(".aud-overlay")).toHaveCount(0);
+
+  // A click on the slide advances; Shift+arrows step by frame.
+  await page.mouse.click(640, 300);
+  await expect.poll(() => roomPage(page)).toBe(1);
+  await page.keyboard.press("Shift+ArrowRight");
+  await expect.poll(() => roomPage(page)).toBe(2);
+
+  // A number being typed is shown, then jumps; Backspace goes back, Ctrl+] forward again.
+  await page.keyboard.type("6");
+  await expect(page.locator(".aud-digits")).toHaveText("Go to frame 6 ⏎");
+  await page.keyboard.press("Enter");
+  await expect(page.locator(".aud-digits")).toBeHidden();
+  await expect.poll(() => roomPage(page)).toBe(8);
+  await page.keyboard.press("Backspace");
+  await expect.poll(() => roomPage(page)).toBe(2);
+  await page.keyboard.press("Control+]");
+  await expect.poll(() => roomPage(page)).toBe(8);
+  await page.keyboard.press("Backspace");
+  await expect.poll(() => roomPage(page)).toBe(2);
+
+  // ? shows the keys; any key puts them away.
+  await page.keyboard.press("?");
+  await expect(page.locator(".aud-help")).toContainText("Go to a frame");
+  if (shots) await page.screenshot({ path: `${shots}/stage-help.png` });
+  await page.keyboard.press("Escape");
+  await expect(page.locator(".aud-help")).toHaveCount(0);
+
+  // L: the mouse is a laser. A click still advances. Esc puts the laser down and does not count towards leaving.
+  await page.keyboard.press("l");
+  await page.mouse.move(500, 300);
+  await page.mouse.move(520, 320);
+  await expect.poll(() => roomHook(page, (h) => h.pointerVisible())).toBe(true);
+  await page.keyboard.press("Escape");
+  expect(await roomHook(page, (h) => h.tool())).toBe("none");
+  await expect.poll(() => roomHook(page, (h) => h.pointerVisible()), { timeout: 3000 }).toBe(false);
+  await page.waitForTimeout(1100); // past the Esc-twice window
+
+  // D: the mouse draws, and a click no longer steps. C clears.
+  await page.keyboard.press("d");
+  await page.mouse.move(400, 300);
+  await page.mouse.down();
+  await page.mouse.move(500, 340, { steps: 5 });
+  await page.mouse.move(600, 300, { steps: 5 });
+  await page.mouse.up();
+  await expect.poll(() => roomHook(page, (h) => h.inkShown())).toBe(1);
+  expect(await roomPage(page)).toBe(2);
+  // The mouse at the bottom edge brings up the bar: tools lit as in the presenter view, Back after the jump.
+  await page.mouse.move(640, 799);
+  await expect(page.locator(".aud-bar")).toBeVisible();
+  await expect(page.locator(".aud-draw")).toHaveClass(/on/);
+  await expect(page.locator(".aud-drawbar")).toBeVisible();
+  await expect(page.locator(".aud-forward")).toHaveText("6 →");
+  if (shots) await page.screenshot({ path: `${shots}/stage-bar.png` });
+  await page.locator(".aud-drawbar .aud-tool", { hasText: "Undo" }).click();
+  await expect.poll(() => roomHook(page, (h) => h.inkShown())).toBe(0);
+  await page.locator(".aud-draw").click();
+  expect(await roomHook(page, (h) => h.tool())).toBe("none");
+  await page.locator(".aud-white").click();
+  expect(await roomMode(page)).toBe("white");
+  await page.keyboard.press("w");
+  expect(await roomMode(page)).toBe("live");
+  // Away from the bar, it goes by itself.
+  await page.mouse.move(640, 300);
+  await expect(page.locator(".aud-bar")).toBeHidden({ timeout: 4000 });
+
+  // Tab: the overview over the slides, with the bar. A click on a frame goes there and closes it.
+  await page.keyboard.press("Tab");
+  await expect(page.locator(".aud-overview .thumb")).toHaveCount(7);
+  await expect(page.locator(".aud-bar")).toBeVisible();
+  await expect(page.locator(".aud-overview .thumb.current")).toHaveAttribute("data-frame", "2");
+  if (shots) {
+    await page.waitForTimeout(500);
+    await page.screenshot({ path: `${shots}/stage-overview.png` });
+  }
+  await page.locator('.aud-overview .thumb[data-frame="4"]').click();
+  await expect(page.locator(".aud-overview")).toHaveCount(0);
+  await expect.poll(() => roomPage(page)).toBe(7); // the fifth frame's first page
+  // Tab again, and Esc closes it without leaving.
+  await page.keyboard.press("Tab");
+  await expect(page.locator(".aud-overview")).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(page.locator(".aud-overview")).toHaveCount(0);
+  await expect(page.locator("#audience")).toBeVisible();
+  await page.close();
+});
+
+test("a laser moved on one device shows on every presenter view's current slide", async ({ browser }) => {
+  const room = await openRoom(browser, true);
+  const phone = await openView(browser);
+  const laptop = await openView(browser, LAPTOP);
+  await expect(laptop.locator("#link")).toContainText("Slides showing");
+  // From the slides screen itself (L, then the mouse): both presenter views show the dot.
+  await room.keyboard.press("l");
+  await room.mouse.move(500, 300);
+  await room.mouse.move(540, 330);
+  await expect.poll(() => viewHook(phone, (h) => h.dot())).toBe(true);
+  await expect.poll(() => viewHook(laptop, (h) => h.dot())).toBe(true);
+  await room.keyboard.press("l");
+  await expect.poll(() => viewHook(phone, (h) => h.dot())).toBe(false);
+  await expect.poll(() => viewHook(laptop, (h) => h.dot())).toBe(false);
+  // From one presenter view: the slides and the other presenter view show it.
+  await laptop.keyboard.press("l");
+  const box = (await laptop.locator("#current").boundingBox())!;
+  await laptop.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+  await laptop.mouse.move(box.x + box.width / 2 + 20, box.y + box.height / 2 + 10);
+  await expect.poll(() => roomHook(room, (h) => h.pointerVisible())).toBe(true);
+  await expect.poll(() => viewHook(phone, (h) => h.dot())).toBe(true);
+  await laptop.keyboard.press("l");
+  await expect.poll(() => viewHook(phone, (h) => h.dot())).toBe(false);
+  await phone.context().close();
+  await laptop.context().close();
+  await room.close();
 });
 
 test("a phone held sideways shows two very large buttons that still drive the talk", async ({ browser }) => {

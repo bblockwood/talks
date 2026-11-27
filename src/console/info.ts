@@ -39,3 +39,21 @@ export const keysInfo = (mac: boolean): string => {
     "- **Connection diagnostics:** `Ctrl`+`Shift`+`D`. **This card:** `?`",
   ].join("\n");
 };
+
+/** The same card on the slides themselves, for a talk run from one device with one screen. */
+export const stageKeysInfo = (mac: boolean): string => {
+  const mod = (key: string): string => (mac ? `\`⌘${key}\`` : `\`Ctrl\`+\`${key}\``);
+  return [
+    "- **Next:** `→` `↓` `Space` `Page Down` `Enter` `N`, or a click on the slide",
+    "- **Previous:** `←` `↑` `Page Up` `P`",
+    "- **Next / previous frame:** `Shift` with `→` / `←`",
+    "- **Go to a frame:** type its number, then `Enter`",
+    `- **Back after a jump:** ${mac ? "`Delete`" : "`Backspace` or `Delete`"} or ${mod("[")}. **Forward again:** ${mod("]")}`,
+    "- **Overview:** `Tab`; a click on a frame goes there",
+    "- **Laser:** `L`, then move the mouse. **Draw:** `D`. **Clear the ink:** `C`",
+    "- **Black:** `B` or `.` **White,** to draw on: `W`",
+    "- **Pause the clock:** `T`",
+    "- **Tools, clock and Exit:** move the mouse to the bottom edge of the screen, or tap twice",
+    "- **Back to the choice of views:** `Esc` twice. One `Esc` closes whatever is open",
+  ].join("\n");
+};
