@@ -464,6 +464,13 @@ button.wide {
 .digits:empty {
   display: none;
 }
+/* Always in the same place, bottom right, whenever there are two screens to swap. */
+.tools button.swap {
+  flex: 0 0 auto;
+  margin-left: auto;
+  padding-left: 0.9rem;
+  padding-right: 0.9rem;
+}
 /* Huge targets, kept clear of the screen edges (SPEC §7). */
 .steps {
   display: grid;
@@ -673,6 +680,10 @@ button.wide {
 .console[data-layout="compact"] #t-forward,
 .console[data-layout="compact"] #t-laser {
   display: none;
+}
+.console[data-layout="compact"] .linkstate {
+  white-space: normal;
+  line-height: 1.2;
 }
 .console[data-layout="compact"] #current {
   aspect-ratio: var(--slide-aspect, 16 / 9);

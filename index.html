@@ -54,6 +54,7 @@
       <section id="ready" hidden>
         <h2 id="deck-title"></h2>
         <p id="deck-summary" class="summary"></p>
+        <div id="preview" class="slide preview"></div>
         <p id="talk-status" class="talk-status" role="status"></p>
         <p id="phone-status" class="phone-status off"></p>
         <p id="split-line" class="split-line" hidden>
@@ -61,31 +62,22 @@
           <button id="split-toggle" type="button"></button>
         </p>
 
+        <p class="views-head">On this device, show</p>
         <div class="views">
-          <button id="presenter">Presenter view</button>
-          <button id="start" class="primary">Show slides</button>
+          <button id="start" class="primary">Audience view<small>the slides, full screen</small></button>
+          <button id="presenter">Presenter view<small>notes, next slide, clock, controls</small></button>
+          <button id="both">Both views<small>slides on one screen, presenter view on the other</small></button>
         </div>
-        <p class="views-hint">
-          Presenter view: notes, next slide, clock and controls, for you. Show slides: full screen, for the audience.
-        </p>
-
-        <fieldset id="modes" class="modes" hidden>
-          <legend>Show slides on</legend>
-          <label><input id="mode-a" type="radio" name="mode" value="a" checked /> This screen</label>
-          <label><input id="mode-b" type="radio" name="mode" value="b" /> The other screen, with the presenter view on this one</label>
-          <div id="mode-b-panel" class="mode-b-panel" hidden>
-            <p>Your browser will ask to manage windows — click Allow.</p>
-            <p><button id="detect-screens" type="button">Choose screens</button> <span id="screens-status"></span></p>
-            <div id="screens" class="screens"></div>
-          </div>
-        </fieldset>
+        <div id="both-panel" class="modes" hidden>
+          <p id="screens-status"></p>
+          <div id="screens" class="screens"></div>
+        </div>
         <p id="mirror-note" class="hint" hidden>
-          One screen found. For notes on this screen and slides on the projector, set the displays to “extend” rather
-          than “mirror” and reopen the talk.
+          Both views need a second screen that extends this one (not mirroring it), in Chrome or Edge.
         </p>
         <p id="fs-problem" class="problem" hidden>
           This browser refused full screen. Press <kbd>F11</kbd> to make the browser full screen yourself, then:
-          <button id="start-windowed">Show slides in this window</button>
+          <button id="start-windowed">Audience view in this window</button>
         </p>
         <p class="keys">
           <kbd>→</kbd> <kbd>Space</kbd> <kbd>Page Down</kbd> next · <kbd>←</kbd> <kbd>Page Up</kbd> previous ·
@@ -183,6 +175,7 @@
         <button id="t-freeze" title="Freeze the room screen (F)">Freeze</button>
         <button id="t-more">More</button>
         <span id="digits" class="digits"></span>
+        <button id="swap" class="swap" title="Slides to the other screen, this view to that one (Ctrl+D, or Cmd+D on a Mac)" hidden>Swap displays</button>
       </nav>
 
       <nav id="steps" class="steps">
@@ -234,9 +227,9 @@
               <span>Notes size</span>
               <span><button id="m-notes-smaller" aria-label="Smaller notes">A−</button> <button id="m-notes-larger" aria-label="Larger notes">A+</button></span>
             </div>
-            <div class="row" id="row-swap" hidden>
-              <span>Displays</span>
-              <span><button id="swap" title="Ctrl+D, or Cmd+D on a Mac">Swap displays</button></span>
+            <div class="row" id="row-join">
+              <span>Other devices join at</span>
+              <span id="join-text" class="diag"></span>
             </div>
             <div class="row" id="row-view" hidden>
               <span>Slides for the audience</span>

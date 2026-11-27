@@ -94,7 +94,34 @@ export type Message =
   /** End the talk on every device. */
   | { readonly type: "end"; readonly body: Record<string, never> }
   /** The host is leaving; the talk goes on, hosted by someone else. */
-  | { readonly type: "bye"; readonly body: Record<string, never> };
+  | { readonly type: "bye"; readonly body: Record<string, never> }
+  // A talk started from a PDF on one device (no published deck): a device that joins by code
+  // asks for the slides, and a device that has them sends them in pieces (see shared/deck-share.ts).
+  | { readonly type: "deck-request"; readonly body: Record<string, never> }
+  | { readonly type: "deck-info"; readonly body: DeckInfo }
+  | { readonly type: "deck-chunk"; readonly body: DeckChunk };
+
+export interface DeckInfo {
+  /** The sender id of the device that asked. */
+  readonly for: string;
+  /** Random id of this transfer. */
+  readonly id: string;
+  readonly bytes: number;
+  readonly chunks: number;
+  readonly title: string;
+}
+
+export interface DeckChunk {
+  readonly for: string;
+  readonly id: string;
+  readonly index: number;
+  /** Base64 of this piece of the PDF. */
+  readonly data: string;
+}
+
+/** Pieces small enough that a chunk, as base64 inside an encrypted message, stays under the relay's 64 KB. */
+export const DECK_CHUNK_BYTES = 40_000;
+export const MAX_DECK_BYTES = 200 * 1024 * 1024;
 
 /**
  * Ink from a remote (SPEC §8.2): stroke begin, append and end with normalised points. `id` is
@@ -393,7 +420,20 @@ export function parseMessage(type: unknown, body: unknown): Message | null {
     }
     case "end":
     case "bye":
+    case "deck-request":
       return { type, body: {} };
+    case "deck-info": {
+      const { for: target, id, bytes, chunks, title } = body;
+      if (typeof target !== "string" || !SID.test(target) || typeof id !== "string" || !SID.test(id)) return null;
+      if (!isIndex(bytes) || bytes < 1 || bytes > MAX_DECK_BYTES || !isIndex(chunks) || chunks !== Math.ceil(bytes / DECK_CHUNK_BYTES)) return null;
+      return { type, body: { for: target, id, bytes, chunks, title: typeof title === "string" ? title.slice(0, 200) : "" } };
+    }
+    case "deck-chunk": {
+      const { for: target, id, index, data } = body;
+      if (typeof target !== "string" || !SID.test(target) || typeof id !== "string" || !SID.test(id) || !isIndex(index)) return null;
+      if (typeof data !== "string" || data.length === 0 || data.length > Math.ceil(DECK_CHUNK_BYTES / 3) * 4 || !/^[A-Za-z0-9+/]+=*$/.test(data)) return null;
+      return { type, body: { for: target, id, index, data } };
+    }
     default:
       return null;
   }

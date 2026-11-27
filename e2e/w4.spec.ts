@@ -61,16 +61,14 @@ async function startTwoScreens(context: BrowserContext, open: (page: Page) => Pr
   await main.goto("./");
   await open(main);
   await expect(main.locator("#ready")).toBeVisible();
-  await expect(main.locator("#modes")).toBeVisible();
-  await main.locator("#mode-b").check();
-  await expect(main.locator("#mode-b-panel")).toContainText("click Allow");
+  await expect(main.locator("#both")).toBeEnabled();
 
   // First click asks for the screens (the permission prompt uses up the click); second click starts.
-  await main.locator("#start").click();
-  await expect(main.locator("#status")).toHaveText("Screens found. Check the choice above, then click Show slides.");
+  await main.locator("#both").click();
+  await expect(main.locator("#status")).toHaveText("Screens found. Check the choice above, then click Both views again.");
   await expect(main.locator("#screens label")).toHaveCount(2);
   await expect(main.locator('#screens input[value="1"]')).toBeChecked(); // the projector is the default for slides
-  const [presenter] = await Promise.all([context.waitForEvent("page"), main.locator("#start").click()]);
+  const [presenter] = await Promise.all([context.waitForEvent("page"), main.locator("#both").click()]);
   await expect(presenter.locator("#console")).toBeVisible({ timeout: 15_000 });
   return { main, presenter };
 }
@@ -95,7 +93,7 @@ test("two screens: the presenter view in a second window drives the audience win
   expect(presenter.url()).toMatch(/\/talks\/#ch=[0-9a-f]{32}$/);
   await expect.poll(() => roomPage(main)).toBe(0);
   // The audience window still shows nothing but slides.
-  expect(await main.locator("#audience > :not(canvas)").count()).toBe(0);
+  await expect(main.locator("#audience > :not(canvas)")).toBeHidden();
 
   // The same presenter view as on any other device, here joined without a code or the relay.
   expect(await view((h) => h.kind())).toBe("local");
@@ -169,12 +167,16 @@ test("two screens: the presenter view in a second window drives the audience win
   // to the other screen; the presenter window moves the opposite way. Ctrl+D does the same.
   const asked = () => main.evaluate(() => (window as unknown as { __askedScreen?: string }).__askedScreen);
   await presenter.locator("#t-more").click();
-  await expect(presenter.locator("#row-swap")).toBeVisible();
+  await expect(presenter.locator("#row-join")).toBeHidden(); // this window is not a device of its own
   await expect(presenter.locator("#row-view")).toBeHidden();
+  await presenter.locator("#more-close").click();
+  // Swap displays is always in view, at the bottom right, not under More.
+  const swap = (await presenter.locator("#swap").boundingBox())!;
+  expect(swap.x + swap.width).toBeGreaterThan(1280 - 40);
+  expect(swap.y).toBeGreaterThan(720 - 80);
   await presenter.locator("#swap").click();
   await expect.poll(asked).toBe("Built-in Display");
   await expect.poll(() => presenter.evaluate(() => (window as unknown as { __moves: number[][] }).__moves.at(-1))).toEqual([1280, 0]);
-  await presenter.locator("#more-close").click();
   await presenter.keyboard.press("Control+d");
   await expect.poll(asked).toBe("Projector");
   await expect.poll(() => presenter.evaluate(() => (window as unknown as { __moves: number[][] }).__moves.at(-1))).toEqual([0, 0]);

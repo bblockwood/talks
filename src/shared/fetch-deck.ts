@@ -8,6 +8,8 @@ import type { DeckPayload } from "../core/payload";
 /** No deck at that code's path, or it would not decrypt. The user sees "No talk found for that code". */
 export class NoTalkError extends Error {
   override name = "NoTalkError";
+  /** The keys the code gives, when it got that far: the talk may still exist on another device. */
+  keys: TalkKeys | null = null;
 }
 
 /** The site could not be reached, or answered with something other than the deck. */
@@ -52,7 +54,10 @@ export async function fetchDeck(
   onProgress("loading");
   const dir = `${baseUrl}d/${keys.deckId}/`;
   // Pages caches for ten minutes; a republished deck must still be picked up at once (SPEC §4.5).
-  const currentResponse = await get(`${dir}current.json?t=${Date.now()}`, true);
+  const currentResponse = await get(`${dir}current.json?t=${Date.now()}`, true).catch((e: unknown) => {
+    if (e instanceof NoTalkError) e.keys = keys; // nothing published under this code
+    throw e;
+  });
   let file: unknown;
   try {
     file = ((await currentResponse.json()) as { file?: unknown }).file;

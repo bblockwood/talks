@@ -3,7 +3,7 @@
 Present a PDF slide deck from someone else's lectern computer, using only its browser.
 
 1. On your own computer, publish the deck: `npm run publish -- talk.pdf --code bunching --wait`.
-2. On the room's computer, open `https://benlockwood.com/talks`, type the code, click **Show slides**.
+2. On the room's computer, open `https://benlockwood.com/talks`, type the code, click **Audience view**.
 3. On your phone, tablet or laptop, open the same address, type the same code, and choose **Presenter view**: your notes, the next slide, a clock, and the controls. Open it on as many devices as you like.
 
 Every device that opens the same code is in the same talk, in any order. Open it on your laptop first and you are rehearsing; when the room's computer joins and shows the slides, it picks the talk up where it stands.
@@ -30,9 +30,11 @@ npm run revoke -- talk.pdf       # take a deck down
 
 ## Showing the slides
 
-- Type the code, or use **open a PDF from this device** for a deck that isn't published (other devices can't join in that case).
+- Type the code, or use **open a PDF from this device** for a deck that isn't published. That talk is given a one-word code, shown on the page; a device that enters it is sent the slides, encrypted, through the relay.
+- Then choose **Audience view**, **Presenter view**, or **Both views** (two screens).
 - **Keys:** → Space Page Down next; ← Page Up previous; Shift+→/← next/previous frame; a number then Enter jumps to that frame; Delete goes back after a jump; B or `.` black; W white (the whiteboard); F freeze; T pause the clock; C clear ink; Esc twice leaves the talk on this computer.
-- **Two screens** (Chrome or Edge, displays set to extend): choose "The other screen", allow window management, and Show slides. Slides go full screen on the projector and the presenter view opens in a second window on the other screen, with Swap displays (Ctrl+D or Cmd+D) under More.
+- **Both views** (Chrome or Edge, displays set to extend): click it, allow window management, check the screens, click it again. Slides go full screen on the projector and the presenter view opens in a second window on the other screen, with **Swap displays** (Ctrl+D or Cmd+D) at its bottom right.
+- If the slides drop out of full screen they stay in the window and keys still drive them; move the mouse for a **Full screen** button.
 - Leaving wipes the slides from this computer's memory and returns to the code screen; the talk goes on for your other devices. **More → End talk** in the presenter view ends it on every device. Use a private window on a shared computer.
 - The computer showing the slides runs the talk, so its keyboard and clicker keep working if the network drops.
 

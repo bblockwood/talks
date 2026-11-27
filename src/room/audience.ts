@@ -306,11 +306,16 @@ export class AudienceView {
     return index < 0 ? null : { page: shown.page, index };
   }
 
-  private readonly onMouseMove = (ev: MouseEvent): void => {
+  /** Shows the cursor, and whatever appears with it, until the mouse has been still for a moment. */
+  wake(): void {
     this.root.classList.remove("cursor-hidden");
-    this.root.classList.toggle("cursor-link", this.linkAt(ev) !== null);
     window.clearTimeout(this.cursorTimer);
     this.cursorTimer = window.setTimeout(() => this.root.classList.add("cursor-hidden"), CURSOR_IDLE_MS);
+  }
+
+  private readonly onMouseMove = (ev: MouseEvent): void => {
+    this.wake();
+    this.root.classList.toggle("cursor-link", this.linkAt(ev) !== null);
   };
 
   private readonly onClick = (ev: MouseEvent): void => {

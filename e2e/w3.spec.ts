@@ -614,26 +614,76 @@ test("a talk nobody shows slides for is a rehearsal: devices join it, and a slid
   await phone.context().close();
   await room.close();
 
-  // From a PDF on this device: no code, no network, this device only.
+});
+
+test("a PDF opened on one device gets a code; a device that joins with it is sent the slides and can show them", async ({ browser }) => {
+  // On the phone: a PDF that was never published.
   const context = await browser.newContext({ viewport: PHONE });
-  const solo = await context.newPage();
-  const requests: string[] = [];
-  solo.on("websocket", (ws) => {
-    if (ws.url().includes(":8787")) requests.push(ws.url());
+  const phone = await context.newPage();
+  await phone.goto("./");
+  await phone.locator("#file").setInputFiles("fixtures/overlays.pdf");
+  await expect(phone.locator("#phone-status")).toContainText("Other devices join with the code");
+  await expect(phone.locator("#preview canvas")).toHaveCount(1); // the first slide, so it is plain which deck this is
+  const code = (await phone.locator("#join-code").textContent()) ?? "";
+  expect(code).toMatch(/^[a-z]{3,}$/);
+  await phone.locator("#presenter").click();
+  await expect(phone.locator("#link")).toHaveText(`No slides screen yet · join with code ${code}`);
+  await phone.locator("#next").click();
+  await phone.locator("#next").click();
+  await expect.poll(() => viewHook(phone, (h) => h.shownPage())).toBe(2);
+  const frame = /Frame (\d+) of 9/.exec((await phone.locator("#frame-line").textContent()) ?? "")?.[1];
+  await phone.locator("#t-more").click();
+  await expect(phone.locator("#join-text")).toHaveText(`localhost:5173/talks, code ${code}`);
+  await phone.locator("#more-close").click();
+
+  // On the room's computer: the code, and nothing else. The slides arrive through the relay.
+  const room = await browser.newPage();
+  const frames: (string | Buffer)[] = [];
+  room.on("websocket", (ws) => {
+    if (ws.url().includes(":8787")) ws.on("framereceived", (f) => frames.push(f.payload));
   });
-  await solo.goto("./");
-  await solo.locator("#file").setInputFiles("fixtures/overlays.pdf");
-  await expect(solo.locator("#phone-status")).toHaveText("A PDF from this device: other devices can't join.");
-  await solo.locator("#presenter").click();
-  await expect(solo.locator("#link")).toHaveText("No slides screen yet · this device only");
-  await solo.locator("#next").click();
-  await expect(solo.locator("#frame-line")).toHaveText("Frame 2 of 9");
-  await solo.locator("#t-more").click();
-  await solo.locator("#end-talk").click();
-  await solo.locator("#end-yes").click();
-  await expect(solo.locator("#code")).toBeVisible();
-  expect(requests).toEqual([]); // nothing was sent anywhere
-  expect(await solo.evaluate(() => localStorage.getItem("lectern.savedTalks"))).toBeNull();
+  await room.goto("./");
+  await room.locator("#code").fill(code);
+  await room.locator("#code").press("Enter");
+  await expect(room.locator("#ready")).toBeVisible({ timeout: 15_000 });
+  await expect(room.locator("#deck-title")).toHaveText(/.+/);
+  await expect(room.locator("#deck-summary")).toHaveText("9 frames, 23 pages");
+  await expect(room.locator("#talk-status")).toContainText(`open on 1 other device, at frame ${frame}`);
+  await expect(room.locator("#join-code")).toHaveText(code);
+  // Only ciphertext crossed: no PDF header, in the clear or in base64.
+  const wire = Buffer.concat(frames.map((f) => (typeof f === "string" ? Buffer.from(f) : f))).toString("latin1");
+  expect(frames.length).toBeGreaterThan(1);
+  expect(wire).not.toContain("%PDF");
+  expect(wire).not.toContain("JVBERi");
+
+  await room.locator("#start").click();
+  await expect.poll(() => roomPage(room)).toBe(2);
+  await expect(phone.locator("#link")).toHaveText("Slides showing · 2 devices");
+  await phone.locator("#next").click();
+  await expect.poll(() => roomPage(room)).toBe(3);
+  expect(await room.evaluate(() => localStorage.length + sessionStorage.length)).toBe(0);
+
+  // A third device joins while the slides screen runs the talk: that one sends the slides.
+  const laptop = await (await browser.newContext({ viewport: LAPTOP })).newPage();
+  await laptop.goto("./");
+  await laptop.locator("#code").fill(code);
+  await laptop.locator("#code").press("Enter");
+  await laptop.locator("#presenter").click();
+  await expect(laptop.locator("#link")).toHaveText("Slides showing · 3 devices");
+  await expect.poll(() => viewHook(laptop, (h) => h.shownPage())).toBe(3);
+
+  // A code nobody is using says so, after a moment of looking.
+  const stray = await browser.newPage();
+  await stray.goto("./");
+  await stray.locator("#code").fill("nobody-has-this");
+  await stray.locator("#code").press("Enter");
+  await expect(stray.locator("#status")).toHaveText("Looking for the talk on another device…");
+  await expect(stray.locator("#status")).toHaveText("No talk found for that code.", { timeout: 10_000 });
+
+  expect(await phone.evaluate(() => localStorage.getItem("lectern.savedTalks"))).toBeNull();
+  await stray.close();
+  await laptop.context().close();
+  await room.close();
   await context.close();
 });
 
@@ -666,12 +716,12 @@ test("each device chooses what it shows, and can change its mind without leaving
   await page.keyboard.press("ArrowRight"); // its keys drive the talk through the first screen
   await expect.poll(() => roomPage(room)).toBe(3);
 
-  // A deck opened from a file has no code, so there is nothing to join from elsewhere.
+  // A deck opened from a file is given a code of its own.
   const other = await context.newPage();
   await other.goto("./");
   await other.locator("#file").setInputFiles("fixtures/overlays.pdf");
   await expect(other.locator("#ready")).toBeVisible();
-  await expect(other.locator("#phone-status")).toHaveText("A PDF from this device: other devices can't join.");
+  await expect(other.locator("#join-code")).toBeVisible(); // a code made for this talk
   await context.close();
   await room.close();
 });

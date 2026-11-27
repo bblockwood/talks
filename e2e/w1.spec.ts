@@ -61,10 +61,12 @@ test("presents a deck: builds, frames, jump by number, back", async ({ page }) =
   await expect(page.locator("#deck-summary")).toHaveText("9 frames, 23 pages");
   await start(page);
 
-  // Full screen, entry screen gone, nothing but the canvas in the audience view.
+  // Full screen, entry screen gone, nothing to see but the canvas in the audience view.
   expect(await page.evaluate(() => document.fullscreenElement?.id)).toBe("audience");
   await expect(page.locator("#entry")).toBeHidden();
-  expect(await page.locator("#audience > *").count()).toBe(1);
+  expect(await page.locator("#audience > canvas").count()).toBe(1);
+  await page.mouse.move(300, 300);
+  await expect(page.locator("#audience .fs-button")).toBeHidden(); // only offered out of full screen
 
   // A 4:3 deck on a 16:9 screen: white slide in the middle, black pillarbox at the edge.
   const first = await sample(page);
@@ -243,6 +245,26 @@ test("when full screen is refused, offers to present in the window; resizing kee
   await expect.poll(async () => (await sample(page)).width).toBe(900);
   await expect.poll(async () => (await sample(page)).centre).toBeGreaterThan(150); // a slide, not a blank
   expect(await shown(page)).toBe(0);
+
+  // In the window, keys only drive the slides: none of them asks for full screen again. The way
+  // back is a button that shows while the mouse moves and goes when it stops, like the cursor.
+  await page.evaluate(() => {
+    (window as unknown as { __asked: number }).__asked = 0;
+    Element.prototype.requestFullscreen = () => {
+      (window as unknown as { __asked: number }).__asked += 1;
+      return Promise.reject(new TypeError("blocked by policy"));
+    };
+  });
   await page.keyboard.press("ArrowRight");
   await expect.poll(() => shown(page)).toBe(1);
+  await page.keyboard.press("Space");
+  await expect.poll(() => shown(page)).toBe(2);
+  expect(await page.evaluate(() => (window as unknown as { __asked: number }).__asked)).toBe(0);
+  await page.mouse.move(200, 200);
+  await page.mouse.move(260, 240);
+  await expect(page.locator("#audience .fs-button")).toBeVisible();
+  await page.locator("#audience .fs-button").click();
+  expect(await page.evaluate(() => (window as unknown as { __asked: number }).__asked)).toBe(1);
+  expect(await shown(page)).toBe(2); // the click did not also step
+  await expect(page.locator("#audience .fs-button")).toBeHidden({ timeout: 4000 });
 });

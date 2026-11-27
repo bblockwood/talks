@@ -77,6 +77,8 @@ export interface ConsoleOptions {
   onLeave(): void;
   /** The room PC has a newer publish of this deck and the user asked to reload. Absent where that can't happen. */
   onReload?: () => void;
+  /** How another device joins, when that can be shown: "code maple". */
+  readonly joinHint?: string;
   /** Swap displays: only the second window of two-screen mode can do this. */
   onSwap?: () => void;
   /** Go back to choosing what this device shows, without leaving the talk. */
@@ -487,8 +489,11 @@ export class PresenterConsole {
     $("count-down").classList.toggle("on", countdown !== null);
     $<HTMLInputElement>("count-from").disabled = !live;
 
-    $("row-swap").hidden = !this.options.onSwap;
+    $("swap").hidden = !this.options.onSwap;
     $("row-view").hidden = !this.options.onChangeView;
+    $("row-join").hidden = this.client.kind === "local";
+    const where = `${window.location.host}${import.meta.env.BASE_URL.replace(/\/$/, "")}`;
+    $("join-text").textContent = `${where}, ${this.options.joinHint ?? "with the same talk code"}`;
 
     $("digits").textContent = this.keys.typedDigits === "" ? "" : `Go to frame ${this.keys.typedDigits}⏎`;
     if (this.overviewOpen) this.markThumbs();
@@ -519,7 +524,9 @@ export class PresenterConsole {
     } else {
       const others = count > 1 ? ` · ${count} devices` : "";
       const alone = room?.relay === "none" ? " · this device only" : room?.relay !== "connected" && this.client.hosting ? " · offline" : "";
-      text = screens > 0 ? `Slides showing${screens > 1 ? ` on ${screens} screens` : ""}${others}${alone}` : `No slides screen yet${others}${alone}`;
+      // With no screen showing the slides, say how one joins.
+      const join = this.options.joinHint && room?.relay === "connected" ? ` · join with ${this.options.joinHint}` : "";
+      text = screens > 0 ? `Slides showing${screens > 1 ? ` on ${screens} screens` : ""}${others}${alone}` : `No slides screen yet${others}${alone}${join}`;
       cls = screens > 0 ? "ok" : "wait";
     }
     if (link.textContent !== text) link.textContent = text;

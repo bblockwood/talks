@@ -7,6 +7,7 @@ import { Peer } from "../core/peer";
 import { randomSid } from "../core/protocol";
 import type { Envelope, RoomInfo } from "../core/protocol";
 import type { Deck } from "./deck";
+import { sendDeck } from "./deck-share";
 import type { PresenterDeck } from "./local-channel";
 import { RELAY_URL, RelayClient, deviceName } from "./relay-client";
 import type { LinkStatus } from "./relay-client";
@@ -20,8 +21,15 @@ export interface TalkSource {
   readonly targetMs: number | null;
   /** `meta.published` of this copy of the deck; empty for a PDF opened from disk. */
   readonly published: string;
-  /** Null for a PDF opened from disk: the talk then lives on this device alone. */
+  /** Null when there is no way to reach other devices: the talk then lives on this device alone. */
   readonly keys: TalkKeys | null;
+  /**
+   * For a talk started from a PDF on one device: the code made for it, which is shown so other
+   * devices can join. Null for a published talk, whose code is never displayed.
+   */
+  readonly joinCode: string | null;
+  /** True on the device where such a talk started. */
+  readonly originator: boolean;
 }
 
 /** What the slides screen gives the talk while it is showing. */
@@ -49,6 +57,8 @@ export class Talk {
   private readonly relay: RelayClient | null;
   private readonly listeners = new Set<(envelope: Envelope) => void>();
   private readonly statusListeners = new Set<(status: LinkStatus) => void>();
+  /** Devices currently being sent the slides. */
+  private readonly sending = new Set<string>();
   private readonly ticker: number;
   private closed = false;
 
@@ -67,7 +77,7 @@ export class Talk {
         },
         linksFor: (page) => deck.linksNow(page),
       },
-      { sid: this.sid, device: deviceName(), deckPublished: source.published, targetMs: source.targetMs, networked },
+      { sid: this.sid, device: deviceName(), deckPublished: source.published, targetMs: source.targetMs, networked, originator: source.originator },
       {
         now: () => Date.now(),
         transmit: (message, to) => this.relay?.send(message, to) ?? 0,
@@ -88,7 +98,10 @@ export class Talk {
             roomId: source.keys.roomId,
             channelKey: source.keys.channelKey,
             sid: this.sid,
-            onMessage: (envelope) => this.peer.receive(envelope),
+            onMessage: (envelope) => {
+              if (envelope.type === "deck-request") this.shareDeck(envelope.sid);
+              else if (envelope.type !== "deck-info" && envelope.type !== "deck-chunk") this.peer.receive(envelope);
+            },
             onStatus: (status) => this.setRelayStatus(status),
           })
         : null;
@@ -103,6 +116,17 @@ export class Talk {
     if ((status === "connected") !== (was === "connected")) this.peer.online(status === "connected");
     for (const listener of [...this.statusListeners]) listener(status);
     this.onNews?.();
+  }
+
+  /**
+   * A device joining by code has no slides (the talk started from a PDF, not a published deck).
+   * The device that runs the talk sends them; one that follows another leaves it to that one.
+   */
+  private shareDeck(to: string): void {
+    const relay = this.relay;
+    if (this.closed || !relay || this.peer.following || this.sending.has(to)) return;
+    this.sending.add(to);
+    void sendDeck((message) => relay.send(message), this.source.pdf, this.source.title, to).finally(() => this.sending.delete(to));
   }
 
   /** Every message from whoever hosts the talk, for a view on this device. Returns the way to stop. */

@@ -12,11 +12,13 @@ import { LocalClient, TalkClient } from "../console/client";
 import { PresenterConsole, layoutFor } from "../console/console";
 import { forget, loadNotesSize, loadSaved, remember, saveNotesSize } from "../console/saved";
 import { DeckError, openDeck } from "../shared/deck";
+import { makeJoinCode, receiveDeck } from "../shared/deck-share";
 import { NetworkError, NoTalkError, fetchDeck } from "../shared/fetch-deck";
 import { SWAP_MESSAGE, channelNameFromHash } from "../shared/local-channel";
 import type { PresenterDeck } from "../shared/local-channel";
 import { registerServiceWorker } from "../shared/register-sw";
 import { RenderCache } from "../shared/render-cache";
+import { SlideSurface } from "../shared/slide-surface";
 import { Talk } from "../shared/talk";
 import type { TalkSource } from "../shared/talk";
 import { LocalHub } from "./local-hub";
@@ -46,6 +48,8 @@ let talk: Talk | null = null;
 let cache: RenderCache | null = null;
 let presentation: Presentation | null = null;
 let active: PresenterConsole | null = null;
+/** The slide shown on the page where a view is chosen. */
+let preview: SlideSurface | null = null;
 /** The code of the open talk, in memory only, so a republished deck can be fetched again. */
 let currentCode = "";
 /** True on the presenter's own device (the talk is remembered here): only then are preferences stored. */
@@ -63,19 +67,14 @@ function setStatus(text: string, error = false): void {
 
 // ---------------------------------------------------------------- two screens (SPEC §5.2)
 
-const modeB = $<HTMLInputElement>("mode-b");
 const twoScreensPossible = (): boolean => typeof window.getScreenDetails === "function" && window.screen.isExtended === true;
 
-function showModes(): void {
+/** "Both views" needs two screens the browser can tell apart; mirrored displays look like one. */
+function showBoth(): void {
   const possible = twoScreensPossible();
-  $("modes").hidden = !possible;
-  // Mirrored displays look like a single screen to the browser, so only one screen can be offered.
-  $("mirror-note").hidden = possible || typeof window.getScreenDetails !== "function" || layoutFor(window.innerWidth, window.innerHeight) !== "wide";
-  if (!possible) {
-    modeB.checked = false;
-    $<HTMLInputElement>("mode-a").checked = true;
-  }
-  $("mode-b-panel").hidden = !modeB.checked;
+  $<HTMLButtonElement>("both").disabled = !possible;
+  $("mirror-note").hidden = possible || layoutFor(window.innerWidth, window.innerHeight) !== "wide";
+  $("both-panel").hidden = !possible || !screens;
 }
 
 function listScreens(): void {
@@ -105,16 +104,17 @@ async function detectScreens(): Promise<boolean> {
     screens = await window.getScreenDetails();
   } catch {
     screens = null;
-    $("screens-status").textContent = "The browser did not allow window management, so the other screen can't be used. Choose “This screen”.";
+    setStatus("The browser did not allow window management, so both views can't be placed. Choose one view for this screen.", true);
     return false;
   }
   if (screens.screens.length < 2) {
-    $("screens-status").textContent = "Only one screen was found. If a projector is attached, it is mirroring this screen.";
+    setStatus("Only one screen was found. If a projector is attached, it is mirroring this screen.", true);
     screens = null;
     return false;
   }
-  $("screens-status").textContent = "The presenter view will open on the screen the slides are not on.";
+  $("screens-status").textContent = "The presenter view goes on the screen the slides are not on. Swap displays, in the presenter view, exchanges them.";
   listScreens();
+  showBoth();
   return true;
 }
 
@@ -146,6 +146,8 @@ function showSplit(): void {
 function applySplit(split: NotesSplit | null): void {
   if (!talk || !cache) return;
   talk.deck.setSplit(split);
+  document.documentElement.style.setProperty("--slide-aspect", String(talk.deck.aspect));
+  preview?.refresh();
   cache.invalidate();
   cache.want([0, 1, 2].filter((p) => p < (talk?.deck.pageCount ?? 0)));
   showSummary();
@@ -176,14 +178,23 @@ function showTalkStatus(): void {
   } else {
     line.textContent = "";
   }
+  // The slide the talk is on, or the first one.
+  const page = heard?.page ?? talk.peer.viewState()?.committedPage ?? 0;
+  preview?.show(Math.min(page, talk.deck.pageCount - 1));
+
   const phone = $("phone-status");
   const canJoin = talk.relayStatus === "connected";
-  phone.textContent =
-    talk.relayStatus === "none"
-      ? "A PDF from this device: other devices can't join."
-      : canJoin
-        ? `Other devices join with the same code at ${window.location.host}${import.meta.env.BASE_URL.replace(/\/$/, "")}`
-        : "Not connected: other devices can't join right now.";
+  const joinCode = talk.source.joinCode;
+  phone.replaceChildren();
+  if (talk.relayStatus === "none") phone.textContent = "Other devices can't join: this build has no relay.";
+  else if (!canJoin) phone.textContent = "Not connected: other devices can't join right now.";
+  else if (joinCode) {
+    // A talk started from a PDF: its code was made for it and is shown, so another device can join.
+    const code = document.createElement("strong");
+    code.id = "join-code";
+    code.textContent = joinCode;
+    phone.append("Other devices join with the code ", code, ` at ${window.location.host}${import.meta.env.BASE_URL.replace(/\/$/, "")}`);
+  } else phone.textContent = `Other devices join with the same code at ${window.location.host}${import.meta.env.BASE_URL.replace(/\/$/, "")}`;
   phone.classList.toggle("ok", canJoin);
   phone.classList.toggle("off", !canJoin);
   showSplit();
@@ -197,13 +208,15 @@ function showReady(): void {
   fsProblem.hidden = true;
   $("deck-title").textContent = talk.source.title;
   showSummary();
-  showModes();
+  showBoth();
   setStatus("");
   // On a phone the presenter view is the likely choice; on a computer, either.
   const small = layoutFor(window.innerWidth, window.innerHeight) !== "wide";
   presenterButton.classList.toggle("primary", small);
   startButton.classList.toggle("primary", !small);
   ready.hidden = false;
+  document.documentElement.style.setProperty("--slide-aspect", String(talk.deck.aspect));
+  preview ??= new SlideSurface($("preview"), talk.deck, 2);
   showTalkStatus();
   (small ? presenterButton : startButton).focus();
 }
@@ -251,10 +264,16 @@ function showChooser(message = "", error = false): void {
 
 // ---------------------------------------------------------------- opening and leaving a talk
 
+function closePreview(): void {
+  preview?.destroy();
+  preview = null;
+}
+
 /** Leaves the talk on this device and drops everything decrypted. The talk goes on for the others. */
 async function dropTalk(): Promise<void> {
   active?.destroy();
   active = null;
+  closePreview();
   const old = talk;
   talk = null;
   currentCode = "";
@@ -282,6 +301,8 @@ interface Loaded {
   targetMs: number | null;
   published: string;
   keys: TalkSource["keys"];
+  joinCode: string | null;
+  originator: boolean;
 }
 
 /** `source` yields the PDF and what came with it; it may set the status line while it works. */
@@ -309,11 +330,14 @@ async function load(source: () => Promise<Loaded>): Promise<boolean> {
     talk = new Talk({
       deck,
       pdf: copy,
-      title: loaded.title ?? deck.title ?? "Untitled",
+      // A PDF's own title comes first; one opened from this device is otherwise known by its file name.
+      title: loaded.originator ? deck.title || loaded.title || "Untitled" : (loaded.title ?? deck.title ?? "Untitled"),
       notes: loaded.notes,
       targetMs: loaded.targetMs,
       published: loaded.published,
       keys: loaded.keys,
+      joinCode: loaded.joinCode,
+      originator: loaded.originator,
     });
     talk.onNews = showTalkStatus;
     talk.onEnd = leave; // someone ended the talk for every device
@@ -332,28 +356,44 @@ async function load(source: () => Promise<Loaded>): Promise<boolean> {
   }
 }
 
+const NO_NOTES: TalkSource["notes"] = { noteOverrides: [], pdfpcText: null, pptxNotes: [] };
+
 /** `own` is true when the talk is, or is to be, remembered on this device. */
 function openByCode(rawCode: string, own: boolean, then?: () => void): void {
   const code = normalizeCode(rawCode);
   if (code === "") return;
+  let published = true;
   void load(async () => {
-    const { payload, keys } = await fetchDeck(code, import.meta.env.BASE_URL, (step) => setStatus(step === "unlocking" ? "Unlocking…" : "Loading slides…"));
-    const pdfpcText = payload.pdfpc ? strFromU8(payload.pdfpc) : null;
-    if (own) remember(code, payload.meta.title || code);
-    return {
-      // Copy the PDF out of the payload so the rest of it can be collected; PDF.js takes the copy.
-      pdf: payload.pdf.slice().buffer,
-      title: payload.meta.title || null,
-      notes: { noteOverrides: payload.meta.noteOverrides, pdfpcText, pptxNotes: payload.notes?.pages ?? [] },
-      targetMs: targetDurationMs(pdfpcText ? parsePdfpc(pdfpcText) : null, payload.meta.settings.targetDuration),
-      published: payload.meta.published,
-      keys,
-      ...(payload.meta.settings.notesSplit !== undefined ? { storedSplit: payload.meta.settings.notesSplit } : {}),
-    };
+    try {
+      const { payload, keys } = await fetchDeck(code, import.meta.env.BASE_URL, (step) => setStatus(step === "unlocking" ? "Unlocking…" : "Loading slides…"));
+      const pdfpcText = payload.pdfpc ? strFromU8(payload.pdfpc) : null;
+      if (own) remember(code, payload.meta.title || code);
+      return {
+        // Copy the PDF out of the payload so the rest of it can be collected; PDF.js takes the copy.
+        pdf: payload.pdf.slice().buffer,
+        title: payload.meta.title || null,
+        notes: { noteOverrides: payload.meta.noteOverrides, pdfpcText, pptxNotes: payload.notes?.pages ?? [] },
+        targetMs: targetDurationMs(pdfpcText ? parsePdfpc(pdfpcText) : null, payload.meta.settings.targetDuration),
+        published: payload.meta.published,
+        keys,
+        joinCode: null,
+        originator: false,
+        ...(payload.meta.settings.notesSplit !== undefined ? { storedSplit: payload.meta.settings.notesSplit } : {}),
+      };
+    } catch (e) {
+      // Nothing is published under this code. It may be a talk another device started from a
+      // PDF: ask the devices in it for the slides.
+      if (!(e instanceof NoTalkError) || !e.keys) throw e;
+      published = false;
+      setStatus("Looking for the talk on another device…");
+      const got = await receiveDeck(e.keys, (fraction) => setStatus(`Receiving slides… ${Math.round(fraction * 100)}%`));
+      return { pdf: got.pdf, title: got.title || null, notes: NO_NOTES, targetMs: null, published: "", keys: e.keys, joinCode: code, originator: false };
+    }
   }).then((ok) => {
     if (!ok) return;
-    currentCode = code;
-    ownDevice = own;
+    // A code made for one talk is not worth remembering or reloading by.
+    currentCode = published ? code : "";
+    ownDevice = own && published;
     then?.();
   });
 }
@@ -361,10 +401,10 @@ function openByCode(rawCode: string, own: boolean, then?: () => void): void {
 function openPdf(pdf: () => Promise<ArrayBuffer>, name: string): void {
   void load(async () => {
     setStatus("Opening…");
-    return { pdf: await pdf(), title: null, notes: { noteOverrides: [], pdfpcText: null, pptxNotes: [] }, targetMs: null, published: "", keys: null };
-  }).then((ok) => {
-    // A PDF with no title of its own is shown by its file name.
-    if (ok && talk && !talk.deck.title) $("deck-title").textContent = name;
+    const bytes = await pdf();
+    // A code for this talk, so another device can join it and be sent the slides.
+    const { code, keys } = await makeJoinCode();
+    return { pdf: bytes, title: name, notes: NO_NOTES, targetMs: null, published: "", keys, joinCode: code, originator: true };
   });
 }
 
@@ -375,6 +415,7 @@ function showPresenter(): void {
   if (!current || active || presentation) return;
   entry.hidden = true;
   consoleEl.hidden = false;
+  closePreview();
   const code = currentCode;
   const own = ownDevice;
   active = new PresenterConsole(
@@ -386,6 +427,7 @@ function showPresenter(): void {
       ownsDeck: false,
       loadNotesSize: () => (own ? loadNotesSize() : null),
       saveNotesSize,
+      ...(current.source.joinCode ? { joinHint: `code ${current.source.joinCode}` } : {}),
       onLeave: leave,
       onChangeView: () => {
         active?.destroy();
@@ -407,13 +449,16 @@ function showPresenter(): void {
 // ---------------------------------------------------------------- the slides
 
 // Called straight from the click handlers: full screen needs the user gesture.
-function start(fullscreen: boolean): void {
+function start(fullscreen: boolean, both = false): void {
   const current = talk;
   if (!current || !cache || starting || active || presentation) return;
-  const twoScreens = fullscreen && modeB.checked && twoScreensPossible();
+  const twoScreens = fullscreen && both && twoScreensPossible();
   if (twoScreens && !screens) {
     // The permission prompt uses up the click, so choosing screens and starting are two clicks.
-    void detectScreens().then((ok) => setStatus(ok ? "Screens found. Check the choice above, then click Show slides." : ""));
+    setStatus("Your browser asks to manage windows: click Allow.");
+    void detectScreens().then((ok) => {
+      if (ok) setStatus("Screens found. Check the choice above, then click Both views again.");
+    });
     return;
   }
   const placement = twoScreens ? chosenScreens() : null;
@@ -431,6 +476,7 @@ function start(fullscreen: boolean): void {
     }
     presentation = started;
     entry.hidden = true;
+    closePreview();
     if (placement) {
       // The presenter view opens on the other screen from the same click, right after full screen
       // is granted. If the browser blocks it, this device simply shows the slides.
@@ -525,9 +571,7 @@ fileInput.addEventListener("change", () => {
 startButton.addEventListener("click", () => start(document.fullscreenEnabled));
 presenterButton.addEventListener("click", showPresenter);
 $("start-windowed").addEventListener("click", () => start(false));
-$("mode-a").addEventListener("change", showModes);
-modeB.addEventListener("change", showModes);
-$("detect-screens").addEventListener("click", () => void detectScreens());
+$("both").addEventListener("click", () => start(document.fullscreenEnabled, true));
 $("split-toggle").addEventListener("click", () => applySplit(talk?.deck.split ? null : suggestedSplit));
 $("another").addEventListener("click", leave);
 // Closing the tab: tell the others, so one of them carries the talk on at once.

@@ -731,3 +731,30 @@ Against `https://benlockwood.com/talks/` and the deployed relay, with a throwawa
 - A third page was told the talk was open on 2 other devices and at which frame; **Show slides** took the talk over on that slide, and its own arrow key then moved all three.
 - Esc twice on the slides page returned it to the code page; the laptop was running the talk again 0.8 s later.
 - **End talk** on the phone returned the phone and the laptop to the start page. No page errors.
+
+## W7.1. Changes from Ben's W7 tests (2026-11-27)
+
+Ben: "Looks good", with five requests. Done:
+
+1. **A PDF opened on a device gets a join code.** The page makes a one-word code for that talk and shows it: on the page where the view is chosen, in the presenter view's top line while no screen shows slides ("No slides screen yet · join with code maple"), and under More. A device that enters that code is sent the PDF through the relay, in 40 KB pieces, encrypted with the key the code gives (`src/shared/deck-share.ts`, messages `deck-request`, `deck-info`, `deck-chunk`). The device running the talk sends; any device that has the slides can, so later joiners are served by whoever runs the talk then. Nothing is stored anywhere. The relay is unchanged.
+2. **A preview** of the first slide (or the slide a running talk is on) on the page where the view is chosen.
+3. **Three choices:** Audience view, Presenter view, Both views. Both views asks for the screens (first click: the browser's permission), lists them with the projector preselected, and starts on the second click. It is greyed out, with a line saying why, when there is one screen or the browser can't do it.
+4. **Swap displays** is a button at the bottom right of the presenter view whenever it applies, no longer under More.
+5. **Out of full screen, keys only drive the slides.** Nothing re-enters full screen by itself. A "Full screen" button at the top right of the windowed slides shows while the mouse moves and hides when it stops, like the cursor.
+
+Verification: build; 290 unit tests; 40 e2e tests (new: a PDF talk joined by code from two more devices, with a check that no PDF bytes cross the relay unencrypted; the windowed slides and their button).
+
+### Known issues
+
+- A joining device waits about 4 seconds before "No talk found for that code" when the code is wrong, because it first asks whether another device has that talk.
+- A join code is one random word from 1,296, as Ben prefers short codes; it lives only while the talk does. In the unlikely case that it equals a published talk's code, a joining device would get the published talk.
+- Sending is paced at 1.6 MB a second, so a 10 MB deck takes about 6 seconds to reach a joining device.
+- Speaker notes are not sent with a PDF talk (a PDF opened from a device has none besides those inside the PDF, which travel with it).
+- No QR code yet: it needs a small library, or my own encoder. Ask if wanted.
+
+### Ben checklist: W7.1
+
+1. Phone: open `/talks`, choose **open a PDF from this device**. The page shows the first slide and "Other devices join with the code …". Tap **Presenter view**: the top line shows the code.
+2. Room computer (or laptop): open `/talks`, type that code. After "Receiving slides… %" the same page appears. Click **Audience view**. The phone should say "Slides showing · 2 devices" and drive it.
+3. Laptop with second display: open a talk, click **Both views** (twice the first time). Check **Swap displays** at the bottom right of the presenter view.
+4. On the slides window, leave full screen (Esc, or the green button on a Mac). Arrow keys should step without going back to full screen. Move the mouse: **Full screen** appears top right; click it.

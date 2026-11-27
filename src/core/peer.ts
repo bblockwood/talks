@@ -85,6 +85,8 @@ export interface PeerOptions {
   readonly device: string;
   readonly deckPublished: string;
   readonly targetMs: number | null;
+  /** True when the talk starts on this device (a PDF opened here): there is nobody to listen for. */
+  readonly originator?: boolean;
 }
 
 interface Followed extends HostClaim {
@@ -141,6 +143,10 @@ export class Peer {
   }
   get hosting(): boolean {
     return this.sessionHost !== null;
+  }
+  /** True when another device runs the talk, as far as this one knows. */
+  get following(): boolean {
+    return this.sessionHost === null && this.followed !== null;
   }
   /** The session id messages must quote, once known. */
   get session(): string | undefined {
@@ -416,7 +422,9 @@ export class Peer {
     }
     // Nobody heard yet: listen for a moment after connecting, then start the talk here. Without
     // a connection, a networked talk waits a little longer for one; a local talk does not wait.
-    const waited = this.onlineSince !== null ? now - this.onlineSince >= JOIN_WAIT_MS : !this.networked || now - this.createdAt >= 2 * JOIN_WAIT_MS;
+    const waited =
+      this.options.originator === true ||
+      (this.onlineSince !== null ? now - this.onlineSince >= JOIN_WAIT_MS : !this.networked || now - this.createdAt >= 2 * JOIN_WAIT_MS);
     if (waited) this.becomeHost();
   }
 

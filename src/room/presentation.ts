@@ -60,6 +60,21 @@ export class Presentation {
     this.view = new AudienceView(root, cache, deck);
     this.view.onLink = (page, index) => this.dispatch({ name: "followLink", page, index }, performance.now());
 
+    // Out of full screen, the slides stay in the window and every key still just drives them
+    // (Ben, 2026-11-27). The way back is a button that shows only while the mouse is moving,
+    // like the cursor, so nothing sits on top of the slides.
+    const back = document.createElement("button");
+    back.type = "button";
+    back.className = "fs-button";
+    back.textContent = "Full screen";
+    back.addEventListener("click", (ev) => {
+      ev.stopPropagation();
+      back.blur();
+      void root.requestFullscreen({ navigationUI: "hide" }).catch(() => {});
+    });
+    root.append(back);
+    this.showWindowed();
+
     window.addEventListener("keydown", this.onKeyDown, { capture: true });
     window.addEventListener("keyup", this.onKeyUp, { capture: true });
     document.addEventListener("fullscreenchange", this.onFullscreenChange);
@@ -179,12 +194,6 @@ export class Presentation {
     );
     if (result.handled) ev.preventDefault();
 
-    // If the browser dropped out of full screen (a stray Esc where keyboard lock isn't available),
-    // any other key press is a user gesture that lets us go straight back in.
-    if (this.options.fullscreen && !document.fullscreenElement && ev.key !== "Escape" && !result.end) {
-      void this.root.requestFullscreen({ navigationUI: "hide" }).catch(() => {});
-    }
-
     if (result.end) void this.end();
     else if (result.command) this.dispatch(result.command, ev.timeStamp);
   };
@@ -193,7 +202,16 @@ export class Presentation {
     if (ev.key === "Escape") this.escapeDown = false;
   };
 
+  /** Marks the slides as windowed or not, and on leaving full screen shows the way back for a moment. */
+  private showWindowed(): void {
+    const windowed = document.fullscreenElement !== this.root && document.fullscreenEnabled;
+    const was = this.root.classList.contains("windowed");
+    this.root.classList.toggle("windowed", windowed);
+    if (windowed && !was) this.view.wake();
+  }
+
   private readonly onFullscreenChange = (): void => {
+    this.showWindowed();
     if (document.fullscreenElement === this.root) {
       void this.lockKeyboard();
       return;

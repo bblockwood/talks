@@ -34,14 +34,40 @@ kbd {
   margin: 1.2rem 0 0.4rem;
 }
 .views button {
-  flex: 1 1 12rem;
-  font-size: 1.15rem;
-  padding: 0.9rem 0.6rem;
+  flex: 1 1 9rem;
+  font-size: 1.1rem;
+  padding: 0.8rem 0.6rem;
 }
-.views-hint {
-  font-size: 0.85rem;
+.views button small {
+  display: block;
+  font-size: 0.75rem;
+  font-weight: 400;
+  opacity: 0.8;
+  margin-top: 0.2rem;
+}
+.views-head {
+  margin: 1.2rem 0 -0.7rem;
   color: var(--muted);
-  margin: 0 0 1rem;
+  font-size: 0.9rem;
+}
+/* The first slide, or the one the talk is on, so it is plain which deck this is. */
+.preview {
+  width: 100%;
+  max-width: 22rem;
+  aspect-ratio: var(--slide-aspect, 16 / 9);
+  margin: 0.8rem 0;
+  border: 1px solid var(--line);
+}
+/* Windowed slides: a way back to full screen, shown only while the mouse is moving, like the cursor. */
+.audience .fs-button {
+  position: absolute;
+  top: 0.8rem;
+  right: 0.8rem;
+  display: none;
+  opacity: 0.85;
+}
+.audience.windowed:not(.cursor-hidden) .fs-button {
+  display: block;
 }
 .talk-status {
   font-size: 0.9rem;
