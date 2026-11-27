@@ -721,3 +721,13 @@ Everything is at `benlockwood.com/talks` now. About 20 minutes; a laptop, a phon
 11. Close the slides screen's browser tab outright. The phone should take over within about 10 seconds.
 
 Results in `docs/spikes/W7.md`, please.
+
+### Live check (2026-11-27)
+
+Against `https://benlockwood.com/talks/` and the deployed relay, with a throwaway deck (published, then revoked), in headless Chromium, three "devices":
+
+- A laptop-sized page opened the talk first in presenter view: "No slides screen yet", clock at 30:00 and not running until the first step.
+- A phone-sized page arriving through the old `/talks/present` address joined it on the same slide and drove it (tap → slide 61 ms).
+- A third page was told the talk was open on 2 other devices and at which frame; **Show slides** took the talk over on that slide, and its own arrow key then moved all three.
+- Esc twice on the slides page returned it to the code page; the laptop was running the talk again 0.8 s later.
+- **End talk** on the phone returned the phone and the laptop to the start page. No page errors.
