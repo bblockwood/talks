@@ -749,8 +749,24 @@ test("slides shown on a touch screen are run by touch: tap, swipe either way, li
   await expect(pad.locator(".aud-bar")).toBeHidden();
   await pad.waitForTimeout(400);
   expect(await roomPage(pad)).toBe(here);
+  // Laser, from the bar: a finger that drags points, but a quick tap still advances and two
+  // still bring the bar back, so the laser never traps the screen.
   await tap(600, 300);
   await tap(600, 300);
+  await pad.locator(".aud-laser").tap();
+  expect(await roomHook(pad, (h) => h.tool())).toBe("laser");
+  await expect(pad.locator(".aud-bar")).toBeHidden({ timeout: 4000 });
+  await tap(900, 700);
+  await expect.poll(() => roomPage(pad)).toBe((here ?? 0) + 1);
+  await touch.send("Input.dispatchTouchEvent", { type: "touchStart", touchPoints: at(500, 400) });
+  for (const x of [540, 600, 680, 760]) await touch.send("Input.dispatchTouchEvent", { type: "touchMove", touchPoints: at(x, 400) });
+  await expect.poll(() => roomHook(pad, (h) => h.pointerVisible())).toBe(true);
+  await touch.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
+  await pad.waitForTimeout(400);
+  expect(await roomPage(pad)).toBe((here ?? 0) + 1); // the drag was not a swipe
+  await tap(600, 300);
+  await tap(600, 300);
+  await expect(pad.locator(".aud-bar")).toBeVisible();
   await pad.locator(".aud-exit").tap();
   await expect(pad.locator("#ready")).toBeVisible();
   await expect(pad.locator("#end-all")).toBeVisible();
@@ -768,9 +784,12 @@ test("one device, one screen: the slides are run from the slides, with the prese
   await expect(page.locator(".aud-bar")).toBeHidden();
   await expect(page.locator(".aud-overlay")).toHaveCount(0);
 
-  // A click on the slide advances; Shift+arrows step by frame.
+  // A click on the slide advances; one on the black above it does not. Shift+arrows step by frame.
   await page.mouse.click(640, 300);
   await expect.poll(() => roomPage(page)).toBe(1);
+  await page.mouse.click(640, 15);
+  await page.waitForTimeout(200);
+  expect(await roomPage(page)).toBe(1);
   await page.keyboard.press("Shift+ArrowRight");
   await expect.poll(() => roomPage(page)).toBe(2);
 
@@ -813,9 +832,13 @@ test("one device, one screen: the slides are run from the slides, with the prese
   await page.mouse.up();
   await expect.poll(() => roomHook(page, (h) => h.inkShown())).toBe(1);
   expect(await roomPage(page)).toBe(2);
-  // The mouse at the bottom edge brings up the bar: tools lit as in the presenter view, Back after the jump.
-  await page.mouse.move(640, 799);
+  // While the mouse moves, a small Menu button shows at the bottom left; it brings up the bar:
+  // tools lit as in the presenter view, Forward after the jump.
+  await page.mouse.move(640, 500);
+  await expect(page.locator(".aud-menu")).toBeVisible();
+  await page.locator(".aud-menu").click();
   await expect(page.locator(".aud-bar")).toBeVisible();
+  await expect(page.locator(".aud-menu")).toBeHidden();
   await expect(page.locator(".aud-draw")).toHaveClass(/on/);
   await expect(page.locator(".aud-drawbar")).toBeVisible();
   await expect(page.locator(".aud-forward")).toHaveText("6 →");

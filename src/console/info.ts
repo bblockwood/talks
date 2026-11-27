@@ -53,7 +53,7 @@ export const stageKeysInfo = (mac: boolean): string => {
     "- **Laser:** `L`, then move the mouse. **Draw:** `D`. **Clear the ink:** `C`",
     "- **Black:** `B` or `.` **White,** to draw on: `W`",
     "- **Pause the clock:** `T`",
-    "- **Tools, clock and Exit:** move the mouse to the bottom edge of the screen, or tap twice",
+    "- **Tools, clock and Exit:** move the mouse and click **Menu** at the bottom left, or tap twice",
     "- **Back to the choice of views:** `Esc` twice. One `Esc` closes whatever is open",
   ].join("\n");
 };

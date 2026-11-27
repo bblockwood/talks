@@ -31,6 +31,8 @@ export type StageTool = "none" | "laser" | "draw";
 const DOUBLE_TAP_MS = 230;
 const SWIPE_MIN_PX = 45;
 const TAP_SLOP_PX = 10;
+/** With the laser on, a finger down this long without moving starts to point. */
+const LASER_HOLD_MS = 180;
 
 export class AudienceView {
   /** A click landed on a navigational link of the page on screen. */
@@ -49,6 +51,7 @@ export class AudienceView {
   /** The pointer now drawing a stroke, or pointing with a finger. */
   private drawing: number | null = null;
   private pointing: number | null = null;
+  private holdTimer: number | undefined;
   private touch: { id: number; x: number; y: number; t: number } | null = null;
   private tapTimer: number | undefined;
   private lastTouchAt = -Infinity;
@@ -108,20 +111,43 @@ export class AudienceView {
     if (this.currentTool === "laser") this.onPoint?.(0, 0, false);
     this.drawing = null;
     this.pointing = null;
+    this.touch = null;
+    window.clearTimeout(this.holdTimer);
     this.currentTool = tool;
     this.root.classList.toggle("tool-laser", tool === "laser");
     this.root.classList.toggle("tool-draw", tool === "draw");
   }
 
   /** Normalised position within the slide (or the whiteboard) of a mouse or pointer event, clamped to it. */
-  private pointAt(ev: MouseEvent): { x: number; y: number } | null {
+  private pointAt(ev: { clientX: number; clientY: number }, clamped = true): { x: number; y: number } | null {
     const shown = this.shown;
     const box = this.canvas.getBoundingClientRect();
     if (!shown || shown.width === 0 || box.width === 0 || box.height === 0) return null;
     const px = ((ev.clientX - box.left) / box.width) * this.canvas.width;
     const py = ((ev.clientY - box.top) / box.height) * this.canvas.height;
+    const x = (px - shown.x) / shown.width;
+    const y = (py - shown.y) / shown.height;
+    if (!clamped) return x < 0 || x > 1 || y < 0 || y > 1 ? null : { x, y };
     const clamp = (v: number): number => Math.min(1, Math.max(0, v));
-    return { x: clamp((px - shown.x) / shown.width), y: clamp((py - shown.y) / shown.height) };
+    return { x: clamp(x), y: clamp(y) };
+  }
+
+  /** True when a click landed on the slide itself (or the black or white screen), not on the bars beside it. */
+  private onSlide(ev: MouseEvent): boolean {
+    const shown = this.shown;
+    // A black screen has no slide rectangle: anywhere on it counts.
+    if (shown && shown.page === null && shown.width === 0) return true;
+    return this.pointAt(ev, false) !== null;
+  }
+
+  /** A finger that has stayed down, or moved, with the laser on: it points from here on. */
+  private startPointing(id: number, at: { clientX: number; clientY: number }): void {
+    window.clearTimeout(this.holdTimer);
+    this.touch = null;
+    const point = this.pointAt(at);
+    if (!point) return;
+    this.pointing = id;
+    this.onPoint?.(point.x, point.y, true);
   }
 
   /** Not the slide: a button, the bar, or anything laid over the slides. */
@@ -238,6 +264,7 @@ export class AudienceView {
     this.onDoubleTap = null;
     this.intercept = null;
     window.clearTimeout(this.tapTimer);
+    window.clearTimeout(this.holdTimer);
     this.tapTimer = undefined;
     this.touch = null;
     this.root.removeEventListener("pointerdown", this.onPointerDown);
@@ -415,17 +442,19 @@ export class AudienceView {
       this.onInk?.({ kind: "begin", ...point });
       return;
     }
-    // With the laser on, a finger points at once and nothing it does steps.
-    if (this.currentTool === "laser" && ev.pointerType !== "mouse") {
-      const point = this.pointAt(ev);
-      if (!point) return;
-      ev.preventDefault();
-      this.pointing = ev.pointerId;
-      this.root.setPointerCapture(ev.pointerId);
-      this.onPoint?.(point.x, point.y, true);
-      return;
-    }
     if (ev.pointerType === "mouse" || this.touch) return;
+    // With the laser on, a finger that moves or stays down points; a quick tap is still a tap,
+    // so the talk can be stepped and the bar brought up without putting the laser down.
+    if (this.currentTool === "laser") {
+      ev.preventDefault();
+      this.root.setPointerCapture(ev.pointerId);
+      const id = ev.pointerId;
+      const at = { clientX: ev.clientX, clientY: ev.clientY };
+      window.clearTimeout(this.holdTimer);
+      this.holdTimer = window.setTimeout(() => {
+        if (this.touch?.id === id && this.currentTool === "laser") this.startPointing(id, at);
+      }, LASER_HOLD_MS);
+    }
     this.touch = { id: ev.pointerId, x: ev.clientX, y: ev.clientY, t: performance.now() };
   };
 
@@ -435,6 +464,11 @@ export class AudienceView {
       if (!point) return;
       if (ev.pointerId === this.drawing) this.onInk?.({ kind: "move", ...point });
       else this.onPoint?.(point.x, point.y, true);
+      return;
+    }
+    const start = this.touch;
+    if (start && ev.pointerId === start.id && this.currentTool === "laser" && Math.hypot(ev.clientX - start.x, ev.clientY - start.y) > TAP_SLOP_PX) {
+      this.startPointing(ev.pointerId, ev);
       return;
     }
     // A mouse moving with no button down: the laser, when it is on.
@@ -459,6 +493,7 @@ export class AudienceView {
 
   private readonly onPointerUp = (ev: PointerEvent): void => {
     if (this.release(ev)) return;
+    window.clearTimeout(this.holdTimer);
     const start = this.touch;
     if (!start || ev.pointerId !== start.id) return;
     this.touch = null;
@@ -486,6 +521,7 @@ export class AudienceView {
 
   private readonly onPointerCancel = (ev: PointerEvent): void => {
     if (this.release(ev)) return;
+    window.clearTimeout(this.holdTimer);
     if (this.touch && ev.pointerId === this.touch.id) this.touch = null;
   };
 
@@ -493,8 +529,10 @@ export class AudienceView {
     if (performance.now() - this.lastTouchAt < 700) return; // already handled as a touch, or the end of a stroke
     if (AudienceView.onControls(ev) || this.currentTool === "draw" || ev.button !== 0) return;
     if (this.intercept?.()) return;
-    // A click on a link follows it; a click anywhere else advances, as in the presenter view
-    // (Ben, 2026-11-27; SPEC §5.3 had clicks elsewhere do nothing).
+    // Only on the slide itself: a click on the black beside it does nothing (Ben, 2026-11-27).
+    if (!this.onSlide(ev)) return;
+    // A click on a link follows it; a click anywhere else on the slide advances, as in the
+    // presenter view (Ben, 2026-11-27; SPEC §5.3 had clicks elsewhere do nothing).
     const hit = this.linkAt(ev);
     if (hit) this.onLink?.(hit.page, hit.index);
     else this.onStep?.("next");

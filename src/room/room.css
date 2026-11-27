@@ -478,3 +478,20 @@ kbd {
     display: none;
   }
 }
+
+/* Shown with the cursor, while the mouse moves: brings up the bar. Not while the laser is on
+   (the mouse is then always moving) or the bar is already up. */
+.audience .aud-menu {
+  position: absolute;
+  left: 0.8rem;
+  bottom: 0.8rem;
+  z-index: 1;
+  display: none;
+  padding: 0.3rem 0.7rem;
+  font-size: 0.85rem;
+  opacity: 0.85;
+  cursor: default;
+}
+.audience:not(.cursor-hidden):not(.tool-laser):not(.bar-up) .aud-menu {
+  display: block;
+}

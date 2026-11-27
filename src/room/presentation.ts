@@ -65,6 +65,7 @@ export class Presentation {
   private overview: HTMLElement | null = null;
   private thumbs: ThumbGrid | null = null;
   private digits!: HTMLElement;
+  private menu!: HTMLButtonElement;
   private inkColor = 0;
   /** Stroke numbers start somewhere new each time, so they never repeat one already on the slide. */
   private strokeSeq = (Date.now() % 1_000_000) * 1000;
@@ -129,7 +130,19 @@ export class Presentation {
     this.digits.className = "aud-digits";
     this.digits.hidden = true;
     root.append(this.bar, this.digits);
-    root.addEventListener("mousemove", this.onRootMouseMove);
+    // With a mouse there is no double tap: a small button shows at the bottom left while the
+    // mouse moves, like the cursor, and brings the bar up (Ben, 2026-11-27).
+    this.menu = document.createElement("button");
+    this.menu.type = "button";
+    this.menu.className = "aud-menu";
+    this.menu.textContent = "Menu";
+    this.menu.title = "Tools, clock and Exit";
+    this.menu.addEventListener("click", (ev) => {
+      ev.stopPropagation();
+      this.menu.blur();
+      this.showBar(true);
+    });
+    root.append(this.menu);
     setStage(true);
 
     // Out of full screen, the slides stay in the window and every key still just drives them
@@ -282,6 +295,7 @@ export class Presentation {
   private showBar(on: boolean): void {
     if (this.ended) return;
     this.bar.hidden = !on;
+    this.root.classList.toggle("bar-up", on);
     window.clearInterval(this.barTimer);
     window.clearTimeout(this.barHide);
     if (!on) {
@@ -302,13 +316,6 @@ export class Presentation {
       this.showBar(false);
     }, ms);
   }
-
-  /** The mouse at the very bottom of the screen brings the bar up, as the Dock or a video player's controls come up. */
-  private readonly onRootMouseMove = (ev: MouseEvent): void => {
-    if (!this.bar.hidden || this.ended) return;
-    const box = this.root.getBoundingClientRect();
-    if (ev.clientY >= box.bottom - 3) this.showBar(true);
-  };
 
   private fillBar(): void {
     const deck = this.talk.deck;
@@ -379,7 +386,8 @@ export class Presentation {
   private setTool(tool: StageTool, pinned = false): void {
     if (this.ended) return;
     this.view.setTool(tool);
-    this.barPinned = tool !== "none" && pinned && !this.bar.hidden;
+    // Only Draw: with the laser on, a quick tap is still a tap, so two of them bring the bar back.
+    this.barPinned = tool === "draw" && pinned && !this.bar.hidden;
     if (!this.bar.hidden) {
       this.fillBar();
       this.lingerBar(BAR_LINGER_MS);
@@ -524,7 +532,8 @@ export class Presentation {
     window.clearInterval(this.barTimer);
     window.clearTimeout(this.barHide);
     window.clearInterval(this.inkTimer);
-    this.root.removeEventListener("mousemove", this.onRootMouseMove);
+    this.menu.remove();
+    this.root.classList.remove("bar-up");
     this.bar.remove();
     this.digits.remove();
     window.removeEventListener("keydown", this.onKeyDown, { capture: true });

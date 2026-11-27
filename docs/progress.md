@@ -970,3 +970,11 @@ Known issues:
 - The clock on the slides' bar can be paused with T but not set; setting it needs a presenter view.
 - The click that advances is a change for a room PC: a stray click on the slides now steps.
 - Touch behaviour is tested with emulated touch only.
+
+### W9.7. Three fixes to the slides' own controls (2026-11-27)
+
+1. A mouse click advances only when it lands on the slide itself, not on the black beside it. (Taps on a touch screen still advance anywhere.)
+2. While the mouse moves, a small **Menu** button shows at the bottom left and brings up the bar. It replaces the bottom-edge trigger. It does not show while the laser is on, since the mouse is then always moving; L or Esc puts the laser down.
+3. With the laser on, a finger points only once it has moved or stayed down for 180 ms. A quick tap is still a tap: one advances, two bring up the bar.
+
+Verification: build; 295 unit tests; 46 e2e tests.
