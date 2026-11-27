@@ -33,6 +33,8 @@ export type Command =
   | { readonly name: "timerPause" }
   | { readonly name: "timerToggle" }
   | { readonly name: "timerReset" }
+  /** Count down from `targetMs`, or count up when it is null. */
+  | { readonly name: "timerSetTarget"; readonly targetMs: number | null }
   // Ink (Native §8). Strokes go on the page, or on the whiteboard while the room screen is white.
   | { readonly name: "inkBegin"; readonly id: string; readonly x: number; readonly y: number; readonly color: number; readonly width: number }
   | { readonly name: "inkAppend"; readonly id: string; readonly points: readonly number[] }
@@ -147,6 +149,13 @@ function applyCommand(state: SessionState, command: Command, deck: DeckContext, 
     case "timerReset":
       // The clock runs whenever a talk is being presented, so a reset restarts it at once.
       return { ...state, timer: { ...state.timer, accumulatedMs: 0, runningSince: now } };
+    case "timerSetTarget": {
+      // The time left is the countdown minus the time already elapsed, so it can be set mid-talk.
+      // Setting a countdown starts the clock if it had been paused (Native §6.7).
+      const start = command.targetMs !== null && state.timer.runningSince === null;
+      if (command.targetMs === state.timer.targetMs && !start) return state;
+      return { ...state, timer: { ...state.timer, targetMs: command.targetMs, ...(start ? { runningSince: now } : {}) } };
+    }
     default:
       break;
   }

@@ -12,7 +12,7 @@ const DECKS = path.resolve(".e2e/d");
 const SRC = path.resolve(".e2e/w3src");
 
 interface RoomHook {
-  state(): { committedPage: number; audienceMode: { kind: string }; timer: { runningSince: number | null } };
+  state(): { committedPage: number; audienceMode: { kind: string }; timer: { runningSince: number | null; targetMs: number | null } };
   session(): string;
   shownPage(): number | null | undefined;
   pointerVisible(): boolean;
@@ -111,7 +111,7 @@ test("a phone drives the room PC: steps, notes, clock, slide grid, back, black, 
   await expect(phone.locator("#link")).toContainText("Connected to room PC");
   await expect(phone.locator("#frame-line")).toHaveText("Frame 1 of 7");
   // The .pdfpc file sets a 30-minute talk: the clock shows the time left, in green.
-  await expect(phone.locator("#timer")).toHaveText(/^0:0\d · (30:00|29:5\d)$/);
+  await expect(phone.locator("#timer")).toHaveText(/^(30:00|29:5\d) ↓$/);
   await expect(phone.locator("#timer")).toHaveClass(/good/);
 
   await phone.locator("#next").click();
@@ -183,7 +183,38 @@ test("a phone drives the room PC: steps, notes, clock, slide grid, back, black, 
   await expect(phone.locator("#clock-toggle")).toHaveText("Resume");
   await expect(phone.locator("#timer")).toHaveClass(/paused/);
   expect(await roomHook(room, (h) => h.state().timer.runningSince)).toBeNull();
+  // The clock's value sits beside its controls.
+  await expect(phone.locator("#clock-now")).toHaveText(/^(30:00|29:\d\d) left$/);
+  await expect(phone.locator("#clock-sub")).toHaveText(/^0:\d\d elapsed · paused$/);
   await phone.locator("#clock-toggle").click();
+
+  // Count up, or down from a typed time (Native §6.2), applied as it is typed.
+  await expect(phone.locator("#count-down")).toHaveClass(/on/);
+  await expect(phone.locator("#count-from")).toHaveValue("30:00");
+  await phone.locator("#count-up").click();
+  await expect(phone.locator("#timer")).toHaveText(/^0:\d\d ↑$/);
+  await expect(phone.locator("#clock-now")).toHaveText(/^0:\d\d$/);
+  expect(await roomHook(room, (h) => h.state().timer.targetMs)).toBeNull();
+  await phone.locator("#count-from").fill("nonsense");
+  await phone.locator("#count-down").click();
+  await expect(phone.locator("#count-hint")).toBeVisible();
+  expect(await roomHook(room, (h) => h.state().timer.targetMs)).toBeNull();
+  const before = await roomPage(room);
+  await phone.locator("#count-from").fill("");
+  await phone.locator("#count-from").pressSequentially("1h30"); // digits here are a time, not a frame number
+  await expect(phone.locator("#count-hint")).toBeHidden();
+  await expect.poll(() => roomHook(room, (h) => h.state().timer.targetMs)).toBe(90 * 60_000);
+  await phone.locator("#count-from").press("Enter");
+  await expect(phone.locator("#sheet-more")).toBeHidden();
+  await expect(phone.locator("#timer")).toHaveText(/^1:29:\d\d ↓$/);
+  await expect(phone.locator("#timer")).toHaveClass(/good/);
+  expect(await roomPage(room)).toBe(before);
+  // Already past the end: red, and counting up.
+  await phone.locator("#timer").click();
+  await phone.locator("#count-from").fill("1s");
+  await expect(phone.locator("#timer")).toHaveText(/^−0:\d\d ↓$/, { timeout: 8000 });
+  await expect(phone.locator("#timer")).toHaveClass(/over/);
+  await expect(phone.locator("#clock-now")).toHaveText(/^0:\d\d over$/);
 
   // The measured numbers Ben reads off for the acceptance test.
   await expect(phone.locator("#diag")).toHaveText(/ping \d+ ms · tap → slide \d+ ms \(median of \d+\)/);
@@ -248,7 +279,13 @@ test("a laptop joined by code gets the full presenter view and drives the room P
   await expect.poll(() => roomPage(room)).toBe(4);
   await expect(laptop.locator("#t-forward")).toHaveAttribute("title", /Forward to frame 6/);
 
-  // Overview: Tab swaps the right column for the grid; a click jumps at once and the overview stays.
+  // Overview: its button sits above the next slide, top right, where the grid appears; Tab does
+  // the same. The grid swaps in for the right column; a click jumps at once and the overview stays.
+  await expect(laptop.locator("#t-slides")).toBeHidden();
+  await laptop.locator("#side-slides").click();
+  await expect(laptop.locator("#grid .thumb")).toHaveCount(7);
+  await laptop.locator("#overview-close").click();
+  await expect(laptop.locator("#next-slide")).toBeVisible();
   await laptop.keyboard.press("Tab");
   await expect(laptop.locator("#grid .thumb")).toHaveCount(7);
   await expect(laptop.locator("#next-slide")).toBeHidden();
@@ -490,6 +527,9 @@ test("the layout follows the window: phone, tablet upright, tablet on its side, 
     // Everything stays on screen: no pane hangs off the right or bottom edge.
     const overflow = await view.evaluate(() => ({ x: document.documentElement.scrollWidth - window.innerWidth, y: document.documentElement.scrollHeight - window.innerHeight }));
     expect(overflow).toEqual({ x: 0, y: 0 });
+    // The Slides button is wherever the grid will open, and nowhere when there are no slides to show.
+    await expect(view.locator("#t-slides")).toBeVisible({ visible: layout === "compact" || layout === "stacked" });
+    await expect(view.locator("#side-slides")).toBeVisible({ visible: layout === "wide" });
     if (layout !== "buttons") {
       await expect(view.locator("#current")).toBeVisible();
       await expect(view.locator("#notes")).toBeVisible();
@@ -512,16 +552,20 @@ test("rehearsing: a presenter view runs the talk by itself, with or without a co
   const view = await openView(browser, LAPTOP);
   await expect(view.locator("#link")).toHaveText("Waiting for the room PC");
   await expect(view.locator("#t-draw")).toBeDisabled();
+  // The offer appears by itself after a moment, and is also under More.
+  await expect(view.locator("#banner-text")).toHaveText("No room screen is showing this talk.");
   await view.locator("#t-more").click();
   await expect(view.locator("#rehearse")).toHaveText("Rehearse here");
-  await view.locator("#rehearse").click();
+  await view.locator("#more-close").click();
+  await view.locator("#banner-action").click();
   await expect(view.locator("#link")).toHaveText("Rehearsing: no room screen");
+  await expect(view.locator("#banner")).toBeHidden();
   expect(await viewHook(view, (h) => h.kind())).toBe("solo");
   await view.keyboard.press("ArrowRight");
   await view.keyboard.press("ArrowRight");
   await expect(view.locator("#bar-where")).toHaveText("Frame 3/7 · 1/3");
   await expect(view.locator("#notes")).toContainText("every build");
-  await expect(view.locator("#timer")).toHaveText(/^0:0\d · (30:00|29:5\d)$/); // the .pdfpc file's 30 minutes
+  await expect(view.locator("#timer")).toHaveText(/^(30:00|29:5\d) ↓$/); // the .pdfpc file's 30 minutes
   // Ink, jumps and Back all work as they will in the talk.
   await view.keyboard.press("d");
   await drag(view, "#current", [0.3, 0.3], [0.6, 0.6]);

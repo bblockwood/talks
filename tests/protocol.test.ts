@@ -199,6 +199,31 @@ describe("talk clock", () => {
     expect(s.timer.targetMs).toBe(600_000);
   });
 
+  it("a countdown can be set and removed mid-talk, and starts a paused clock", () => {
+    const running = run([["timerStart", 1000]]);
+    const down = apply(running, { name: "timerSetTarget", targetMs: 1_200_000 }, deck, 5000);
+    expect(down.timer).toEqual({ accumulatedMs: 0, runningSince: 1000, targetMs: 1_200_000 }); // elapsed time is kept
+    expect(apply(down, { name: "timerSetTarget", targetMs: 1_200_000 }, deck, 6000)).toBe(down);
+    const up = apply(down, { name: "timerSetTarget", targetMs: null }, deck, 7000);
+    expect(up.timer.targetMs).toBeNull();
+    expect(up.timer.runningSince).toBe(1000);
+
+    const paused = run([["timerStart", 0], ["timerPause", 4000]]);
+    const started = apply(paused, { name: "timerSetTarget", targetMs: 60_000 }, deck, 9000);
+    expect(started.timer).toEqual({ accumulatedMs: 4000, runningSince: 9000, targetMs: 60_000 });
+    // Counting up again does not start a paused clock.
+    const stillPaused = apply({ ...paused, timer: { ...paused.timer, targetMs: 60_000 } }, { name: "timerSetTarget", targetMs: null }, deck, 9000);
+    expect(stillPaused.timer.runningSince).toBeNull();
+  });
+
+  it("validates a countdown from the network", () => {
+    expect(parseCommand({ name: "timerSetTarget", targetMs: null })).toEqual({ name: "timerSetTarget", targetMs: null });
+    expect(parseCommand({ name: "timerSetTarget", targetMs: 1_200_000.4 })).toEqual({ name: "timerSetTarget", targetMs: 1_200_000 });
+    for (const targetMs of [0, -5, Infinity, NaN, "1200000", undefined, 25 * 3600_000]) {
+      expect(parseCommand({ name: "timerSetTarget", targetMs })).toBeNull();
+    }
+  });
+
   it("navigation does not disturb the clock", () => {
     const s = run([["timerStart", 1000], ["next", 2000]]);
     expect(s.committedPage).toBe(1);

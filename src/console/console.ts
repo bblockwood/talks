@@ -3,6 +3,7 @@
 // its own copy of the deck and exchanges small messages with whatever runs the talk (see
 // client.ts). That side stays authoritative: this view shows what was last reported back, never
 // what it merely asked for.
+import { parseDuration } from "../core/duration";
 import { DEFAULT_INK_WIDTH, NO_INK, appendToStroke, beginStroke, clearLayer, undoStroke } from "../core/ink";
 import type { InkLayer, InkState } from "../core/ink";
 import { KeyInterpreter } from "../core/keys";
@@ -31,6 +32,9 @@ const LONG_PRESS_MS = 350;
 const POINTER_INTERVAL_MS = 33; // at most ~30 messages a second, well under the relay's limit
 const SWIPE_MIN_PX = 45;
 const TAP_SLOP_PX = 10;
+/** How long with no room screen before rehearsing is offered: at once when opening, slowly mid-talk. */
+const OFFER_REHEARSAL_MS = 2500;
+const OFFER_REHEARSAL_MIDTALK_MS = 20_000;
 
 export type Layout = "wide" | "stacked" | "compact" | "buttons";
 
@@ -124,6 +128,11 @@ export class PresenterConsole {
   private readonly pings = new Set<number>();
   private rtts: number[] = [];
   private taps: number[] = [];
+  /** When this view last had a room screen (or was opened): how long it has been waiting for one. */
+  private waitingSince = performance.now();
+  private bannerAction: "reload" | "rehearse" | null = null;
+  /** What "Down from" offers next time the clock's controls open. */
+  private lastCountdownMs = 20 * 60_000;
   private notice = "";
   private noticeUntil = 0;
   private timers: number[] = [];
@@ -245,6 +254,7 @@ export class PresenterConsole {
     this.view = null;
     this.roomSeenAt = -Infinity;
     this.roomWaitingForStart = false;
+    this.waitingSince = performance.now();
     this.ink = NO_INK;
     this.pending.clear();
     this.pings.clear();
@@ -464,7 +474,7 @@ export class PresenterConsole {
     pill.textContent = mode === "white" ? "WHITEBOARD" : mode.toUpperCase();
     pill.className = `pill ${mode}`;
 
-    for (const id of ["prev", "next", "t-black", "t-freeze", "m-white", "clock-toggle", "clock-reset", "end-talk", "t-draw", "t-laser", "ink-board"]) {
+    for (const id of ["prev", "next", "t-black", "t-freeze", "m-white", "clock-toggle", "clock-reset", "count-up", "count-down", "end-talk", "t-draw", "t-laser", "ink-board"]) {
       $<HTMLButtonElement>(id).disabled = !live;
     }
     $("t-black").classList.toggle("on", mode === "black");
@@ -498,15 +508,19 @@ export class PresenterConsole {
     backButton.title = back === null ? "Back after a jump (Delete)" : `Back to frame ${label(back)} (Delete)`;
     forwardButton.title = forward === null ? "Forward" : `Forward to frame ${label(forward)}`;
     $("clock-toggle").textContent = view?.timer.running === false ? "Resume" : "Pause";
+    const countdown = view?.timer.targetMs ?? null;
+    if (countdown !== null) this.lastCountdownMs = countdown;
+    $("count-up").classList.toggle("on", view !== null && countdown === null);
+    $("count-down").classList.toggle("on", countdown !== null);
+    $<HTMLInputElement>("count-from").disabled = !live;
 
-    const stale = view !== null && this.options.published !== "" && view.deckPublished !== "" && view.deckPublished !== this.options.published;
-    $("banner").hidden = !stale || !this.options.onReload;
-    if (stale) {
-      $("banner-text").textContent = "Slides updated — reload?";
-      $("banner-action").textContent = "Reload";
-    }
-
-    $("row-swap").hidden = !this.options.onSwap;
+    // Swapping needs the window that opened this one. A view joined by code on a computer with two
+    // screens is probably beside the slides, so it says how to get the button rather than nothing.
+    const canSwap = this.options.onSwap !== undefined;
+    const besideSlides = this.client.kind === "relay" && this.layout === "wide" && window.screen.isExtended === true;
+    $("row-swap").hidden = !canSwap && !besideSlides;
+    $("swap").hidden = !canSwap;
+    $("swap-note").hidden = canSwap;
     const canRehearse = this.options.onRehearse !== undefined;
     const solo = this.client.kind === "solo";
     $("row-rehearse").hidden = !canRehearse || (!solo && live);
@@ -555,17 +569,40 @@ export class PresenterConsole {
     link.classList.toggle("ok", cls === "ok");
     link.classList.toggle("wait", cls === "wait");
 
+    // Offer rehearsal when no room screen is showing the talk; a newer publish comes first.
+    const view = this.view;
+    if (this.live || this.client.kind !== "relay") this.waitingSince = now;
+    const stale = view !== null && this.options.published !== "" && view.deckPublished !== "" && view.deckPublished !== this.options.published;
+    const roomReady = this.roomWaitingForStart && now - this.roomSeenAt < ROOM_TIMEOUT_MS;
+    const waited = now - this.waitingSince > (view === null ? OFFER_REHEARSAL_MS : OFFER_REHEARSAL_MIDTALK_MS);
+    const action =
+      stale && this.options.onReload ? "reload" : this.options.onRehearse && this.client.kind === "relay" && !roomReady && waited ? "rehearse" : null;
+    if (action !== this.bannerAction || $("banner").hidden !== (action === null)) {
+      this.bannerAction = action;
+      $("banner").hidden = action === null;
+      $("banner-text").textContent = action === "reload" ? "Slides updated — reload?" : "No room screen is showing this talk.";
+      $("banner-action").textContent = action === "reload" ? "Reload" : "Rehearse here";
+    }
+
     const timer = $("timer");
-    const t = this.view?.timer;
+    const t = view?.timer;
     if (!t) {
       timer.textContent = "0:00";
       timer.className = "timer paused";
+      $("clock-now").textContent = "";
+      $("clock-sub").textContent = "";
     } else {
       const elapsed = t.elapsedMs + (t.running && this.live ? now - this.viewAt : 0);
       const left = t.targetMs === null ? null : t.targetMs - elapsed;
-      // With a target, the time left sits beside the clock: green while positive, red once over (Native §6.2).
-      timer.textContent = `${t.running ? "" : "⏸ "}${formatClock(elapsed)}${left === null ? "" : ` · ${formatClock(left)}`}`;
-      timer.className = `timer${!t.running ? " paused" : left === null ? "" : left >= 0 ? " good" : " over"}`;
+      // Counting down, the time left takes the clock's place: green while positive, red and
+      // counting up once it has run out. The arrow gives the direction (Native §6.2).
+      const over = left !== null && left <= -1000;
+      const shown = left === null ? formatClock(elapsed) : `${over ? "−" : ""}${formatClock(Math.abs(left))}`;
+      timer.textContent = `${shown} ${!t.running ? "⏸" : left === null ? "↑" : "↓"}`;
+      timer.className = `timer${!t.running ? " paused" : left === null ? "" : over ? " over" : " good"}`;
+      // Beside the clock's controls: the same value in words, and the elapsed time under a countdown.
+      $("clock-now").textContent = left === null ? formatClock(elapsed) : `${formatClock(Math.abs(left))} ${over ? "over" : "left"}`;
+      $("clock-sub").textContent = [left === null ? "" : `${formatClock(elapsed)} elapsed`, t.running ? "" : "paused"].filter((x) => x !== "").join(" · ");
     }
     $("wall").textContent = new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
 
@@ -609,6 +646,7 @@ export class PresenterConsole {
   // ---------------------------------------------------------------- overview and search
 
   private setOverview(open: boolean): void {
+    if (open && this.layout === "buttons") return; // a phone held sideways shows no slides
     this.overviewOpen = open;
     $("overview").hidden = !open;
     // In the wide and stacked layouts the overview takes the place of the next slide and notes.
@@ -710,6 +748,21 @@ export class PresenterConsole {
     else this.send({ name: "setAudienceMode", mode: { kind } });
   }
 
+  /** Counts down from the typed time. A time that does not parse is flagged and leaves the clock alone. */
+  private countDown(close: boolean): void {
+    const input = $<HTMLInputElement>("count-from");
+    const ms = parseDuration(input.value);
+    input.classList.toggle("invalid", ms === null);
+    $("count-hint").hidden = ms !== null;
+    if (ms === null) {
+      input.focus();
+      return;
+    }
+    this.lastCountdownMs = ms;
+    this.send({ name: "timerSetTarget", targetMs: ms });
+    if (close) $("sheet-more").hidden = true;
+  }
+
   private setNotesSize(px: number): void {
     const base = this.notesSize > 0 ? this.notesSize : this.layout === "wide" ? 22 : 18;
     this.notesSize = Math.min(48, Math.max(12, base + px));
@@ -745,6 +798,18 @@ export class PresenterConsole {
     }
     const plain = !ev.ctrlKey && !ev.altKey && !ev.metaKey;
     const search = $<HTMLInputElement>("search");
+
+    // Typing a countdown: digits here are a time, not a frame to jump to.
+    if (ev.target === $("count-from")) {
+      if (ev.key === "Enter") {
+        ev.preventDefault();
+        this.countDown(true);
+      } else if (ev.key === "Escape") {
+        ev.preventDefault();
+        $("sheet-more").hidden = true;
+      }
+      if (ev.key !== "PageDown" && ev.key !== "PageUp") return;
+    }
 
     if (ev.target === search && plain) {
       if (ev.key === "Enter") {
@@ -836,6 +901,28 @@ export class PresenterConsole {
     on("ink-board", () => this.toggleMode("white"));
     on("clock-toggle", () => this.send({ name: "timerToggle" }));
     on("clock-reset", () => this.send({ name: "timerReset" }));
+    const countFrom = $<HTMLInputElement>("count-from");
+    const clearCountError = (): void => {
+      countFrom.classList.remove("invalid");
+      $("count-hint").hidden = true;
+    };
+    on("count-up", () => {
+      clearCountError();
+      if (this.view?.timer.targetMs !== null) this.send({ name: "timerSetTarget", targetMs: null });
+    });
+    on("count-down", () => this.countDown(false));
+    // Applied as it is typed, so there is nothing to confirm; a half-typed "20:" is left alone.
+    countFrom.addEventListener(
+      "input",
+      () => {
+        clearCountError();
+        const ms = parseDuration(countFrom.value);
+        if (ms === null) return;
+        this.lastCountdownMs = ms;
+        this.send({ name: "timerSetTarget", targetMs: ms });
+      },
+      { signal },
+    );
 
     on("t-draw", () => this.setDraw(!this.drawMode));
     on("t-laser", () => this.setLaser(!this.laserMode));
@@ -860,12 +947,14 @@ export class PresenterConsole {
       );
     }
 
-    on("t-slides", () => this.setOverview(!this.overviewOpen));
+    for (const id of ["t-slides", "side-slides"]) on(id, () => this.setOverview(!this.overviewOpen));
     on("overview-close", () => this.setOverview(false));
     $("search").addEventListener("input", () => void this.runSearch(), { signal });
 
     const openMore = (): void => {
       $("end-confirm").hidden = true;
+      clearCountError();
+      countFrom.value = formatClock(this.view?.timer.targetMs ?? this.lastCountdownMs);
       $("sheet-more").hidden = false;
       this.tick();
     };
@@ -886,7 +975,10 @@ export class PresenterConsole {
     on("debug-toggle", () => ($("debug").hidden = !$("debug").hidden));
     on("swap", () => this.options.onSwap?.());
     on("rehearse", () => this.options.onRehearse?.(this.client.kind !== "solo"));
-    on("banner-action", () => this.options.onReload?.());
+    on("banner-action", () => {
+      if (this.bannerAction === "reload") this.options.onReload?.();
+      else if (this.bannerAction === "rehearse") this.options.onRehearse?.(true);
+    });
     on("leave", () => this.options.onLeave());
     on("end-talk", () => ($("end-confirm").hidden = false));
     on("end-cancel", () => ($("end-confirm").hidden = true));
@@ -1050,7 +1142,7 @@ export class PresenterConsole {
 
   /** The page elements outlive a console (the same device can open another talk), so start and end clean. */
   private resetPanels(): void {
-    for (const id of ["sheet-more", "end-confirm", "banner", "pill", "overview", "drawbar", "debug"]) $(id).hidden = true;
+    for (const id of ["sheet-more", "end-confirm", "banner", "pill", "overview", "drawbar", "debug", "count-hint"]) $(id).hidden = true;
     $("side-normal").hidden = false;
     $<HTMLInputElement>("search").value = "";
     $("results").replaceChildren();

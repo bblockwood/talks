@@ -101,7 +101,7 @@ test("two screens: the presenter view in a second window drives the audience win
   expect(await view((h) => h.kind())).toBe("local");
   expect(await view((h) => h.layout())).toBe("wide");
   await expect(presenter.locator("#bar-where")).toHaveText("Frame 1/7");
-  await expect(presenter.locator("#timer")).toHaveText(/^0:\d\d · (30:00|29:\d\d)$/);
+  await expect(presenter.locator("#timer")).toHaveText(/^(30:00|29:\d\d) ↓$/);
   await expect(presenter.locator("#link")).toHaveText("Slides on the other screen");
   await expect(presenter.locator("#entry")).toBeHidden();
 

@@ -2,6 +2,7 @@
 // end between devices that know the talk code. WebCrypto only, no DOM.
 import type { AudienceMode, Command, SessionState } from "./session";
 import { elapsedMs, inkLayer } from "./session";
+import { MAX_COUNTDOWN_MS } from "./duration";
 import type { FrameIndex } from "./frames";
 import type { InkLayer } from "./ink";
 
@@ -195,6 +196,11 @@ export function parseCommand(v: unknown): Command | null {
     case "inkUndo":
     case "inkClear":
       return { name: v["name"] };
+    case "timerSetTarget": {
+      const t = v["targetMs"];
+      if (t === null) return { name: "timerSetTarget", targetMs: null };
+      return isUnit(t) && t > 0 && t <= MAX_COUNTDOWN_MS ? { name: "timerSetTarget", targetMs: Math.round(t) } : null;
+    }
     case "goToPage":
       return isIndex(v["page"]) ? { name: "goToPage", page: v["page"] } : null;
     case "goToFrameLabel":

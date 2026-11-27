@@ -335,10 +335,21 @@ button.wide {
   font-size: 0.9rem;
   min-height: 1.3em;
 }
+.nexthead {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 0.15rem;
+}
 .nextlabel {
   font-size: 0.7rem;
   color: var(--muted);
-  margin-bottom: 0.15rem;
+}
+/* Only the wide layout has the overview beside the slide, so only there does its button sit here. */
+#side-slides {
+  display: none;
+  padding: 0.3rem 0.9rem;
+  font-size: 0.95rem;
 }
 .noteshead {
   display: flex;
@@ -583,6 +594,50 @@ button.wide {
   margin-top: 1.5rem;
   border-bottom: none;
 }
+.clock-now {
+  margin-left: 0.5rem;
+  font-variant-numeric: tabular-nums;
+}
+.clock-sub {
+  display: block;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+.clock-sub:empty {
+  display: none;
+}
+.pair {
+  flex: none;
+  white-space: nowrap;
+}
+.count {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 0.4rem;
+}
+#count-from {
+  font: inherit;
+  font-size: 1rem; /* 16px or more, or iOS zooms the page on focus */
+  width: 5.5rem;
+  padding: 0.45rem 0.6rem;
+  border-radius: 0.5rem;
+  border: 1px solid var(--line);
+  background: var(--panel);
+  color: var(--text);
+  user-select: text;
+  -webkit-user-select: text;
+}
+#count-from.invalid {
+  border-color: #dc2626;
+}
+.count-hint {
+  margin: 0.4rem 0 0;
+  color: #f87171;
+  font-size: 0.85rem;
+  text-align: right;
+}
 .diag {
   color: var(--muted);
   font-size: 0.85rem;
@@ -642,6 +697,7 @@ button.wide {
 /* ------------------------------------------------------------ buttons: a phone held sideways */
 .console[data-layout="buttons"] .body,
 .console[data-layout="buttons"] .wall,
+.console[data-layout="buttons"] #t-slides,
 .console[data-layout="buttons"] #t-forward,
 .console[data-layout="buttons"] #t-laser,
 .console[data-layout="buttons"] #t-draw {
@@ -731,8 +787,12 @@ button.wide {
   width: 2px;
   background: var(--line);
 }
-.console[data-layout="wide"] .where {
+.console[data-layout="wide"] .where,
+.console[data-layout="wide"] #t-slides {
   display: none;
+}
+.console[data-layout="wide"] #side-slides {
+  display: block;
 }
 .console[data-layout="wide"] .info {
   display: block;

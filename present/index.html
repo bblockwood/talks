@@ -91,7 +91,10 @@
                 <div id="build-line" class="build-line"></div>
               </div>
               <div class="nextbox">
-                <div class="nextlabel">Next</div>
+                <div class="nexthead">
+                  <span class="nextlabel">Next</span>
+                  <button id="side-slides" title="Overview (Tab)">Slides</button>
+                </div>
                 <div id="next-slide" class="slide small"></div>
               </div>
             </div>
@@ -143,12 +146,34 @@
           </header>
           <div class="rows">
             <div class="row">
-              <span>Clock</span>
               <span>
+                Clock <strong id="clock-now" class="clock-now"></strong>
+                <small id="clock-sub" class="clock-sub"></small>
+              </span>
+              <span class="pair">
                 <button id="clock-toggle">Pause</button>
                 <button id="clock-reset">Reset</button>
               </span>
             </div>
+            <div class="row">
+              <span>Counts</span>
+              <span class="count">
+                <button id="count-up">Up</button>
+                <button id="count-down">Down from</button>
+                <input
+                  id="count-from"
+                  type="text"
+                  placeholder="20:00"
+                  aria-label="Count down from"
+                  autocomplete="off"
+                  autocapitalize="none"
+                  autocorrect="off"
+                  spellcheck="false"
+                  enterkeyhint="done"
+                />
+              </span>
+            </div>
+            <p id="count-hint" class="count-hint" hidden>Minutes (45), minutes:seconds (45:00) or hours (1h30).</p>
             <div class="row">
               <span>Room screen</span>
               <span><button id="m-white">Whiteboard</button></span>
@@ -159,7 +184,12 @@
             </div>
             <div class="row" id="row-swap" hidden>
               <span>Displays</span>
-              <span><button id="swap" title="Ctrl+D, or Cmd+D on a Mac">Swap displays</button></span>
+              <span>
+                <button id="swap" title="Ctrl+D, or Cmd+D on a Mac">Swap displays</button>
+                <span id="swap-note" class="diag" hidden>
+                  Only when the talk was started with “Two screens” on this computer’s talk page.
+                </span>
+              </span>
             </div>
             <div class="row" id="row-rehearse" hidden>
               <span id="rehearse-label">No room screen yet</span>

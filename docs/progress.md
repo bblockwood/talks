@@ -614,3 +614,30 @@ Against `https://benlockwood.com/talks/` and the deployed relay, with a throwawa
 - Phone: ping 81 ms, tap → slide 28 ms (median of 8), from a home connection.
 - Esc twice on the laptop ended the talk on the room page. The laptop then rehearsed by itself.
 - `/talks/presenter/` (the old second-window page) now returns 404, as intended. No page errors.
+
+## W6.1. Changes from Ben's W6 tests (2026-11-27)
+
+Ben's results (given in conversation): mostly works; six notes. What was done for each:
+
+1. **No Swap displays on the laptop presenter view.** Swap exists only in the second window that two-screen mode opens, because only that window can ask the slides window to move. Not reproduced there (the e2e test still finds the button). A view joined by code on a computer with two screens now shows a "Displays" row under More saying how to get the button, instead of nothing. Open question for Ben: which way was the laptop view opened?
+2. **Phone sideways:** the Slides button is gone in the buttons-only layout, and Tab does nothing there.
+3. **Laptop (wide) layout:** the Slides button moved from the bottom toolbar to the top right, above the next slide, where the grid opens and where its Close button then sits.
+4. **Rehearsing a published talk:** when no room screen is showing the talk, a banner says so and offers **Rehearse here** (after 2.5 s on opening; after 20 s if a talk was running, so a network blip does not offer it). The row under More stays.
+5. **Clock value beside its controls** under More: the time (or time left), with the elapsed time and "paused" beneath.
+6. **Count up / count down**, as in the native app: under More, **Up**, or **Down from** a typed time ("45", "45:00", "1h30"), applied as typed; Enter closes. Counting down, the top-bar clock shows the time left in place of the elapsed time (green, then red and counting up once over), with an arrow for the direction and a pause mark when paused. New command `timerSetTarget`; setting a countdown starts a paused clock.
+
+Verification: build; 266 unit tests (new: duration parser, countdown command and its validation); 39 e2e tests (extended: countdown from the phone, the Slides button per layout, the rehearsal banner).
+
+### Known issues
+
+- Swap displays from a view joined by code is not possible: browsers only let a window hand its click to a window it opened.
+- The last countdown typed is remembered only until the presenter view is closed.
+- While rehearsing by code, the view does not notice a room screen starting; **More → Stop rehearsing** joins it.
+
+### Ben checklist: W6.1
+
+1. Laptop, presenter view by code, no talk running: within a few seconds a yellow line offers **Rehearse here**. Click it; arrows should step.
+2. Click the clock (top right). Click **Down from**, type `1h15` or `20`, press Enter. The clock should show the time left in green with ↓. Open it again and click **Up**: back to elapsed time with ↑.
+3. Same on the phone: tap the clock; the Clock line shows the current value; set a countdown.
+4. Laptop: **Slides** is now above the next slide, top right. Phone sideways: no Slides button.
+5. Two-screen mode on the Mac with the second display: in the second window, **More → Swap displays** should be there. If it is not, note how the window was opened.
