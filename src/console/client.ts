@@ -101,6 +101,11 @@ export class LocalClient implements ConsoleClient {
     queueMicrotask(() => handlers.onStatus("connected"));
   }
 
+  /** Asks the slides window to go back to the choice of views; this window closes with them. */
+  requestStop(): void {
+    this.post({ k: "stop" });
+  }
+
   requestDeck(): void {
     this.post({ k: "deck-request" });
   }

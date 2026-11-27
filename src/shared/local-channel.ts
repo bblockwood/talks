@@ -27,6 +27,8 @@ export type LocalFrame =
   | { k: "notice"; text: string }
   /** The talk is over: the presenter window drops everything and closes. */
   | { k: "end" }
+  /** Esc twice in the presenter window: the slides come down too, back to the choice of views. */
+  | { k: "stop" }
   /** The presenter window is closing. */
   | { k: "closed" };
 

@@ -160,7 +160,7 @@ describe("markdown", () => {
     expect(renderNotesHtml("**bold** and *em* and `code*x*`\nnext line")).toBe(
       "<p><strong>bold</strong> and <em>em</em> and <code>code*x*</code><br>next line</p>",
     );
-    expect(renderNotesHtml("- **markdown** is on")).toBe('<p class="li l0"><span class="mark">•</span><strong>markdown</strong> is on</p>');
+    expect(renderNotesHtml("- **markdown** is on")).toBe('<p class="li l0"><span class="mark">•</span><span><strong>markdown</strong> is on</span></p>');
     expect(renderNotesHtml("snake_case_name and 2 * 3 * 4")).toBe("<p>snake_case_name and 2 * 3 * 4</p>");
   });
 

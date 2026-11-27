@@ -97,7 +97,7 @@ async function drag(page: Page, selector: string, from: [number, number], to: [n
 
 test("a phone drives the room PC: steps, notes, clock, slide grid, back, black, freeze, end", async ({ browser }) => {
   const room = await openRoom(browser);
-  await expect(room.locator("#phone-status")).toContainText("Other devices join with the same code");
+  await expect(room.locator("#phone-status")).toContainText("Other devices join with this code");
 
   const phone = await openView(browser, PHONE, true);
   const errors: string[] = [];
@@ -294,6 +294,30 @@ test("a laptop joined by code gets the full presenter view and drives the room P
   await laptop.keyboard.press("Tab");
   await expect(laptop.locator("#grid .thumb")).toHaveCount(7);
   await expect(laptop.locator("#next-slide")).toBeHidden();
+  // The frame the talk is in lists its builds, the one on screen lit, and its thumbnail follows
+  // it; every other frame shows fully built, with a count.
+  const here = laptop.locator("#grid .thumb.current");
+  await expect(here.locator(".label")).toHaveText("3");
+  await expect(here.locator(".buildlist button")).toHaveCount(3);
+  await expect(here.locator(".buildlist button.lit")).toHaveText("3");
+  await expect(here).toHaveAttribute("data-page", "4");
+  await here.locator(".buildlist button").first().click();
+  await expect.poll(() => roomPage(room)).toBe(2);
+  await expect(here.locator(".buildlist button.lit")).toHaveText("1");
+  await expect(here).toHaveAttribute("data-page", "2");
+  await expect(here).toHaveAttribute("data-drawn", "2");
+  await expect(laptop.locator("#grid .thumb").nth(3).locator(".builds")).toHaveText("2 builds");
+  await expect(laptop.locator("#grid .thumb").nth(3)).toHaveAttribute("data-page", "6");
+  // Builds: every page is its own thumbnail.
+  await laptop.locator("#ov-builds").click();
+  await expect(laptop.locator("#grid .thumb")).toHaveCount(10);
+  await expect(laptop.locator("#grid .thumb.current .builds")).toHaveText("1/3");
+  await laptop.locator("#grid .thumb").nth(4).click();
+  await expect.poll(() => roomPage(room)).toBe(4);
+  await expect(laptop.locator("#grid .thumb.current .builds")).toHaveText("3/3");
+  await laptop.locator("#ov-frames").click();
+  await expect(laptop.locator("#grid .thumb")).toHaveCount(7);
+  await expect(laptop.locator("#grid .thumb.current .buildlist button.lit")).toHaveText("3");
   await laptop.locator("#grid .thumb").nth(4).click();
   await expect.poll(() => roomPage(room)).toBe(7);
   await expect(laptop.locator("#grid .thumb.current .cap span").first()).toHaveText("5");
@@ -344,12 +368,69 @@ test("a laptop joined by code gets the full presenter view and drives the room P
   await expect(laptop.locator("#debug")).toContainText("input → audience draw");
   await expect(laptop.locator("#debug")).toContainText(/median \d/);
   await expect(laptop.locator("#debug")).toContainText("follows, wide");
-  await laptop.keyboard.press("Control+Shift+D");
+  await laptop.locator("#debug-close").click();
+  await expect(laptop.locator("#debug")).toBeHidden();
 
-  // Esc twice here ends the talk on the room PC.
+  // The outline takes the notes' place: the part the talk is in is lit, and a click jumps there.
+  await expect(laptop.locator("#outline")).toBeHidden();
+  await laptop.locator("#tab-outline").click();
+  await expect(laptop.locator("#notes")).toBeHidden();
+  await expect(laptop.locator("#outline .entry-row")).toHaveCount(3);
+  await expect(laptop.locator("#outline .entry-row.current")).toHaveCount(1);
+  await laptop.locator("#outline .entry-row").first().click();
+  const sectionStart = await roomPage(room);
+  await expect(laptop.locator("#outline .entry-row.current .title")).toHaveText("Main");
+  await laptop.locator("#tab-notes").click();
+  await expect(laptop.locator("#notes")).toBeVisible();
+  // Where notes come from, in a pop-up; Enter or Esc closes it without touching the talk.
+  await laptop.locator("#info-notes").click();
+  await expect(laptop.locator("#info-body")).toContainText("\\pdfpcnote");
+  await laptop.keyboard.press("Enter");
+  await expect(laptop.locator("#info")).toBeHidden();
+  expect(await roomPage(room)).toBe(sectionStart);
+
+  // More: Close is the blue button and Enter presses it. The notes size and the old
+  // "Slides for the audience" line are gone from it.
+  await laptop.locator("#t-more").click();
+  await expect(laptop.locator("#more-close")).toHaveClass(/primary/);
+  await expect(laptop.locator("#sheet-more")).not.toContainText("Notes size");
+  await expect(laptop.locator("#sheet-more")).not.toContainText("Slides for the audience");
+  await laptop.keyboard.press("Enter");
+  await expect(laptop.locator("#sheet-more")).toBeHidden();
+  expect(await roomPage(room)).toBe(sectionStart);
+  // End talk asks in a pop-up, in the middle of the window whatever the sheet is scrolled to.
+  await laptop.locator("#t-more").click();
+  await laptop.locator("#end-talk").click();
+  const ask = (await laptop.locator("#end-confirm .modal-panel").boundingBox())!;
+  expect(ask.y).toBeGreaterThan(100);
+  expect(ask.y + ask.height).toBeLessThan(700);
+  await laptop.keyboard.press("Enter"); // never ends the talk
+  await expect(laptop.locator("#end-confirm")).toBeVisible();
+  await laptop.keyboard.press("Escape");
+  await expect(laptop.locator("#end-confirm")).toBeHidden();
+  await laptop.keyboard.press("Escape"); // closes More
+  await expect(laptop.locator("#sheet-more")).toBeHidden();
+  await laptop.waitForTimeout(1100);
+
+  // The presenter view went full screen with the click that chose it. Out of full screen, a
+  // button at the top offers the way back.
+  expect(await laptop.evaluate(() => document.fullscreenElement?.id)).toBe("console");
+  await expect(laptop.locator("#fs")).toBeHidden();
+  await laptop.evaluate(() => document.exitFullscreen());
+  await expect(laptop.locator("#fs")).toBeVisible();
+  await laptop.locator("#fs").click();
+  await expect.poll(() => laptop.evaluate(() => document.fullscreenElement?.id)).toBe("console");
+
+  // Esc twice here goes back to the choice of views, as on the slides. The talk goes on.
   await laptop.keyboard.press("Escape");
   await laptop.keyboard.press("Escape");
-  await expect(room.locator("#code")).toBeVisible();
+  await expect(laptop.locator("#ready")).toBeVisible();
+  await expect(laptop.locator("#console")).toBeHidden();
+  await expect.poll(() => laptop.evaluate(() => document.fullscreenElement === null)).toBe(true);
+  await expect(room.locator("#audience")).toBeVisible();
+  expect(await roomPage(room)).toBe(sectionStart);
+  await laptop.locator("#presenter").click();
+  await expect(laptop.locator("#link")).toContainText("Slides showing");
   expect(errors).toEqual([]);
   await laptop.context().close();
   await room.close();
@@ -483,6 +564,7 @@ test("a phone held sideways shows two very large buttons that still drive the ta
   const phone = await openView(browser);
   await expect(phone.locator("#link")).toContainText("Slides showing");
 
+  await phone.evaluate(() => document.exitFullscreen()); // the test browser can't resize a full-screen window
   await phone.setViewportSize({ width: 844, height: 390 });
   await expect.poll(() => viewHook(phone, (h) => h.layout())).toBe("buttons");
   await expect(phone.locator("#current")).toBeHidden();
@@ -519,6 +601,7 @@ test("the layout follows the window: phone, tablet upright, tablet on its side, 
   const room = await openRoom(browser, true);
   const view = await openView(browser, PHONE);
   await expect(view.locator("#link")).toContainText("Slides showing");
+  await view.evaluate(() => document.exitFullscreen()); // the test browser can't resize a full-screen window
   const shots = process.env["LECTERN_SHOTS"];
   for (const [width, height, layout] of [
     [390, 844, "compact"],
@@ -633,7 +716,9 @@ test("a PDF opened on one device gets a code; a device that joins with it is sen
   const phone = await context.newPage();
   await phone.goto("./");
   await phone.locator("#file").setInputFiles("fixtures/overlays.pdf");
-  await expect(phone.locator("#phone-status")).toContainText("Other devices join with the code");
+  await expect(phone.locator("#phone-status")).toContainText("Other devices join with this code");
+  await expect(phone.locator("#code-line")).toContainText("Talk code:");
+  await expect(phone.locator("#reveal-code")).toBeHidden(); // made here, so shown outright
   await expect(phone.locator("#preview canvas")).toHaveCount(1); // the first slide, so it is plain which deck this is
   const code = (await phone.locator("#join-code").textContent()) ?? "";
   expect(code).toMatch(/^[a-z]{3,}$/);
@@ -660,7 +745,13 @@ test("a PDF opened on one device gets a code; a device that joins with it is sen
   await expect(room.locator("#deck-title")).toHaveText(/.+/);
   await expect(room.locator("#deck-summary")).toHaveText("9 frames, 23 pages");
   await expect(room.locator("#talk-status")).toContainText(`open on 1 other device, at frame ${frame}`);
-  await expect(room.locator("#join-code")).toHaveCount(0); // not shown where it was typed: that screen may be the projector
+  // Not shown where it was typed, as that screen may be the projector: dots, until asked for.
+  await expect(room.locator("#join-code")).toHaveCount(0);
+  await expect(room.locator("#code-line")).toContainText("Talk code: ••••••");
+  await room.locator("#reveal-code").click();
+  await expect(room.locator("#join-code")).toHaveText(code);
+  await room.locator("#reveal-code").click();
+  await expect(room.locator("#join-code")).toHaveCount(0);
   // Only ciphertext crossed: no PDF header, in the clear or in base64.
   const wire = Buffer.concat(frames.map((f) => (typeof f === "string" ? Buffer.from(f) : f))).toString("latin1");
   expect(frames.length).toBeGreaterThan(1);
@@ -713,10 +804,10 @@ test("each device chooses what it shows, and can change its mind without leaving
   await page.keyboard.press("ArrowRight");
   await expect.poll(() => roomPage(room)).toBe(1);
 
-  // More → Show slides…: back to the choice, still in the talk. This device then shows the slides
+  // More → Change view: back to the choice, still in the talk. This device then shows the slides
   // too, as a second screen following the first.
   await page.locator("#t-more").click();
-  await page.locator("#show-slides").click();
+  await page.locator("#change-view").click();
   await expect(page.locator("#ready")).toBeVisible();
   await expect(page.locator("#console")).toBeHidden();
   await page.locator("#start").click();

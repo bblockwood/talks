@@ -168,7 +168,6 @@ test("two screens: the presenter view in a second window drives the audience win
   const asked = () => main.evaluate(() => (window as unknown as { __askedScreen?: string }).__askedScreen);
   await presenter.locator("#t-more").click();
   await expect(presenter.locator("#row-join")).toBeHidden(); // this window is not a device of its own
-  await expect(presenter.locator("#row-view")).toBeHidden();
   await presenter.locator("#more-close").click();
   // Swap displays is always in view, at the bottom right, not under More.
   const swap = (await presenter.locator("#swap").boundingBox())!;
@@ -191,13 +190,20 @@ test("two screens: the presenter view in a second window drives the audience win
   // Nothing is stored on the room PC, by either window.
   expect(await presenter.evaluate(() => localStorage.length + sessionStorage.length)).toBe(0);
 
-  // Esc twice in the presenter window ends the talk: the window closes and the room PC is wiped.
+  // A window the browser placed stays a window, so Swap displays can move it: no Full screen button.
+  await expect(presenter.locator("#fs")).toBeHidden();
+
+  // Esc twice in the presenter window: it closes, and the first window is back at the choice of
+  // views, still in the talk.
   await presenter.bringToFront();
   const closed = presenter.waitForEvent("close");
   await presenter.keyboard.press("Escape");
   await presenter.keyboard.press("Escape");
   await closed;
-  await expect(main.locator("#code")).toBeVisible();
+  await expect(main.locator("#ready")).toBeVisible();
+  await expect(main.locator("#audience")).toBeHidden();
+  // This screen has shown the slides, so the code is dots here now.
+  await expect(main.locator("#join-code")).toHaveCount(0);
   expect(problems).toEqual([]);
   await context.close();
 });
@@ -296,7 +302,8 @@ test("an ordinary deck shows no split line; mirrored displays get a one-line not
   await expect(page.locator("#ready")).toBeVisible();
   await expect(page.locator("#split-line")).toBeHidden();
   await expect(page.locator("#modes")).toBeHidden();
-  await expect(page.locator("#mirror-note")).toContainText("extend");
+  await expect(page.locator("#both")).toBeDisabled();
+  await expect(page.locator("#both-note")).toContainText("unavailable: it needs a second screen that extends this one");
   await context.close();
 });
 
@@ -310,7 +317,7 @@ test("a browser that cannot place windows (Safari, Firefox): Both views opens tw
   await byCode(main);
   await expect(main.locator("#ready")).toBeVisible();
   await expect(main.locator("#both")).toBeEnabled();
-  await expect(main.locator("#manual-note")).toBeVisible();
+  await expect(main.locator("#both-note")).toContainText("in two windows");
 
   // One click: the presenter view opens in a second window, the slides start in this one.
   const [presenter] = await Promise.all([context.waitForEvent("page"), main.locator("#both").click()]);
@@ -322,6 +329,7 @@ test("a browser that cannot place windows (Safari, Firefox): Both views opens tw
   await expect(main.locator("#audience .fs-button")).toBeVisible();
   await expect(presenter.locator("#link")).toHaveText("Drag the slides window to the projector, then click Full screen on it.");
   await expect(presenter.locator("#swap")).toBeHidden(); // nothing to swap: the windows are placed by hand
+  await expect(presenter.locator("#fs")).toBeVisible(); // this window can fill its screen, on a click
 
   await presenter.keyboard.press("ArrowRight");
   await expect.poll(() => roomPage(main)).toBe(1);

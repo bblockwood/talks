@@ -59,6 +59,10 @@ let suggestedSplit: NotesSplit | null = null;
 let screens: ScreenDetails | null = null;
 let starting = false;
 let loading = false;
+/** The talk code was asked for on the page where a view is chosen. */
+let codeRevealed = false;
+/** This device has shown the slides, so its screen may be one the audience sees. */
+let shownSlidesHere = false;
 
 function setStatus(text: string, error = false): void {
   status.textContent = text;
@@ -84,9 +88,16 @@ function showBoth(): void {
   const possible = twoScreensPossible();
   const byHand = (!managed || placeByHand) && canPlaceByHand();
   $<HTMLButtonElement>("both").disabled = !possible && !byHand;
-  $("mirror-note").hidden = possible || byHand || !managed || layoutFor(window.innerWidth, window.innerHeight) !== "wide";
-  $("manual-note").hidden = !byHand;
   $("both-panel").hidden = !possible || !screens || byHand;
+  // What Both views does here, or why it can't.
+  const computer = layoutFor(window.innerWidth, window.innerHeight) === "wide" && window.matchMedia("(pointer: fine)").matches;
+  $("both-note").textContent = byHand
+    ? "Both views opens the slides and the presenter view in two windows. This browser can't place windows on screens itself: drag the slides window to the projector and click Full screen there."
+    : possible
+      ? "Both views puts the slides full screen on one screen and the presenter view on the other. The browser asks once for permission to place windows."
+      : computer
+        ? "Both views is unavailable: it needs a second screen that extends this one. No second screen was found, or it is mirroring this one."
+        : "Both views is unavailable: it needs a computer with a second screen, such as a laptop on a projector.";
 }
 
 function listScreens(): void {
@@ -199,21 +210,38 @@ function showTalkStatus(): void {
 
   const phone = $("phone-status");
   const canJoin = talk.relayStatus === "connected";
-  const joinCode = talk.source.joinCode;
   phone.replaceChildren();
   if (talk.relayStatus === "none") phone.textContent = "Other devices can't join: this build has no relay.";
   else if (!canJoin) phone.textContent = "Not connected: other devices can't join right now.";
-  else if (joinCode && talk.source.originator) {
-    // A talk started from a PDF on this device: its code was made here and is shown, so another
-    // device can join. A device that joined with it does not show it: its screen may be the projector.
-    const code = document.createElement("strong");
-    code.id = "join-code";
-    code.textContent = joinCode;
-    phone.append("Other devices join with the code ", code, ` at ${window.location.host}${import.meta.env.BASE_URL.replace(/\/$/, "")}`);
-  } else phone.textContent = `Other devices join with the same code at ${window.location.host}${import.meta.env.BASE_URL.replace(/\/$/, "")}`;
+  else phone.textContent = `Other devices join with this code at ${window.location.host}${import.meta.env.BASE_URL.replace(/\/$/, "")}`;
   phone.classList.toggle("ok", canJoin);
   phone.classList.toggle("off", !canJoin);
+  showCodeLine();
   showSplit();
+}
+
+/**
+ * "Talk code: maple". Shown outright only where the code was made, on a device that has not been
+ * showing the slides; where it was typed in, or on a screen the audience has been looking at, it
+ * is dots until asked for (Ben, 2026-11-27).
+ */
+function showCodeLine(): void {
+  const code = talk?.source.joinCode ?? currentCode;
+  $("code-line").hidden = code === "";
+  if (!talk || code === "") return;
+  const open = codeRevealed || (talk.source.originator && !shownSlidesHere);
+  const shown = $("code-shown");
+  // The element with the code in it exists only while the code is on screen.
+  shown.replaceChildren();
+  if (open) {
+    const text = document.createElement("span");
+    text.id = "join-code";
+    text.textContent = code;
+    shown.append(text);
+  } else shown.textContent = "••••••";
+  const toggle = $("reveal-code");
+  toggle.hidden = open && !codeRevealed;
+  toggle.textContent = codeRevealed ? "Hide code" : "Display code";
 }
 
 function showReady(): void {
@@ -228,8 +256,7 @@ function showReady(): void {
   setStatus("");
   // On a phone the presenter view is the likely choice; on a computer, either.
   const small = layoutFor(window.innerWidth, window.innerHeight) !== "wide";
-  presenterButton.classList.toggle("primary", small);
-  startButton.classList.toggle("primary", !small);
+  codeRevealed = false;
   ready.hidden = false;
   document.documentElement.style.setProperty("--slide-aspect", String(talk.deck.aspect));
   preview ??= new SlideSurface($("preview"), talk.deck, 2);
@@ -293,6 +320,8 @@ async function dropTalk(): Promise<void> {
   talk = null;
   currentCode = "";
   ownDevice = false;
+  codeRevealed = false;
+  shownSlidesHere = false;
   suggestedSplit = null;
   cache?.wipe();
   cache = null;
@@ -409,6 +438,7 @@ function openByCode(rawCode: string, own: boolean, then?: () => void): void {
     // A code made for one talk is not worth remembering or reloading by.
     currentCode = published ? code : "";
     ownDevice = own && published;
+    showCodeLine();
     then?.();
   });
 }
@@ -444,9 +474,11 @@ function showPresenter(): void {
       saveNotesSize,
       ...(current.source.joinCode && current.source.originator ? { joinHint: `code ${current.source.joinCode}` } : {}),
       onLeave: leave,
+      // Esc twice, or Change view: back to the choice of views, still in the talk.
       onChangeView: () => {
         active?.destroy();
         active = null;
+        if (document.fullscreenElement) void document.exitFullscreen().catch(() => {});
         showReady();
       },
       // The host has a newer publish: fetch it again and come straight back to this view.
@@ -459,6 +491,9 @@ function showPresenter(): void {
     }),
   );
   current.peer.setView("presenter");
+  // Called from the click, so the browser lets the presenter view fill the screen. After a
+  // reload of the slides there is no click: the view's Full screen button is there instead.
+  active.enterFullscreen();
 }
 
 // ---------------------------------------------------------------- the slides
@@ -509,6 +544,7 @@ function start(fullscreen: boolean, both = false): void {
       return;
     }
     presentation = started;
+    shownSlidesHere = true;
     entry.hidden = true;
     closePreview();
     if (placement) {
@@ -564,6 +600,10 @@ function joinLocal(channelName: string): void {
             loadNotesSize: () => null,
             saveNotesSize: () => {},
             onLeave: () => window.close(),
+            // Esc twice here takes the slides down too: the first window returns to the choice of views.
+            onChangeView: () => client.requestStop(),
+            // A window the browser placed must stay a window, or Swap displays can't move it.
+            fullscreen: !handed.canSwap,
             // The click or key press happened here, but it is the slides window that must change
             // its full screen, so the gesture is handed over with `delegate: "fullscreen"`. Only
             // where the browser placed the windows: otherwise they are dragged by hand.
@@ -614,6 +654,49 @@ $("start-windowed").addEventListener("click", () => start(false));
 $("both").addEventListener("click", () => start(document.fullscreenEnabled, true));
 $("split-toggle").addEventListener("click", () => applySplit(talk?.deck.split ? null : suggestedSplit));
 $("another").addEventListener("click", leave);
+$("reveal-code").addEventListener("click", () => {
+  codeRevealed = !codeRevealed;
+  showCodeLine();
+});
+
+// A PDF dropped anywhere on the start page opens it; the box says so and lights up on the way.
+const dropBox = $("drop");
+const draggingFile = (ev: DragEvent): boolean => ev.dataTransfer?.types.includes("Files") === true;
+let dragDepth = 0;
+const setDragging = (on: boolean): void => {
+  dropBox.classList.toggle("over", on && !choose.hidden);
+};
+window.addEventListener("dragenter", (ev) => {
+  if (!draggingFile(ev)) return;
+  dragDepth += 1;
+  setDragging(true);
+});
+window.addEventListener("dragleave", (ev) => {
+  if (!draggingFile(ev)) return;
+  dragDepth = Math.max(0, dragDepth - 1);
+  if (dragDepth === 0) setDragging(false);
+});
+window.addEventListener("dragover", (ev) => {
+  if (!draggingFile(ev)) return;
+  ev.preventDefault(); // or the browser would navigate to the dropped file
+  if (ev.dataTransfer) ev.dataTransfer.dropEffect = choose.hidden ? "none" : "copy";
+});
+window.addEventListener("drop", (ev) => {
+  if (!draggingFile(ev)) return;
+  ev.preventDefault();
+  dragDepth = 0;
+  setDragging(false);
+  if (choose.hidden) return; // a talk is open, or the slides are showing
+  const file = ev.dataTransfer?.files[0];
+  if (!file) return;
+  if (file.type !== "application/pdf" && !/\.pdf$/i.test(file.name)) {
+    setStatus("That is not a PDF. Export the slides as a PDF and drop that.", true);
+    return;
+  }
+  openPdf(() => file.arrayBuffer(), file.name.replace(/\.pdf$/i, ""));
+});
+// The box is also a button: a click opens the file picker.
+dropBox.addEventListener("click", () => fileInput.click());
 // Closing the tab: tell the others, so one of them carries the talk on at once.
 window.addEventListener("pagehide", () => {
   if (presentation) void presentation.end(false);

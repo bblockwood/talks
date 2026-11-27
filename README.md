@@ -30,8 +30,8 @@ npm run revoke -- talk.pdf       # take a deck down
 
 ## Showing the slides
 
-- Type the code, or use **open a PDF from this device** for a deck that isn't published. That talk is given a one-word code, shown on the page; a device that enters it is sent the slides, encrypted, through the relay.
-- Then choose **Audience view**, **Presenter view**, or **Both views** (two screens).
+- **Open a PDF from this device**, or drop one on the page. The talk is given a one-word code, shown under its first slide; a device that enters that code is sent the slides, encrypted, through the relay. A published talk opens by typing its code.
+- Then choose **Audience view**, **Presenter view**, or **Both views** (two screens). The line under the buttons says what Both views does on this device, or why it can't. The talk code sits under the preview: in full where it was made, as dots with **Display code** where it was typed in or where the slides have been showing.
 - **Keys:** → Space Page Down next; ← Page Up previous; Shift+→/← next/previous frame; a number then Enter jumps to that frame; Delete goes back after a jump; B or `.` black; W white (the whiteboard); F freeze; T pause the clock; C clear ink; Esc twice takes the slides off the screen and returns to the choice of views, one click from showing them again.
 - **Both views** (Chrome or Edge, displays set to extend): click it, allow window management, check the screens, click it again. Slides go full screen on the projector and the presenter view opens in a second window on the other screen, with **Swap displays** (Ctrl+D or Cmd+D) at its bottom right.
 - In Safari or Firefox, which can't place windows on screens, **Both views** opens the two windows and you drag the slides to the projector and click **Full screen** there. No Swap displays in that case.
@@ -46,12 +46,14 @@ One view for you, on whatever you have: your laptop or tablet on the lectern, yo
 
 - **It fits the screen.** A laptop or a tablet on its side gets the slide, the next slide and notes side by side; a tablet upright stacks them; a phone gets a compact column; a phone held sideways shows just two very large buttons.
 - **Stepping:** arrow keys, Space, Page Up/Down or a clicker; click the slide with a mouse; swipe, or tap Next/Prev, on a touch screen.
-- **Slides** (Tab) shows every frame, with search. Picking one jumps there at once; **Back** returns.
+- **It fills the screen** when you choose it. Out of full screen, a **Full screen** button sits at the top. Esc twice goes back to the choice of views, as on the slides.
+- **Slides** (Tab) shows every frame, with search. Picking one jumps there at once; **Back** returns. The frame the talk is in shows the build on screen and lists its builds, each a click away; **Builds** shows every build as its own thumbnail.
+- **Outline**, beside Notes, lists the PDF's sections with the one you are in lit; click one to jump. The **i** beside each says where notes and outlines come from.
 - **Pointer:** press and hold on the slide, then drag. With a mouse, **Laser** (L) points wherever the mouse goes.
 - **Draw** (D) writes on the slide in three colours, or on a whiteboard (**Board**). A pen always draws, without turning Draw on. Everyone's ink shows on every presenter view.
-- **More** has the clock, the whiteboard, notes size, connection numbers, and **End talk**.
+- **More** has the clock, the whiteboard, connection numbers, and **End talk**, which asks first. Enter closes it.
 - **Rehearse** by opening the talk in the presenter view with no screen showing slides; other devices can join. The top line says "No slides screen yet". The clock starts with the first slide change.
-- **More → Show slides…** returns to the choice of views without leaving the talk, to put the slides on this device's screen or its second screen.
+- **More → Change view** (or Esc twice) returns to the choice of views without leaving the talk, to put the slides on this device's screen or its second screen.
 - Tick **Remember on this device** to reopen a talk with one tap. Do that only on your own devices.
 
 ## Security: what this does and does not protect

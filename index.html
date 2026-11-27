@@ -15,81 +15,109 @@
   </head>
   <body>
     <main id="entry" class="entry">
-      <h1>Lectern</h1>
+      <header class="brand">
+        <svg class="logo" viewBox="0 0 1024 1024" aria-hidden="true">
+          <rect width="1024" height="1024" rx="228" fill="#0736A8" />
+          <g fill="#FFFFFF">
+            <path d="M254 357 Q246 360 241 371 L228 395 Q220 410 233 418 Q238 422 246 421 L778 351 Q794 349 789 333 L758 272 Q754 261 743 265 Z" />
+            <path d="M489 406 L531 400 L531 756 L489 756 Z" />
+            <rect x="317" y="756" width="390" height="43" rx="21.5" />
+          </g>
+        </svg>
+        <h1>Lectern</h1>
+      </header>
 
       <!-- Replaced as soon as the app starts. If it stays, the browser could not run the app. -->
       <p id="boot">Starting… If this message stays, this browser is too old or has JavaScript turned off.</p>
 
       <section id="choose" hidden>
+        <p class="tagline">
+          A streamlined PDF presenter that runs in the browser. Show the slides full screen for the audience, keep a
+          presenter view with notes, the next slide and a clock for yourself, and run the same talk from several
+          devices at once.
+        </p>
+
         <div id="saved" class="saved" hidden></div>
-        <form id="code-form">
-          <label for="code">Talk code</label>
-          <input
-            id="code"
-            name="lectern-talk-code"
-            type="text"
-            autocomplete="off"
-            autocapitalize="none"
-            autocorrect="off"
-            spellcheck="false"
-            enterkeyhint="go"
-          />
-          <label class="check small"><input id="show-code" type="checkbox" /> Show the code as I type</label>
-          <label class="check"><input id="remember" type="checkbox" /> Remember on this device (only on your own)</label>
-          <button id="open" class="primary wide">Open</button>
-        </form>
-        <p class="secondary">
-          or
-          <label class="filepick">
-            open a PDF from this device
+
+        <section class="card">
+          <label class="filepick primary wide">
+            Open a PDF from this device
             <input id="file" type="file" accept="application/pdf,.pdf" />
           </label>
-        </p>
+          <div id="drop" class="drop">or drop a PDF here</div>
+          <p class="hint">The PDF is not uploaded or stored anywhere. It opens in this browser, and you get a talk code for your other devices.</p>
+        </section>
         <div id="fixtures" class="choices" hidden></div>
-        <p class="hint">
-          Every device that opens the same code is in the same talk. Each one shows either the slides, full screen,
-          or the presenter view with notes and controls. On a shared computer, use a private or InPrivate window.
-        </p>
+
+        <section class="card">
+          <h2>Already have a talk open on another device?</h2>
+          <form id="code-form">
+            <label for="code">Enter its talk code here</label>
+            <div class="code-row">
+              <input
+                id="code"
+                name="lectern-talk-code"
+                type="text"
+                autocomplete="off"
+                autocapitalize="none"
+                autocorrect="off"
+                spellcheck="false"
+                enterkeyhint="go"
+              />
+              <button id="open" class="primary">Join</button>
+            </div>
+            <label class="check small"><input id="show-code" type="checkbox" /> Show the code as I type</label>
+            <label class="check small"><input id="remember" type="checkbox" /> Remember this talk on this device (only on your own)</label>
+          </form>
+          <p class="hint">
+            Every device that enters the same code joins the same talk and stays in step, and each one chooses what it
+            shows. Put the slides on the room's computer and keep your notes on a laptop, or drive from your phone. The
+            slides reach a joining device encrypted. A talk published ahead of time opens with its code here too. On a
+            shared computer, use a private or InPrivate window.
+          </p>
+        </section>
       </section>
 
       <section id="ready" hidden>
         <h2 id="deck-title"></h2>
         <p id="deck-summary" class="summary"></p>
         <div id="preview" class="slide preview"></div>
-        <p id="talk-status" class="talk-status" role="status"></p>
+        <p id="code-line" class="code-line" hidden>
+          Talk code: <strong id="code-shown"></strong>
+          <button id="reveal-code" type="button">Display code</button>
+        </p>
         <p id="phone-status" class="phone-status off"></p>
+        <p id="talk-status" class="talk-status" role="status"></p>
         <p id="split-line" class="split-line" hidden>
           <span id="split-text"></span>
           <button id="split-toggle" type="button"></button>
         </p>
 
-        <p class="views-head">On this device, show</p>
+        <p class="views-head">On this device, show…</p>
         <div class="views">
           <button id="start" class="primary">Audience view<small>the slides, full screen</small></button>
-          <button id="presenter">Presenter view<small>notes, next slide, clock, controls</small></button>
-          <button id="both">Both views<small>slides on one screen, presenter view on the other</small></button>
+          <button id="presenter" class="primary">Presenter view<small>notes, next slide, clock, controls</small></button>
+          <button id="both" class="primary">Both views<small>on two screens</small></button>
         </div>
+        <p id="both-note" class="hint both-note"></p>
         <div id="both-panel" class="modes" hidden>
           <p id="screens-status"></p>
           <div id="screens" class="screens"></div>
         </div>
-        <p id="mirror-note" class="hint" hidden>
-          Both views need a second screen that extends this one (not mirroring it).
-        </p>
-        <p id="manual-note" class="hint" hidden>
-          Both views: this browser can't place windows on screens itself. It opens the slides and the presenter view
-          in two windows; drag the slides to the projector and click Full screen there.
-        </p>
         <p id="fs-problem" class="problem" hidden>
           This browser refused full screen. Press <kbd>F11</kbd> to make the browser full screen yourself, then:
           <button id="start-windowed">Audience view in this window</button>
         </p>
-        <p class="keys">
-          <kbd>→</kbd> <kbd>Space</kbd> <kbd>Page Down</kbd> next · <kbd>←</kbd> <kbd>Page Up</kbd> previous ·
-          <kbd>Shift</kbd>+<kbd>→</kbd>/<kbd>←</kbd> next/previous frame · number then <kbd>Enter</kbd> jump to frame ·
-          <kbd>Delete</kbd> back after a jump · <kbd>B</kbd> black · <kbd>W</kbd> white · <kbd>F</kbd> freeze · <kbd>T</kbd> pause clock ·
-          <kbd>Esc</kbd> twice to come back to this page
-        </p>
+
+        <section class="controls">
+          <h3>Controls</h3>
+          <p class="keys">
+            <kbd>→</kbd> <kbd>Space</kbd> <kbd>Page Down</kbd> next · <kbd>←</kbd> <kbd>Page Up</kbd> previous ·
+            <kbd>Shift</kbd>+<kbd>→</kbd>/<kbd>←</kbd> next/previous frame · number then <kbd>Enter</kbd> jump to frame ·
+            <kbd>Delete</kbd> back after a jump · <kbd>B</kbd> black · <kbd>W</kbd> white · <kbd>F</kbd> freeze · <kbd>T</kbd> pause clock ·
+            <kbd>Esc</kbd> twice to come back to this page
+          </p>
+        </section>
         <p><button id="another">Leave this talk</button></p>
       </section>
 
@@ -104,6 +132,7 @@
         <span id="bar-where" class="bar-where"></span>
         <span id="pill" class="pill" hidden></span>
         <span class="spacer"></span>
+        <button id="fs" class="fs" hidden>Full screen</button>
         <button id="timer" class="timer">0:00</button>
         <span id="wall" class="wall"></span>
       </header>
@@ -147,20 +176,32 @@
                 <div id="next-slide" class="slide small"></div>
               </div>
             </div>
-            <div class="noteshead">
-              <span>Notes</span>
-              <span>
-                <button id="notes-smaller" aria-label="Smaller notes">A−</button>
-                <button id="notes-larger" aria-label="Larger notes">A+</button>
-              </span>
+            <div class="notesbox">
+              <div class="noteshead">
+                <span class="tabs">
+                  <button id="tab-notes" class="tab on-tab">Notes</button>
+                  <button id="info-notes" class="info-button" aria-label="Where speaker notes come from" title="Where speaker notes come from">i</button>
+                  <button id="tab-outline" class="tab">Outline</button>
+                  <button id="info-outline" class="info-button" aria-label="Where the outline comes from" title="Where the outline comes from">i</button>
+                </span>
+                <span class="sizes">
+                  <button id="notes-smaller" aria-label="Smaller text">A−</button>
+                  <button id="notes-larger" aria-label="Larger text">A+</button>
+                </span>
+              </div>
+              <section id="notes" class="notes"></section>
+              <section id="notes-image" class="slide notes-image" hidden></section>
+              <section id="outline" class="notes outline" hidden></section>
             </div>
-            <section id="notes" class="notes"></section>
-            <section id="notes-image" class="slide notes-image" hidden></section>
           </div>
 
           <div id="overview" class="overview" hidden>
             <header class="sheet-head">
               <strong>Slides</strong>
+              <span id="ov-mode" class="seg" title="Frames: one thumbnail per frame; the current frame shows the build on screen and lists its builds. Builds: every build as its own thumbnail.">
+                <button id="ov-frames">Frames</button>
+                <button id="ov-builds">Builds</button>
+              </span>
               <button id="overview-close">Close</button>
             </header>
             <input id="search" type="search" placeholder="Search slides" autocomplete="off" spellcheck="false" />
@@ -192,7 +233,7 @@
         <div class="sheet-panel">
           <header class="sheet-head">
             <strong>More</strong>
-            <button id="more-close">Close</button>
+            <button id="more-close" class="primary">Close</button>
           </header>
           <div class="rows">
             <div class="row">
@@ -228,17 +269,9 @@
               <span>Slides screen</span>
               <span><button id="m-white">Whiteboard</button></span>
             </div>
-            <div class="row">
-              <span>Notes size</span>
-              <span><button id="m-notes-smaller" aria-label="Smaller notes">A−</button> <button id="m-notes-larger" aria-label="Larger notes">A+</button></span>
-            </div>
             <div class="row" id="row-join">
               <span>Other devices join at</span>
               <span id="join-text" class="diag"></span>
-            </div>
-            <div class="row" id="row-view" hidden>
-              <span>Slides for the audience</span>
-              <span><button id="show-slides">Show slides…</button></span>
             </div>
             <div class="row">
               <span>Connection</span>
@@ -250,22 +283,43 @@
             </div>
             <div class="row">
               <span>This device</span>
-              <span><button id="leave">Leave the talk</button></span>
+              <span class="pair">
+                <button id="change-view" hidden>Change view</button>
+                <button id="leave">Leave the talk</button>
+              </span>
             </div>
             <div class="row danger">
               <span>Every device</span>
               <span><button id="end-talk" class="dangerous">End talk…</button></span>
             </div>
-            <div id="end-confirm" class="confirm" hidden>
-              <p>End the talk on every device? Each one returns to the start page and forgets the slides.</p>
-              <button id="end-cancel">Cancel</button>
-              <button id="end-yes" class="dangerous solid">End talk</button>
-            </div>
           </div>
         </div>
       </div>
 
-      <pre id="debug" class="debug" hidden></pre>
+      <div id="end-confirm" class="modal" role="dialog" aria-modal="true" hidden>
+        <div class="modal-panel">
+          <p>End the talk on every device? Each one returns to the start page and forgets the slides.</p>
+          <p class="modal-actions">
+            <button id="end-cancel">Cancel</button>
+            <button id="end-yes" class="dangerous solid">End talk</button>
+          </p>
+        </div>
+      </div>
+
+      <div id="info" class="modal" role="dialog" aria-modal="true" hidden>
+        <div class="modal-panel wide">
+          <header class="sheet-head">
+            <strong id="info-title"></strong>
+            <button id="info-close" class="primary">Close</button>
+          </header>
+          <div id="info-body" class="info-body"></div>
+        </div>
+      </div>
+
+      <div id="debug" class="debug" hidden>
+        <button id="debug-close" class="x" aria-label="Close timings" title="Close">×</button>
+        <pre id="debug-text"></pre>
+      </div>
     </div>
     <script type="module" src="/src/room/main.ts"></script>
   </body>

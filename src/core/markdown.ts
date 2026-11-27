@@ -63,8 +63,9 @@ export function renderNotesHtml(text: string): string {
   for (const block of parseBlocks(text.replace(/\u0000/g, ""))) {
     const body = inline(escapeHtml(block.text)).replace(/\n/g, "<br>");
     if (block.kind === "paragraph") html.push(`<p>${body}</p>`);
-    else if (block.kind === "bullet") html.push(`<p class="li l${block.level}"><span class="mark">•</span>${body}</p>`);
-    else html.push(`<p class="li l0"><span class="mark">${block.number}.</span>${body}</p>`);
+    // The text is one box beside its mark, so bold or code inside it wraps as text does.
+    else if (block.kind === "bullet") html.push(`<p class="li l${block.level}"><span class="mark">•</span><span>${body}</span></p>`);
+    else html.push(`<p class="li l0"><span class="mark">${block.number}.</span><span>${body}</span></p>`);
   }
   return html.join("");
 }

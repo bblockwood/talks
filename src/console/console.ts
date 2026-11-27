@@ -10,6 +10,8 @@ import { KeyInterpreter } from "../core/keys";
 import { hitTest } from "../core/links";
 import { formatClock, renderNotesHtml } from "../core/markdown";
 import { NotesTable, assembleNotes, parsePdfpc } from "../core/notes";
+import { currentEntry, shadowedEntries } from "../core/outline";
+import type { OutlineEntry } from "../core/outline";
 import { APP_VERSION } from "../core/protocol";
 import type { Envelope, StateBody, StrokeOp } from "../core/protocol";
 import { hitsByFrame, searchPages } from "../core/search";
@@ -23,7 +25,9 @@ import { deviceName } from "../shared/relay-client";
 import type { LinkStatus } from "../shared/relay-client";
 import { SlideSurface } from "../shared/slide-surface";
 import { ThumbGrid } from "../shared/thumbs";
+import type { ThumbMode } from "../shared/thumbs";
 import type { ConsoleClient } from "./client";
+import { NOTES_INFO, outlineInfo } from "./info";
 
 const PING_MS = 2000;
 /** The host sends state every 2.5 s; past this it is treated as gone (and a successor takes over). */
@@ -81,8 +85,10 @@ export interface ConsoleOptions {
   readonly joinHint?: string;
   /** Swap displays: only the second window of two-screen mode can do this. */
   onSwap?: () => void;
-  /** Go back to choosing what this device shows, without leaving the talk. */
+  /** Go back to choosing what this device shows, without leaving the talk (Esc twice, or Change view). */
   onChangeView?: () => void;
+  /** False in a window the browser placed on a screen itself, which must stay movable for Swap displays. */
+  readonly fullscreen?: boolean;
   /** Development and tests only: drop the connection as a network failure would. */
   dropForTest?: () => void;
 }
@@ -121,6 +127,12 @@ export class PresenterConsole {
   private lastResync = 0;
 
   private overviewOpen = false;
+  private thumbMode: ThumbMode = "frames";
+  /** The PDF's outline, once read; and whether the notes pane shows it instead of the notes. */
+  private outline: readonly OutlineEntry[] = [];
+  private outlineShown = false;
+  private outlineBuilt = false;
+  private keyboardLocked = false;
   private pageTexts: string[] | null = null;
   private hits: SearchHit[] = [];
   private selectedHit = 0;
@@ -160,7 +172,9 @@ export class PresenterConsole {
       window.setInterval(() => this.ping(), PING_MS),
     );
     void this.loadNotes();
+    void this.loadOutline();
     void this.requestWakeLock();
+    this.showFullscreen();
     this.update();
 
     if (import.meta.env.DEV) {
@@ -172,6 +186,7 @@ export class PresenterConsole {
         rtts: () => this.rtts,
         ink: () => ({ page: this.ink.page.length, board: this.ink.board.length }),
         hits: () => this.hits,
+        outline: () => this.outline,
         kind: () => this.client.kind,
         hosting: () => this.client.hosting,
         drop: () => this.options.dropForTest?.(),
@@ -283,6 +298,7 @@ export class PresenterConsole {
     this.notesImage = null;
     this.thumbs?.destroy();
     this.thumbs = null;
+    this.outlineBuilt = false; // its frame numbers changed
     void this.loadNotes();
   }
 
@@ -429,12 +445,19 @@ export class PresenterConsole {
     const note = this.notes.noteFor(page, frames);
     const notesEl = $("notes");
     const asImage = !note && this.deck.notesCrop !== null;
-    notesEl.hidden = asImage;
-    $("notes-image").hidden = !asImage;
-    if (asImage) {
+    const outlineShown = this.outlineShown && this.outline.length > 0;
+    notesEl.hidden = asImage || outlineShown;
+    $("notes-image").hidden = !asImage || outlineShown;
+    $("outline").hidden = !outlineShown;
+    $("tab-notes").classList.toggle("on-tab", !outlineShown);
+    $("tab-outline").classList.toggle("on-tab", outlineShown);
+    $("tab-outline").classList.toggle("off", this.outline.length === 0);
+    $("tab-outline").title = this.outline.length === 0 ? "This PDF has no outline" : "The PDF's outline; click an entry to jump there";
+    if (outlineShown) this.showOutline(page);
+    if (asImage && !outlineShown) {
       this.notesImage ??= new SlideSurface($("notes-image"), this.deck, 3, "notes");
       this.notesImage.show(page);
-    } else {
+    } else if (!asImage) {
       const html = note ? renderNotesHtml(note.text) : `<p class="empty">No notes for this slide.</p>`;
       if (notesEl.dataset["html"] !== html) {
         notesEl.dataset["html"] = html;
@@ -490,7 +513,7 @@ export class PresenterConsole {
     $<HTMLInputElement>("count-from").disabled = !live;
 
     $("swap").hidden = !this.options.onSwap;
-    $("row-view").hidden = !this.options.onChangeView;
+    $("change-view").hidden = !this.options.onChangeView;
     $("row-join").hidden = this.client.kind === "local";
     const where = `${window.location.host}${import.meta.env.BASE_URL.replace(/\/$/, "")}`;
     $("join-text").textContent = `${where}, ${this.options.joinHint ?? "with the same talk code"}`;
@@ -581,7 +604,7 @@ export class PresenterConsole {
         : `ping ${rtt === null ? "–" : `${Math.round(rtt)} ms`} · tap → slide ${oneWay === null ? "–" : `${Math.round(oneWay)} ms`} (median of ${this.taps.length})`;
 
     const ms = (n: number | null | undefined): string => (n === null || n === undefined ? "–" : `${n.toFixed(1)} ms`);
-    $("debug").textContent = [
+    $("debug-text").textContent = [
       `input → audience draw   n=${room?.draw.count ?? 0}`,
       `  median ${ms(room?.draw.medianMs)}   last ${ms(room?.draw.lastMs)}   max ${ms(room?.draw.maxMs)}`,
       `render-cache misses     ${room?.cacheMisses ?? 0}`,
@@ -606,6 +629,105 @@ export class PresenterConsole {
     this.update();
   }
 
+  private async loadOutline(): Promise<void> {
+    const outline = await this.deck.loadOutline().catch((): readonly OutlineEntry[] => []);
+    if (this.destroyed) return;
+    this.outline = outline;
+    this.outlineBuilt = false;
+    this.update();
+  }
+
+  /** The outline in the notes pane: every entry with the frame it starts on, the current one lit and in view. */
+  private showOutline(page: number): void {
+    const box = $("outline");
+    const frames = this.deck.frames;
+    if (!this.outlineBuilt) {
+      this.outlineBuilt = true;
+      const shadowed = shadowedEntries(this.outline);
+      box.replaceChildren(
+        ...this.outline.map((entry, i) => {
+          const row = document.createElement("button");
+          row.type = "button";
+          row.className = "entry-row";
+          row.style.paddingLeft = `${0.5 + entry.depth * 1.1}em`;
+          const title = document.createElement("span");
+          title.className = "title";
+          title.textContent = entry.title === "" ? "(untitled)" : entry.title;
+          row.append(title);
+          const target = entry.page;
+          if (target === null) row.disabled = true;
+          else {
+            if (!shadowed.has(i)) {
+              const frame = document.createElement("span");
+              frame.className = "frame";
+              frame.textContent = frames.frameContaining(target)?.label ?? "";
+              row.append(frame);
+            }
+            // A jump like any other: Back returns to where it started.
+            row.addEventListener("click", () => this.send({ name: "goToPage", page: target }), { signal: this.abort.signal });
+          }
+          return row;
+        }),
+      );
+      delete box.dataset["current"];
+    }
+    const current = currentEntry(this.outline, page);
+    if (box.dataset["current"] === String(current)) return;
+    box.dataset["current"] = String(current);
+    Array.from(box.children).forEach((row, i) => {
+      row.classList.toggle("current", i === current);
+      if (i === current) row.scrollIntoView({ block: "nearest" });
+    });
+  }
+
+  private setOutlineShown(shown: boolean): void {
+    this.outlineShown = shown && this.outline.length > 0;
+    delete $("outline").dataset["current"]; // scroll the current entry into view when it appears
+    this.update();
+  }
+
+  // ---------------------------------------------------------------- pop-ups
+
+  private showInfo(title: string, markdown: string): void {
+    $("info-title").textContent = title;
+    $("info-body").innerHTML = renderNotesHtml(markdown); // fixed text of ours, escaped all the same
+    $("info").hidden = false;
+  }
+
+  // ---------------------------------------------------------------- full screen
+
+  /** The presenter view fills the screen when the browser allows; otherwise a button at the top offers it. */
+  private get canFullscreen(): boolean {
+    return this.options.fullscreen !== false && document.fullscreenEnabled;
+  }
+
+  private showFullscreen(): void {
+    const full = document.fullscreenElement !== null;
+    $("fs").hidden = full || !this.canFullscreen;
+    if (full) void this.lockKeyboard();
+    else this.keyboardLocked = false;
+  }
+
+  /** Call from a click or key press: full screen needs the user gesture. */
+  enterFullscreen(): void {
+    if (!this.canFullscreen || document.fullscreenElement) return;
+    void $("console")
+      .requestFullscreen({ navigationUI: "hide" })
+      .catch(() => {}); // refused: the button stays
+  }
+
+  /** Where the browser can hold Esc for the page, Esc closes what is open here instead of leaving full screen. */
+  private async lockKeyboard(): Promise<void> {
+    const keyboard = navigator.keyboard;
+    if (!keyboard?.lock || this.keyboardLocked) return;
+    try {
+      await keyboard.lock(["Escape"]);
+      this.keyboardLocked = !this.destroyed;
+    } catch {
+      this.keyboardLocked = false;
+    }
+  }
+
   // ---------------------------------------------------------------- overview and search
 
   private setOverview(open: boolean): void {
@@ -616,9 +738,13 @@ export class PresenterConsole {
     $("side-normal").hidden = open && this.layout !== "compact";
     $("t-slides").classList.toggle("on", open);
     if (open) {
+      if (!this.thumbs) {
+        $("grid").scrollTop = 0;
+        this.thumbMode = "frames";
+      }
       this.thumbs ??= new ThumbGrid($("grid"), this.deck, {
         // A pick jumps at once and can be undone with Back; the overview stays open (Native §6.3).
-        onPick: (frame) => this.send({ name: "goToPage", page: frame.firstPage }),
+        onPick: (page) => this.send({ name: "goToPage", page }),
         hasNotes: (frame) => {
           for (let p = frame.firstPage; p <= frame.lastPage; p++) if (this.notes.byPage.has(p)) return true;
           return false;
@@ -636,10 +762,18 @@ export class PresenterConsole {
 
   private markThumbs(scroll = false): void {
     const view = this.view;
-    const frames = this.deck.frames;
-    const current = frames.frameContaining(this.page)?.index ?? null;
-    const frozen = view?.audienceMode.kind === "frozen" ? (frames.frameContaining(view.audienceMode.page)?.index ?? null) : null;
-    this.thumbs?.mark(current, frozen, scroll);
+    const frozen = view?.audienceMode.kind === "frozen" ? view.audienceMode.page : null;
+    this.thumbs?.mark(this.page, frozen, scroll);
+    // Frames or Builds: only a deck with builds has the choice.
+    $("ov-mode").hidden = this.deck.frames.frameCount === this.deck.pageCount;
+    $("ov-frames").classList.toggle("on", this.thumbMode === "frames");
+    $("ov-builds").classList.toggle("on", this.thumbMode === "builds");
+  }
+
+  private setThumbMode(mode: ThumbMode): void {
+    this.thumbMode = mode;
+    this.thumbs?.setMode(mode);
+    this.markThumbs(true);
   }
 
   private async runSearch(): Promise<void> {
@@ -749,6 +883,15 @@ export class PresenterConsole {
 
   private readonly onKeyDown = (ev: KeyboardEvent): void => {
     if ($("console").hidden) return;
+    // A pop-up takes the keys while it is open: Esc closes it, and Enter closes the information one.
+    // Ending the talk is never one key press away.
+    const modal = !$("end-confirm").hidden ? "end-confirm" : !$("info").hidden ? "info" : null;
+    if (modal && !ev.ctrlKey && !ev.altKey && !ev.metaKey && (ev.key === "Escape" || ev.key === "Enter" || ev.key === " " || ev.key === "Tab")) {
+      ev.preventDefault();
+      ev.stopPropagation();
+      if (ev.key === "Escape" || (ev.key === "Enter" && modal === "info")) $(modal).hidden = true;
+      return;
+    }
     if (ev.ctrlKey && ev.shiftKey && (ev.key === "D" || ev.key === "d")) {
       ev.preventDefault();
       $("debug").hidden = !$("debug").hidden;
@@ -819,6 +962,12 @@ export class PresenterConsole {
     // A single Esc first clears typed digits, then turns the laser or pen off, then closes
     // whatever is open; only after that does it count towards ending the talk (Native §6.5).
     const sheetOpen = !$("sheet-more").hidden;
+    // With More open, Enter is its Close button.
+    if (plain && sheetOpen && ev.key === "Enter") {
+      ev.preventDefault();
+      if (!ev.repeat) $("sheet-more").hidden = true;
+      return;
+    }
     if (plain && ev.key === "Escape" && !ev.repeat && this.keys.typedDigits === "" && (this.laserMode || this.drawMode || this.overviewOpen || sheetOpen)) {
       ev.preventDefault();
       if (sheetOpen) $("sheet-more").hidden = true;
@@ -833,7 +982,9 @@ export class PresenterConsole {
       this.keyState(),
     );
     if (result.handled) ev.preventDefault();
-    if (result.end) this.endTalk();
+    // Esc twice goes back to choosing a view, as it does on the slides (Ben, 2026-11-27). The talk
+    // goes on; ending it for everyone is End talk, under More.
+    if (result.end) this.options.onChangeView?.();
     else if (result.command) this.send(result.command);
     $("digits").textContent = this.keys.typedDigits === "" ? "" : `Go to frame ${this.keys.typedDigits}⏎`;
   };
@@ -933,11 +1084,33 @@ export class PresenterConsole {
       { signal },
     );
 
-    for (const id of ["notes-smaller", "m-notes-smaller"]) on(id, () => this.setNotesSize(-2));
-    for (const id of ["notes-larger", "m-notes-larger"]) on(id, () => this.setNotesSize(2));
-    on("debug-toggle", () => ($("debug").hidden = !$("debug").hidden));
+    on("notes-smaller", () => this.setNotesSize(-2));
+    on("notes-larger", () => this.setNotesSize(2));
+    on("tab-notes", () => this.setOutlineShown(false));
+    on("tab-outline", () => this.setOutlineShown(true));
+    on("info-notes", () => this.showInfo("Notes", NOTES_INFO));
+    on("info-outline", () => this.showInfo("Outline", outlineInfo(this.outline.length > 0)));
+    on("info-close", () => ($("info").hidden = true));
+    on("ov-frames", () => this.setThumbMode("frames"));
+    on("ov-builds", () => this.setThumbMode("builds"));
+    on("debug-toggle", () => {
+      $("debug").hidden = !$("debug").hidden;
+      $("sheet-more").hidden = true; // or the sheet covers what was just asked for
+    });
+    on("debug-close", () => ($("debug").hidden = true));
     on("swap", () => this.options.onSwap?.());
-    on("show-slides", () => this.options.onChangeView?.());
+    on("change-view", () => this.options.onChangeView?.());
+    on("fs", () => this.enterFullscreen());
+    document.addEventListener("fullscreenchange", () => this.showFullscreen(), { signal });
+    for (const id of ["end-confirm", "info"]) {
+      $(id).addEventListener(
+        "click",
+        (ev) => {
+          if (ev.target === ev.currentTarget) $(id).hidden = true; // a click outside the pop-up
+        },
+        { signal },
+      );
+    }
     on("banner-action", () => this.options.onReload?.());
     on("leave", () => this.options.onLeave());
     on("end-talk", () => ($("end-confirm").hidden = false));
@@ -1102,7 +1275,9 @@ export class PresenterConsole {
 
   /** The page elements outlive a console (the same device can open another talk), so start and end clean. */
   private resetPanels(): void {
-    for (const id of ["sheet-more", "end-confirm", "banner", "pill", "overview", "drawbar", "debug", "count-hint"]) $(id).hidden = true;
+    for (const id of ["sheet-more", "end-confirm", "info", "banner", "pill", "overview", "drawbar", "debug", "count-hint", "outline", "fs"]) $(id).hidden = true;
+    $("outline").replaceChildren();
+    delete $("outline").dataset["current"];
     $("side-normal").hidden = false;
     $<HTMLInputElement>("search").value = "";
     $("results").replaceChildren();
@@ -1134,6 +1309,7 @@ export class PresenterConsole {
     delete $("notes").dataset["html"];
     this.resetPanels();
     void this.wakeLock?.release().catch(() => {});
+    if (this.keyboardLocked) navigator.keyboard?.unlock?.();
     if (this.options.ownsDeck) void this.deck.destroy();
     if (import.meta.env.DEV) delete (window as unknown as { __console?: unknown }).__console;
   }

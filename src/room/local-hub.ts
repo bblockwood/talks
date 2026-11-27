@@ -96,6 +96,9 @@ export class LocalHub {
         this.talk.peer.fromLocal({ sid: frame.sid, seq: frame.seq, ...message });
         break;
       }
+      case "stop":
+        void this.presentation?.stop();
+        break;
       case "closed":
         this.close();
         break;

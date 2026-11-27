@@ -46,9 +46,40 @@ kbd {
   margin-top: 0.2rem;
 }
 .views-head {
-  margin: 1.2rem 0 -0.7rem;
-  color: var(--muted);
-  font-size: 0.9rem;
+  margin: 1.4rem 0 -0.6rem;
+  font-size: 1.05rem;
+  font-weight: 600;
+}
+.both-note {
+  margin: 0.5rem 0 0;
+}
+/* "Talk code: maple", or dots and a button where the code should not sit on screen. */
+.code-line {
+  font-size: 1.3rem;
+  margin: 0.6rem 0 0.4rem;
+}
+.code-line strong {
+  font-family: ui-monospace, Menlo, Consolas, monospace;
+  letter-spacing: 0.02em;
+}
+.code-line button {
+  font-size: 0.85rem;
+  padding: 0.2rem 0.7rem;
+  margin-left: 0.6rem;
+  vertical-align: middle;
+}
+.controls {
+  margin: 1.6rem 0 1rem;
+  border: 1px solid var(--line);
+  border-radius: 0.8rem;
+  padding: 0.8rem 1rem;
+}
+.controls h3 {
+  margin: 0 0 0.3rem;
+  font-size: 0.95rem;
+}
+.controls .keys {
+  margin: 0;
 }
 /* The first slide, or the one the talk is on, so it is plain which deck this is. */
 .preview {

@@ -145,6 +145,32 @@ test("the file picker still opens a PDF from this computer", async ({ page }) =>
   await expect(page.locator("#deck-summary")).toHaveText("9 frames, 23 pages");
 });
 
+test("a PDF dropped on the start page opens; anything else is refused in plain words", async ({ page }) => {
+  await page.goto("./");
+  await expect(page.locator(".tagline")).toContainText("PDF presenter");
+  await expect(page.locator(".brand svg")).toBeVisible();
+  const drop = (name: string, type: string, bytes: number[]) =>
+    page.evaluate(
+      ({ name, type, bytes }) => {
+        const data = new DataTransfer();
+        data.items.add(new File([new Uint8Array(bytes)], name, { type }));
+        for (const kind of ["dragenter", "dragover", "drop"]) {
+          window.dispatchEvent(new DragEvent(kind, { dataTransfer: data, bubbles: true, cancelable: true }));
+        }
+      },
+      { name, type, bytes },
+    );
+  await drop("notes.txt", "text/plain", [104, 105]);
+  await expect(page.locator("#status")).toHaveText("That is not a PDF. Export the slides as a PDF and drop that.");
+  await expect(page.locator("#ready")).toBeHidden();
+  await drop("My talk.pdf", "application/pdf", [...readFileSync("fixtures/overlays.pdf")]);
+  await expect(page.locator("#ready")).toBeVisible();
+  await expect(page.locator("#deck-summary")).toHaveText("9 frames, 23 pages");
+  // All three views are offered the same way.
+  for (const id of ["start", "presenter", "both"]) await expect(page.locator(`#${id}`)).toHaveClass(/primary/);
+  await expect(page.locator(".controls h3")).toHaveText("Controls");
+});
+
 test("the browser's crypto matches the shared test vectors", async ({ page }) => {
   await page.goto("./");
   const vectors = JSON.parse(readFileSync("fixtures/crypto-vectors.json", "utf8")) as {

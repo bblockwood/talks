@@ -7,6 +7,8 @@ import { FrameIndex } from "../core/frames";
 import { linkFromRaw } from "../core/links";
 import type { PageLink } from "../core/links";
 import type { NormalizedRect } from "../core/links";
+import { flattenOutline } from "../core/outline";
+import type { OutlineEntry, OutlineNode } from "../core/outline";
 import { cropLinks, splitRects } from "../core/split";
 import type { NotesSplit } from "../core/split";
 import { loadEmbeddedNotes } from "./deck-notes";
@@ -49,6 +51,8 @@ export interface Deck {
   pageText(page: number): Promise<string>;
   /** Notes embedded in the PDF as text annotations, per page. Scans every page once. */
   loadEmbeddedNotes(): Promise<Map<number, string>>;
+  /** The PDF's outline (bookmarks) in reading order; empty when it has none. */
+  loadOutline(): Promise<readonly OutlineEntry[]>;
   /** Drops the document and its worker. The deck is unusable afterwards. */
   destroy(): Promise<void>;
 }
@@ -140,6 +144,26 @@ export async function openDeck(data: ArrayBuffer): Promise<Deck> {
     return known;
   };
 
+  interface RawOutline {
+    title?: unknown;
+    dest?: unknown;
+    items?: unknown;
+  }
+  const outlineNodes = async (items: unknown, depth: number): Promise<OutlineNode[]> => {
+    if (!Array.isArray(items) || depth > 8) return [];
+    const out: OutlineNode[] = [];
+    for (const item of items as RawOutline[]) {
+      if (!item || typeof item !== "object") continue;
+      out.push({
+        title: typeof item.title === "string" ? item.title : "",
+        page: item.dest != null ? await resolveDest(item.dest) : null,
+        children: await outlineNodes(item.items, depth + 1),
+      });
+    }
+    return out;
+  };
+  let outline: Promise<readonly OutlineEntry[]> | null = null;
+
   const extractLinks = async (page: number): Promise<readonly PageLink[]> => {
     const proxy = await pdf.getPage(page + 1);
     const viewport = proxy.getViewport({ scale: 1 });
@@ -216,6 +240,12 @@ export async function openDeck(data: ArrayBuffer): Promise<Deck> {
       return text;
     },
     loadEmbeddedNotes: () => (embeddedNotes ??= loadEmbeddedNotes(pdf)),
+    loadOutline: () =>
+      (outline ??= pdf
+        .getOutline()
+        .then((raw) => outlineNodes(raw, 0))
+        .then((nodes) => flattenOutline(nodes, pdf.numPages))
+        .catch((): readonly OutlineEntry[] => [])),
     getPage: (page) => pdf.getPage(page + 1),
     linksNow: (page) => links.get(page),
     loadLinks(page) {

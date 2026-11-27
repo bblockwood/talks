@@ -781,3 +781,44 @@ Verification: build; 291 unit tests; 41 e2e tests (new: the hand-placed two-wind
 1. Type a code on the start page: dots, not letters. Tick "Show the code as I type" to see it.
 2. Audience view, step a few slides, Esc twice: the choice page shows the slide you were on. Click Audience view: same slide, full screen.
 3. Safari on the Mac with the second display: open a talk, click **Both views**. Allow pop-ups if Safari asks, and click again. Drag the slides window to the projector, click **Full screen** on it, and drive from the other window.
+
+## W8. Start page, preview page and presenter view, from Ben's W7.2 tests (2026-11-27)
+
+Plan, as asked:
+
+1. Esc twice in the presenter view goes back to the choice of views instead of ending the talk.
+2. Start page for a first-time visitor: icon, a short description, **Open a PDF** and a drop box first, then "Already have a talk open on another device?" with the code field.
+3. Preview page: the talk code under the slide (dots and **Display code** where it should not sit on screen), three blue buttons, a line saying what Both views does or why it can't, a boxed Controls section.
+4. Presenter view: blue Close on More that Enter presses; no notes size or "Slides for the audience" in More; End talk asks in a pop-up; Timings closes with ×; an **i** beside Notes; larger "Next" and "Notes" labels; full screen by default with a button at the top otherwise; Frames/Builds in Slides as in the native app; an Outline tab.
+
+### Done
+
+- All of the above. Details that were my call are in `docs/decisions.md`:
+  - The way back to the choice of views stays under More as **Change view** in the "This device" row, because a phone has no Esc.
+  - The talk code is dots, with **Display code**, on any device that typed it in or has shown the slides.
+  - The second window that Chrome places on a screen does not go full screen, or Swap displays could not move it.
+  - With the notes size gone from More, the Notes heading with A− and A+ now shows on phones and upright tablets too.
+- Slides (`src/shared/thumbs.ts`): **Frames** shows each frame fully built, except the frame the talk is in, whose thumbnail follows the build on screen and whose caption lists its builds, the current one lit, each a click away (more than 8 builds: "build k/n"). **Builds** shows every page. The toggle is hidden for a deck without builds.
+- Outline (`src/core/outline.ts`, `Deck.loadOutline`): the PDF's bookmarks with the frame each starts on; the current part is lit and kept in view; a click jumps, and Back returns. A section whose first subsection starts on the same page shows no frame number, as in the native app.
+- Fixed on the way: a bullet in the notes that contained bold or code was laid out in columns. It now wraps as text.
+
+Verification: build; 295 unit tests (new: outline); 42 e2e tests (new: drop a PDF; extended: the laptop presenter test covers builds in Slides, the Outline tab, the information pop-up, More, the End talk pop-up, Timings ×, full screen, Esc twice; the two-window tests cover Esc twice in the second window).
+
+### Known issues
+
+- **Full screen in the presenter view is tried only in the test browser.** Not tried: Safari on a Mac or iPad, Chrome on Android. An iPhone has no full screen for web pages, so nothing changes there and no button shows.
+- In Safari and Firefox a single Esc leaves full screen (those browsers don't let a page hold the key). The view stays up and the **Full screen** button returns.
+- In Both views the presenter window is not full screen: placed by Chrome it stays a window for Swap displays; opened by hand it shows the **Full screen** button.
+- The native app's appendix mark in the Slides grid is not carried over.
+- The Frames/Builds choice and the Notes/Outline choice are not remembered between talks.
+
+### Ben checklist: W8
+
+1. Laptop, `/talks`: read the start page as a newcomer would. Drag a PDF onto it.
+2. Preview page: the code shows under the slide. Open the same code on the phone: there it is dots, and **Display code** shows it.
+3. Laptop, **Presenter view**: it should fill the screen. Press Esc once (in Chrome it stays full screen; in Safari it leaves, and **Full screen** appears at the top). Press Esc twice: back at the preview page.
+4. Presenter view, a Beamer deck with overlays: **Slides**, step through a frame with builds and watch its thumbnail and build numbers; click a build number; try **Builds**.
+5. **Outline** beside Notes on a deck with sections: click a section, then **Back**. Click the **i** beside Notes.
+6. **More**: press Enter to close it. **End talk…**: the question appears in the middle; Cancel.
+7. Phone: check the Notes/Outline heading and A−/A+ fit, and **More → Change view**.
+8. Projector, **Both views** in Chrome: Esc twice in the presenter window should close it and bring the first window back to the preview page.
