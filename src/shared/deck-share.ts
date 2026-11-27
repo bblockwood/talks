@@ -4,7 +4,7 @@
 // forwards each piece and forgets it.
 import { deriveKeys } from "../core/crypto";
 import type { TalkKeys } from "../core/crypto";
-import { DECK_CHUNK_BYTES, randomSid } from "../core/protocol";
+import { DECK_CHUNK_BYTES, MAX_MISSING, randomSid } from "../core/protocol";
 import type { Envelope, Message } from "../core/protocol";
 import { NetworkError, NoTalkError } from "./fetch-deck";
 import { RELAY_URL, RelayClient } from "./relay-client";
@@ -14,6 +14,8 @@ const CHUNKS_PER_SECOND = 40;
 /** How long a joining device waits for anyone to answer before deciding there is no such talk. */
 const ANSWER_WAIT_MS = 4000;
 const STALL_MS = 12_000;
+/** With pieces still missing, this long without one and the missing ones are asked for again. */
+const GAP_MS = 2000;
 
 function toBase64(bytes: Uint8Array): string {
   let binary = "";
@@ -28,18 +30,67 @@ function fromBase64(text: string): Uint8Array {
   return out;
 }
 
-/** Sends the PDF to the device that asked. Resolves when done, or early if the connection goes. */
-export async function sendDeck(send: (message: Message) => number, pdf: ArrayBuffer, title: string, to: string): Promise<void> {
-  const bytes = new Uint8Array(pdf);
-  const chunks = Math.ceil(bytes.length / DECK_CHUNK_BYTES);
-  const id = randomSid();
-  if (send({ type: "deck-info", body: { for: to, id, bytes: bytes.length, chunks, title } }) === 0) return;
-  for (let index = 0; index < chunks; index++) {
-    const data = toBase64(bytes.subarray(index * DECK_CHUNK_BYTES, (index + 1) * DECK_CHUNK_BYTES));
-    if (send({ type: "deck-chunk", body: { for: to, id, index, data } }) === 0) return;
-    await new Promise((resolve) => window.setTimeout(resolve, 1000 / CHUNKS_PER_SECOND));
+/**
+ * Sends the PDF to devices that ask for it. However many ask at once, the pieces go out at one
+ * steady rate, taking turns, so the relay's limit is never reached (it drops what is over it);
+ * a device that missed pieces anyway asks for those again.
+ */
+export class DeckSender {
+  private readonly bytes: Uint8Array;
+  private readonly chunks: number;
+  private jobs: { to: string; id: string; pending: number[] }[] = [];
+  /** The transfer each device was last given. */
+  private readonly ids = new Map<string, string>();
+  private timer: number | undefined;
+
+  constructor(
+    private readonly send: (message: Message) => number,
+    pdf: ArrayBuffer,
+    private readonly title: string,
+  ) {
+    this.bytes = new Uint8Array(pdf);
+    this.chunks = Math.ceil(this.bytes.length / DECK_CHUNK_BYTES);
+  }
+
+  /** A `deck-request` from the device `to`. */
+  request(to: string, body: { readonly id?: string; readonly missing?: readonly number[] }): void {
+    const running = this.jobs.find((job) => job.to === to);
+    if (body.id !== undefined && body.missing) {
+      if (this.ids.get(to) !== body.id) return; // not a transfer of ours
+      const wanted = body.missing.filter((index) => index < this.chunks);
+      if (running) running.pending.push(...wanted.filter((index) => !running.pending.includes(index)));
+      else if (wanted.length > 0) this.jobs.push({ to, id: body.id, pending: wanted });
+    } else {
+      if (running) return; // already on its way
+      const id = randomSid();
+      if (this.send({ type: "deck-info", body: { for: to, id, bytes: this.bytes.length, chunks: this.chunks, title: this.title } }) === 0) return;
+      this.ids.set(to, id);
+      this.jobs.push({ to, id, pending: Array.from({ length: this.chunks }, (_, index) => index) });
+    }
+    this.timer ??= window.setInterval(() => this.step(), 1000 / CHUNKS_PER_SECOND);
+  }
+
+  stop(): void {
+    window.clearInterval(this.timer);
+    this.timer = undefined;
+    this.jobs = [];
+  }
+
+  /** One piece, for whichever device's turn it is. */
+  private step(): void {
+    const job = this.jobs.shift();
+    const index = job?.pending.shift();
+    if (!job || index === undefined) {
+      if (this.jobs.length === 0) this.stop();
+      return;
+    }
+    const data = toBase64(this.bytes.subarray(index * DECK_CHUNK_BYTES, (index + 1) * DECK_CHUNK_BYTES));
+    // Not sent: the connection has gone. The device asks again when it is back.
+    if (this.send({ type: "deck-chunk", body: { for: to(job), id: job.id, index, data } }) === 0) return;
+    if (job.pending.length > 0) this.jobs.push(job);
   }
 }
+const to = (job: { to: string }): string => job.to;
 
 export interface ReceivedDeck {
   readonly pdf: ArrayBuffer;
@@ -57,8 +108,23 @@ export function receiveDeck(keys: TalkKeys, onProgress: (fraction: number) => vo
     let transfer: { id: string; bytes: number; title: string; parts: (Uint8Array | undefined)[]; got: number } | null = null;
     let asking: number | undefined;
     let deadline: number | undefined;
+    let lastPieceAt = 0;
+    let asked = 0;
+    /** Pieces can be lost on the way (the relay drops what is over its rate): ask for those again, a few times. */
+    const askAgain = (): void => {
+      if (!transfer || transfer.got >= transfer.parts.length) return;
+      const missing: number[] = [];
+      for (let i = 0; i < transfer.parts.length && missing.length < MAX_MISSING; i++) if (!transfer.parts[i]) missing.push(i);
+      asked = performance.now();
+      relay.send({ type: "deck-request", body: { id: transfer.id, missing } });
+    };
+    const gaps = window.setInterval(() => {
+      const now = performance.now();
+      if (transfer && now - lastPieceAt > GAP_MS && now - asked > GAP_MS) askAgain();
+    }, 500);
     const finish = (result: ReceivedDeck | Error): void => {
       window.clearInterval(asking);
+      window.clearInterval(gaps);
       window.clearTimeout(deadline);
       void relay.close();
       if (result instanceof Error) reject(result);
@@ -73,6 +139,7 @@ export function receiveDeck(keys: TalkKeys, onProgress: (fraction: number) => vo
         window.clearInterval(asking); // the first device to answer is the one listened to
         const { id, bytes, chunks, title } = envelope.body;
         transfer = { id, bytes, title, parts: new Array<Uint8Array | undefined>(chunks), got: 0 };
+        lastPieceAt = performance.now();
         arm(STALL_MS, new NetworkError("the slides stopped arriving"));
         return;
       }
@@ -81,9 +148,14 @@ export function receiveDeck(keys: TalkKeys, onProgress: (fraction: number) => vo
       if (index >= transfer.parts.length || transfer.parts[index]) return;
       transfer.parts[index] = fromBase64(data);
       transfer.got += 1;
+      lastPieceAt = performance.now();
       onProgress(transfer.got / transfer.parts.length);
       arm(STALL_MS, new NetworkError("the slides stopped arriving"));
-      if (transfer.got < transfer.parts.length) return;
+      if (transfer.got < transfer.parts.length) {
+        // The last piece is here but earlier ones are not: no need to wait to ask.
+        if (index === transfer.parts.length - 1 && performance.now() - asked > GAP_MS) askAgain();
+        return;
+      }
       const pdf = new Uint8Array(transfer.bytes);
       let offset = 0;
       for (const part of transfer.parts) {

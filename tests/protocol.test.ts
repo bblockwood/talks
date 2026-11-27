@@ -122,6 +122,16 @@ describe("message validation", () => {
     expect(parseCommand({ name: "next", extra: "ignored", __proto__: { evil: true } })).toEqual({ name: "next" });
   });
 
+  it("accepts a plain request for the slides, or one for missing pieces", () => {
+    expect(parseMessage("deck-request", {})).toEqual({ type: "deck-request", body: {} });
+    const id = "0123456789abcdef";
+    expect(parseMessage("deck-request", { id, missing: [0, 7] })).toEqual({ type: "deck-request", body: { id, missing: [0, 7] } });
+    expect(parseMessage("deck-request", { id, missing: [] })).toBeNull();
+    expect(parseMessage("deck-request", { id: "x", missing: [1] })).toBeNull();
+    expect(parseMessage("deck-request", { id, missing: [-1] })).toBeNull();
+    expect(parseMessage("deck-request", { id, missing: Array.from({ length: 65 }, (_, i) => i) })).toBeNull();
+  });
+
   it("clamps pointer coordinates and validates the rest", () => {
     expect(parseMessage("pointer", { x: 1.7, y: -0.2, visible: true })).toEqual({ type: "pointer", body: { x: 1, y: 0, visible: true } });
     expect(parseMessage("pointer", { x: Number.NaN, y: 0, visible: true })).toBeNull();

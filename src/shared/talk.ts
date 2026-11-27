@@ -7,7 +7,7 @@ import { Peer } from "../core/peer";
 import { randomSid } from "../core/protocol";
 import type { Envelope, RoomInfo } from "../core/protocol";
 import type { Deck } from "./deck";
-import { sendDeck } from "./deck-share";
+import { DeckSender } from "./deck-share";
 import type { PresenterDeck } from "./local-channel";
 import { RELAY_URL, RelayClient, deviceName } from "./relay-client";
 import type { LinkStatus } from "./relay-client";
@@ -39,6 +39,11 @@ export interface AudienceSink {
   status(): Pick<RoomInfo, "draw" | "cacheMisses">;
 }
 
+/** Two of the host's heartbeats missed: time to doubt the connection. */
+const SILENCE_MS = 6000;
+/** Hidden for this long, the connection is replaced on return without waiting to find out. */
+const AWAY_MS = 5000;
+
 const NO_DRAWS: RoomInfo["draw"] = { count: 0, medianMs: null, lastMs: null, maxMs: null };
 
 export class Talk {
@@ -57,8 +62,12 @@ export class Talk {
   private readonly relay: RelayClient | null;
   private readonly listeners = new Set<(envelope: Envelope) => void>();
   private readonly statusListeners = new Set<(status: LinkStatus) => void>();
-  /** Devices currently being sent the slides. */
-  private readonly sending = new Set<string>();
+  /** Sends the slides to devices that join by code. */
+  private deckSender: DeckSender | null = null;
+  /** `performance.now()` when anything last arrived from another device. */
+  private heardAt = performance.now();
+  private recycledAt = 0;
+  private hiddenAt: number | null = null;
   private readonly ticker: number;
   private closed = false;
 
@@ -104,15 +113,49 @@ export class Talk {
             channelKey: source.keys.channelKey,
             sid: this.sid,
             onMessage: (envelope) => {
-              if (envelope.type === "deck-request") this.shareDeck(envelope.sid);
+              this.heardAt = performance.now();
+              if (envelope.type === "deck-request") this.shareDeck(envelope.sid, envelope.body);
               else if (envelope.type !== "deck-info" && envelope.type !== "deck-chunk") this.peer.receive(envelope);
             },
             onStatus: (status) => this.setRelayStatus(status),
           })
         : null;
     if (this.relay) this.relayStatus = this.relay.connected ? "connected" : "connecting";
-    this.ticker = window.setInterval(() => this.peer.tick(), 250);
+    this.ticker = window.setInterval(() => {
+      this.checkLink();
+      this.peer.tick();
+    }, 250);
+    document.addEventListener("visibilitychange", this.onVisibility);
   }
+
+  /**
+   * A connection can look open and carry nothing. Whoever runs the talk is heard from every few
+   * seconds, and hears from the others; if that stops while the connection claims to be fine,
+   * it is replaced, once, before this device concludes that it is alone.
+   */
+  private checkLink(): void {
+    if (this.relayStatus !== "connected") return;
+    const now = performance.now();
+    const expectTraffic = this.peer.following || (this.peer.hosting && this.peer.deviceCount > 1);
+    const quietFor = now - Math.max(this.heardAt, this.recycledAt);
+    if (expectTraffic && quietFor > SILENCE_MS && this.recycledAt < this.heardAt) {
+      this.recycledAt = now;
+      this.relay?.recycle();
+    }
+  }
+
+  /** Back from the background, where phones drop connections without saying so. */
+  private readonly onVisibility = (): void => {
+    if (document.visibilityState !== "visible") {
+      this.hiddenAt = performance.now();
+      return;
+    }
+    const away = this.hiddenAt === null ? 0 : performance.now() - this.hiddenAt;
+    this.hiddenAt = null;
+    if (this.closed || away < AWAY_MS) return;
+    this.recycledAt = performance.now();
+    this.relay?.recycle();
+  };
 
   private setRelayStatus(status: LinkStatus): void {
     if (this.closed) return;
@@ -127,11 +170,11 @@ export class Talk {
    * A device joining by code has no slides (the talk started from a PDF, not a published deck).
    * The device that runs the talk sends them; one that follows another leaves it to that one.
    */
-  private shareDeck(to: string): void {
+  private shareDeck(to: string, body: { readonly id?: string; readonly missing?: readonly number[] }): void {
     const relay = this.relay;
-    if (this.closed || !relay || this.peer.following || this.sending.has(to)) return;
-    this.sending.add(to);
-    void sendDeck((message) => relay.send(message), this.source.pdf, this.source.title, to).finally(() => this.sending.delete(to));
+    if (this.closed || !relay || this.peer.following) return;
+    this.deckSender ??= new DeckSender((message) => relay.send(message), this.source.pdf, this.source.title);
+    this.deckSender.request(to, body);
   }
 
   /** Every message from whoever hosts the talk, for a view on this device. Returns the way to stop. */
@@ -165,6 +208,8 @@ export class Talk {
     this.peer.leave();
     this.closed = true;
     window.clearInterval(this.ticker);
+    document.removeEventListener("visibilitychange", this.onVisibility);
+    this.deckSender?.stop();
     this.listeners.clear();
     this.statusListeners.clear();
     this.audience = null;

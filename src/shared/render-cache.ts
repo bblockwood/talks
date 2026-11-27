@@ -5,6 +5,11 @@ import { AnnotationMode } from "pdfjs-dist";
 import type { RenderTask } from "pdfjs-dist";
 import { evictions, fitPage } from "../core/prefetch";
 import type { Deck } from "./deck";
+import { APPLE_TOUCH } from "./device";
+
+/** Most memory one cache's pages may take, as RGBA pixels. */
+const BUDGET_BYTES = 256 * 1024 * 1024;
+const TOUCH_BUDGET_BYTES = 128 * 1024 * 1024;
 
 /** A finished page: `canvas` is exactly the size the page occupies on the surface, in device pixels. */
 export interface RenderedPage {
@@ -61,9 +66,20 @@ export class RenderCache {
     return this.entries.get(page);
   }
 
+  /**
+   * How many pages may be held at this surface size. A 4K screen takes 33 MB a page, and an
+   * iPad stops drawing canvases altogether past its (smaller) limit, so the count follows the
+   * pixels; never fewer than the page on screen and the next.
+   */
+  private get limit(): number {
+    const bytes = this.surfaceWidth * this.surfaceHeight * 4;
+    if (bytes === 0) return this.capacity;
+    return Math.max(2, Math.min(this.capacity, Math.floor((APPLE_TOUCH ? TOUCH_BUDGET_BYTES : BUDGET_BYTES) / bytes)));
+  }
+
   /** Pages to have ready, most urgent first. Replaces the previous list. */
   want(pages: readonly number[]): void {
-    this.wanted = [...pages];
+    this.wanted = pages.slice(0, this.limit);
     const first = this.wanted[0];
     if (first !== undefined && !this.entries.has(first)) this.misses += 1;
     if (this.inFlight && !this.wanted.includes(this.inFlight.page)) this.inFlight.task?.cancel();
@@ -103,7 +119,7 @@ export class RenderCache {
         }
         this.entries.delete(page);
         this.entries.set(page, { page, canvas });
-        for (const old of evictions([...this.entries.keys()], this.wanted, this.capacity)) {
+        for (const old of evictions([...this.entries.keys()], this.wanted, this.limit)) {
           const entry = this.entries.get(old);
           if (entry) release(entry.canvas);
           this.entries.delete(old);

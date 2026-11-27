@@ -86,6 +86,22 @@ export class RelayClient {
     this.connect();
   };
 
+  /**
+   * Replaces a connection that claims to be open but may carry nothing (a phone back from the
+   * background, a change of Wi-Fi: the browser can take minutes to notice). Says nothing about
+   * it unless the new connection fails too.
+   */
+  recycle(): void {
+    if (this.closed) return;
+    if (!this.connected) {
+      this.reconnectNow();
+      return;
+    }
+    window.clearTimeout(this.retryTimer);
+    this.attempt = 0;
+    this.connect(true);
+  }
+
   /** Development and tests only: drops the socket as a network failure would, so the client must recover. */
   dropForTest(): void {
     this.socket?.close(4000);
@@ -107,12 +123,12 @@ export class RelayClient {
     this.options.onStatus(status);
   }
 
-  private connect(): void {
+  private connect(quiet = false): void {
     if (this.closed) return;
     const old = this.socket;
     this.socket = null;
     old?.close();
-    this.setStatus(this.attempt === 0 && this.status !== "reconnecting" ? "connecting" : "reconnecting");
+    if (!quiet) this.setStatus(this.attempt === 0 && this.status !== "reconnecting" ? "connecting" : "reconnecting");
 
     let socket: WebSocket;
     try {

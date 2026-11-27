@@ -64,6 +64,10 @@ let loading = false;
 let codeRevealed = false;
 /** This device has shown the slides, so its screen may be one the audience sees. */
 let shownSlidesHere = false;
+/** The view this device last showed, which F5 (a clicker's start button) shows again. */
+let lastView: "audience" | "presenter" | "both" = "audience";
+/** Leave or End was chosen: the page may go without asking. */
+let leavingOnPurpose = false;
 
 function setStatus(text: string, error = false): void {
   status.textContent = text;
@@ -335,6 +339,7 @@ async function dropTalk(): Promise<void> {
 
 /** Leaving reloads the page, which guarantees that nothing of the talk survives in this tab. */
 function leave(): void {
+  leavingOnPurpose = true;
   if (presentation) void presentation.end();
   else void dropTalk().then(() => window.location.replace(import.meta.env.BASE_URL));
 }
@@ -460,6 +465,7 @@ function openPdf(pdf: () => Promise<ArrayBuffer>, name: string): void {
 function showPresenter(): void {
   const current = talk;
   if (!current || active || presentation) return;
+  lastView = "presenter";
   entry.hidden = true;
   consoleEl.hidden = false;
   closePreview();
@@ -539,6 +545,7 @@ function start(fullscreen: boolean, both = false, audienceScreen: ScreenDetailed
     if (!hub.open(null)) hub = null; // blocked: this device simply shows the slides
   }
 
+  lastView = both ? "both" : "audience";
   starting = true;
   const starter = Presentation.start(current, pages, audience, {
     fullscreen: fullscreen && !byHand,
@@ -548,7 +555,10 @@ function start(fullscreen: boolean, both = false, audienceScreen: ScreenDetailed
       presentation = null;
       showReady();
     },
-    onEnded: () => window.location.replace(import.meta.env.BASE_URL),
+    onEnded: () => {
+      leavingOnPurpose = true;
+      window.location.replace(import.meta.env.BASE_URL);
+    },
   });
   void starter.then((started) => {
     starting = false;
@@ -669,6 +679,43 @@ $("start-windowed").addEventListener("click", () => start(false));
 $("both").addEventListener("click", () => start(canFullscreen(), true));
 $("split-toggle").addEventListener("click", () => applySplit(talk?.deck.split ? null : suggestedSplit));
 $("another").addEventListener("click", leave);
+
+// A clicker's start button sends F5 (or Shift+F5): on the page where a view is chosen it shows
+// the last view again, where the talk stands, instead of reloading the page and losing the talk.
+window.addEventListener("keydown", (ev) => {
+  if (ev.key !== "F5" || ev.ctrlKey || ev.metaKey || ev.altKey) return;
+  if (!talk || ready.hidden || entry.hidden || active || presentation) return;
+  ev.preventDefault();
+  if (ev.repeat || !screenPick.hidden || !endConfirm.hidden) return;
+  if (lastView === "presenter") showPresenter();
+  else if (lastView === "both" && !$<HTMLButtonElement>("both").disabled) start(canFullscreen(), true);
+  else start(canFullscreen());
+});
+
+// A talk opened from a file exists only in this tab: a reload or a closed tab would lose it,
+// so the browser asks first. Leave and End do not ask.
+window.addEventListener("beforeunload", (ev) => {
+  if (!talk || leavingOnPurpose) return;
+  ev.preventDefault();
+  ev.returnValue = "";
+});
+// Brought back from the browser's back/forward cache, the page looks alive but has left the talk.
+window.addEventListener("pageshow", (ev) => {
+  if (ev.persisted) window.location.reload();
+});
+
+// Nothing should ever throw on stage, but if something does, a presenter view says so instead
+// of silently standing still. The slides never show it.
+let lastErrorNotice = -Infinity;
+const onUnexpected = (name: string): void => {
+  if (name === "AbortError" || name === "RenderingCancelledException") return;
+  const now = performance.now();
+  if (!active || now - lastErrorNotice < 30_000) return;
+  lastErrorNotice = now;
+  active.showNotice("Something went wrong on this device. If it stops responding, reload the page.");
+};
+window.addEventListener("error", (ev) => onUnexpected(ev.error instanceof Error ? ev.error.name : ""));
+window.addEventListener("unhandledrejection", (ev) => onUnexpected(ev.reason instanceof Error ? ev.reason.name : ""));
 
 // The browser's own full-screen key, for when the page is refused: F11 on Windows and Linux.
 if (IS_MAC) $("fs-key").textContent = "⌃⌘F";

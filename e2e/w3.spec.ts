@@ -873,6 +873,16 @@ test("one device, one screen: the slides are run from the slides, with the prese
   await page.keyboard.press("Escape");
   await expect(page.locator(".aud-overview")).toHaveCount(0);
   await expect(page.locator("#audience")).toBeVisible();
+
+  // Esc twice (a clicker's stop button, pressed twice) leaves the slides; F5 (its start button)
+  // on the page where a view is chosen shows them again, on the same slide, without a reload.
+  await page.waitForTimeout(1600);
+  await page.keyboard.press("Escape");
+  await page.keyboard.press("Escape");
+  await expect(page.locator("#ready")).toBeVisible();
+  await page.keyboard.press("F5");
+  await expect(page.locator("#audience")).toBeVisible();
+  await expect.poll(() => roomPage(page)).toBe(7);
   await page.close();
 });
 

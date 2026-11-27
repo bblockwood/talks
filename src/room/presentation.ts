@@ -300,6 +300,7 @@ export class Presentation {
     window.clearTimeout(this.barHide);
     if (!on) {
       this.barPinned = false;
+      this.barHovered = false; // it gets no mouseleave when it is hidden under the mouse
       return;
     }
     this.fillBar();

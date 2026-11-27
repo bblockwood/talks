@@ -99,7 +99,8 @@ export type Message =
   | { readonly type: "bye"; readonly body: Record<string, never> }
   // A talk started from a PDF on one device (no published deck): a device that joins by code
   // asks for the slides, and a device that has them sends them in pieces (see shared/deck-share.ts).
-  | { readonly type: "deck-request"; readonly body: Record<string, never> }
+  /** Asks for the slides; with `id` and `missing`, asks again for pieces of that transfer that never arrived. */
+  | { readonly type: "deck-request"; readonly body: { readonly id?: string; readonly missing?: readonly number[] } }
   | { readonly type: "deck-info"; readonly body: DeckInfo }
   | { readonly type: "deck-chunk"; readonly body: DeckChunk };
 
@@ -123,6 +124,8 @@ export interface DeckChunk {
 
 /** Pieces small enough that a chunk, as base64 inside an encrypted message, stays under the relay's 64 KB. */
 export const DECK_CHUNK_BYTES = 40_000;
+/** Most pieces one request may ask for again. */
+export const MAX_MISSING = 64;
 export const MAX_DECK_BYTES = 200 * 1024 * 1024;
 
 /**
@@ -423,8 +426,13 @@ export function parseMessage(type: unknown, body: unknown): Message | null {
     }
     case "end":
     case "bye":
-    case "deck-request":
       return { type, body: {} };
+    case "deck-request": {
+      const { id, missing } = body;
+      if (id === undefined && missing === undefined) return { type, body: {} };
+      if (typeof id !== "string" || !SID.test(id) || !Array.isArray(missing) || missing.length < 1 || missing.length > MAX_MISSING || !missing.every(isIndex)) return null;
+      return { type, body: { id, missing: missing as number[] } };
+    }
     case "deck-info": {
       const { for: target, id, bytes, chunks, title } = body;
       if (typeof target !== "string" || !SID.test(target) || typeof id !== "string" || !SID.test(id)) return null;

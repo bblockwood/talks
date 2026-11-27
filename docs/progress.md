@@ -978,3 +978,22 @@ Known issues:
 3. With the laser on, a finger points only once it has moved or stayed down for 180 ms. A quick tap is still a tap: one advances, two bring up the bar.
 
 Verification: build; 295 unit tests; 46 e2e tests.
+
+### W9.8. Audit, and its fixes (2026-11-27)
+
+A design, efficiency and stability audit (read through, not reproduced). Fixed:
+
+1. **A connection that looks open but is dead** (phone back from the background, a change of Wi-Fi). If the device running the talk goes unheard for 6 s while the connection claims to be fine, the connection is replaced, once, before this device decides it is alone. Any view hidden for 5 s or more replaces its connection on return.
+2. **Memory on large screens.** The page cache is limited by pixels (256 MB; 128 MB on iPad and iPhone), never fewer than two pages. A 4K screen holds 7 pages instead of 12.
+3. **Sending the slides to a device that joins.** Pieces go out at one steady rate however many devices ask at once, taking turns, and a device asks again for pieces that never arrived (`deck-request` with `id` and `missing`).
+4. **Leaving by accident.** The browser asks before a reload or a closed tab while a talk is open. Leave and End do not ask.
+5. **Unexpected errors** show a line in the presenter view's status ("Something went wrong on this device…"), at most every 30 s. Never on the slides.
+6. The slides' bar no longer sticks after Esc with the mouse on it.
+7. A page restored from the back/forward cache reloads.
+8. **F5 on the page where a view is chosen** (a clicker's start button) shows the last view again, on the same slide. The Audience view button also has the focus there, so Enter does the same.
+
+Not done, by Ben's choice: two-word codes; the Esc-twice risk from clickers stays.
+
+Verification: build; 296 unit tests; 46 e2e tests.
+
+Known issues: items 1 and 2 can't be reproduced in the test browser (a dead connection, an iPad's canvas limit); they are reasoned from the code. Very large PDFs (100 MB and more) still take two to three copies in memory.
