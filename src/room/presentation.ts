@@ -1,172 +1,115 @@
-// Presenting (SPEC §5.2–5.3): the audience window while a talk is running. It wraps the session
-// host with the screen: keys and clicks become Commands, the audience view draws the state, and
-// every presenter view (a second window here, or other devices through the relay) is kept in
-// step. Ending wipes everything.
-import { SessionHost } from "../core/host";
+// Showing the slides (SPEC §5.2–5.3): this device's full-screen view for the audience. Keys and
+// clicks become commands for the talk, and the view draws whatever the talk's host says, which
+// is this device itself whenever it can be (see core/peer.ts). Leaving wipes everything here;
+// the talk goes on for the other devices.
 import { KeyInterpreter } from "../core/keys";
 import { prefetchPages } from "../core/prefetch";
-import type { Envelope, Message } from "../core/protocol";
-import type { Command, SessionState } from "../core/session";
-import type { Deck } from "../shared/deck";
-import { deviceName } from "../shared/relay-client";
+import { initialState } from "../core/session";
+import type { Command } from "../core/session";
+import { parseSplit } from "../core/split";
 import type { RenderCache } from "../shared/render-cache";
+import type { Talk } from "../shared/talk";
 import { AudienceView } from "./audience";
 
-const HEARTBEAT_MS = 5000;
-
-/** A connection to presenter views: the relay, or the local channel to a second window. */
-export interface HostTransport {
-  onMessage: ((envelope: Envelope) => void) | null;
-  /** Called with "connected" when the connection (re)opens, so the host can resync its listeners. */
-  onStatus: ((status: string) => void) | null;
-  readonly status: string;
-  send(message: Message): void;
-  close(): void;
-}
-
 export interface PresentationOptions {
-  /** False when the user chose to present in the window (full screen was blocked). */
+  /** False when the user chose to show the slides in the window (full screen was blocked). */
   readonly fullscreen: boolean;
-  /** Two-screen mode: the screen to put the audience view on. Omitted, full screen uses the current screen. */
+  /** Two-screen mode: the screen to put the slides on. Omitted, full screen uses the current screen. */
   readonly screen?: ScreenDetailed;
-  /** Called once everything decrypted has been dropped. */
+  /** Called once this device has left the talk and everything decrypted has been dropped. */
   readonly onEnded: () => void;
-  /** The relay connection, when the deck was opened by code. Null means keyboard and clicker only. */
-  readonly relay: HostTransport | null;
-  /** `meta.published` of the open deck, so presenter views can tell their copy is stale. */
-  readonly deckPublished: string;
-  /** Target length of the talk for the clock, if the deck sets one. */
-  readonly targetMs: number | null;
 }
 
 export class Presentation {
-  private readonly host: SessionHost;
   private readonly view: AudienceView;
   private readonly keys = new KeyInterpreter();
-  private readonly transports = new Set<HostTransport>();
   private wakeLock: WakeLockSentinel | null = null;
   private keyboardLocked = false;
   private escapeDown = false;
   private ended = false;
-  private readonly heartbeat: number;
 
-  /** Two-screen mode: Ctrl+D or Cmd+D was pressed in the audience window (swap displays, Native §6.5). */
+  /** Two-screen mode: Ctrl+D or Cmd+D was pressed in the slides window (swap displays, Native §6.5). */
   onSwapKey: (() => void) | null = null;
+  /** Two-screen mode: this view is going away, and the second window with it. */
+  onEnding: (() => void) | null = null;
 
   /**
-   * Starts presenting. Must be called synchronously from the Start click, because full screen
+   * Starts showing the slides. Must be called synchronously from the click, because full screen
    * needs that user gesture. Resolves to null, with nothing changed, if full screen is refused.
    */
-  static async start(
-    deck: Deck,
-    cache: RenderCache,
-    root: HTMLElement,
-    options: PresentationOptions,
-  ): Promise<Presentation | null> {
+  static async start(talk: Talk, cache: RenderCache, root: HTMLElement, options: PresentationOptions): Promise<Presentation | null> {
     root.hidden = false;
     if (options.fullscreen) {
       try {
-        await root.requestFullscreen(
-          options.screen ? { navigationUI: "hide", screen: options.screen } : { navigationUI: "hide" },
-        );
+        await root.requestFullscreen(options.screen ? { navigationUI: "hide", screen: options.screen } : { navigationUI: "hide" });
       } catch {
         root.hidden = true;
         return null;
       }
     }
-    return new Presentation(deck, cache, root, options);
+    return new Presentation(talk, cache, root, options);
   }
 
   private constructor(
-    private readonly deck: Deck,
+    private readonly talk: Talk,
     private readonly cache: RenderCache,
     private readonly root: HTMLElement,
     private readonly options: PresentationOptions,
   ) {
+    const deck = talk.deck;
     this.view = new AudienceView(root, cache, deck);
     this.view.onLink = (page, index) => this.dispatch({ name: "followLink", page, index }, performance.now());
-
-    this.host = new SessionHost(
-      {
-        get frames() {
-          return deck.frames;
-        },
-        get split() {
-          return deck.split;
-        },
-        linksFor: (page) => deck.linksNow(page),
-      },
-      { deckPublished: options.deckPublished, targetMs: options.targetMs, device: deviceName() },
-      {
-        now: () => Date.now(),
-        send: (message) => {
-          for (const transport of this.transports) transport.send(message);
-        },
-        applied: (state, inputTime) => this.render(state, inputTime ?? performance.now()),
-        pointer: (x, y, visible) => this.view.setPointer(x, y, visible),
-        end: () => void this.end(),
-        status: () => this.status(),
-      },
-    );
 
     window.addEventListener("keydown", this.onKeyDown, { capture: true });
     window.addEventListener("keyup", this.onKeyUp, { capture: true });
     document.addEventListener("fullscreenchange", this.onFullscreenChange);
     document.addEventListener("visibilitychange", this.onVisibilityChange);
-    window.addEventListener("pagehide", this.onPageHide);
 
     if (document.fullscreenElement === root) void this.lockKeyboard();
     void this.requestWakeLock();
-    this.render(this.host.state, performance.now());
 
-    if (options.relay) this.addTransport(options.relay);
-    this.heartbeat = window.setInterval(() => this.host.broadcast(), HEARTBEAT_MS);
+    talk.audience = {
+      changed: (inputTime) => this.render(inputTime ?? performance.now()),
+      pointer: (x, y, visible) => this.view.setPointer(x, y, visible),
+      status: () => this.status(),
+    };
+    this.render(performance.now());
+    // From here this device shows the slides: if it does not run the talk yet, it takes it over.
+    talk.peer.setView("audience");
 
     if (import.meta.env.DEV) {
-      // Development and e2e only: lets tests read the state without anything showing on the audience view.
+      // Development and e2e only: lets tests read the state without anything showing on the slides.
       (window as unknown as { __lectern?: unknown }).__lectern = {
-        state: () => this.host.state,
-        session: () => this.host.session,
+        state: () => this.state(),
+        session: () => talk.peer.session,
+        role: () => talk.peer.role,
         shownPage: () => this.view.shownPage,
-        links: (page: number) => this.deck.linksNow(page),
-        frames: () => this.deck.frames.frames,
+        links: (page: number) => deck.linksNow(page),
+        frames: () => deck.frames.frames,
         keyboardLocked: () => this.keyboardLocked,
         pointerVisible: () => this.view.pointerVisible,
         inkShown: () => this.view.inkShown,
+        drop: () => talk.dropForTest(),
       };
     }
   }
 
-  /** Connects a set of presenter views. They are told who this is and what the state is. */
-  addTransport(transport: HostTransport): void {
-    if (this.ended) return;
-    this.transports.add(transport);
-    transport.onMessage = (envelope) => {
-      if (!this.ended) this.host.receive(envelope);
-    };
-    transport.onStatus = (status) => {
-      if (status === "connected" && !this.ended) this.host.announce(); // resync whoever is listening
-    };
-    this.host.announce();
+  /** What to show: the talk as it stands, or the first slide until that is known. */
+  private state() {
+    return this.talk.peer.viewState() ?? { ...initialState, timer: { ...initialState.timer, targetMs: this.talk.source.targetMs } };
   }
 
-  removeTransport(transport: HostTransport): void {
-    this.transports.delete(transport);
-    transport.onMessage = null;
-    transport.onStatus = null;
-  }
-
-  /** Applies a command from this window's own keyboard or mouse. `inputTime` is a `performance.now()` timestamp. */
+  /** A command from this window's own keyboard or mouse. `inputTime` is a `performance.now()` timestamp. */
   dispatch(command: Command, inputTime: number): void {
-    if (!this.ended) this.host.dispatch(command, inputTime);
+    if (!this.ended) this.talk.peer.dispatch(command, inputTime);
   }
 
-  /** Moves the full-screen audience view to another screen. Needs a user gesture, or one delegated to this window. */
+  /** Moves the full-screen slides to another screen. Needs a user gesture, or one delegated to this window. */
   async moveToScreen(screen: ScreenDetailed): Promise<void> {
     await this.root.requestFullscreen({ navigationUI: "hide", screen });
   }
 
-  /** End (SPEC §5.3): leave full screen, release locks, drop every decrypted byte and pixel. */
+  /** Leave (SPEC §5.3): out of full screen, locks released, every decrypted byte and pixel dropped. */
   async end(navigate = true): Promise<void> {
     if (this.ended) return;
     this.ended = true;
@@ -174,13 +117,12 @@ export class Presentation {
     window.removeEventListener("keyup", this.onKeyUp, { capture: true });
     document.removeEventListener("fullscreenchange", this.onFullscreenChange);
     document.removeEventListener("visibilitychange", this.onVisibilityChange);
-    window.removeEventListener("pagehide", this.onPageHide);
     if (import.meta.env.DEV) delete (window as unknown as { __lectern?: unknown }).__lectern;
 
-    window.clearInterval(this.heartbeat);
-    for (const transport of this.transports) transport.close();
-    this.transports.clear();
+    this.onEnding?.();
     this.onSwapKey = null;
+    this.onEnding = null;
+    const leaving = this.talk.close();
     this.view.wipe();
     this.cache.wipe();
     this.root.hidden = true;
@@ -188,16 +130,16 @@ export class Presentation {
     void this.wakeLock?.release().catch(() => {});
     this.wakeLock = null;
     if (document.fullscreenElement) await document.exitFullscreen().catch(() => {});
-    await this.deck.destroy();
+    await leaving;
+    await this.talk.deck.destroy();
     if (navigate) this.options.onEnded();
   }
 
-  /** The room PC's own status, for presenter views only; none of it is ever shown to the audience. */
-  private status(): { relay: string; draw: { count: number; medianMs: number | null; lastMs: number | null; maxMs: number | null }; cacheMisses: number } {
+  /** This screen's own numbers, for presenter views only; none of it is ever shown to the audience. */
+  private status(): { draw: { count: number; medianMs: number | null; lastMs: number | null; maxMs: number | null }; cacheMisses: number } {
     const draws = performance.getEntriesByName("lectern:input-to-draw").map((e) => e.duration);
     const sorted = [...draws].sort((a, b) => a - b);
     return {
-      relay: this.options.relay?.status ?? "unavailable",
       draw: {
         count: draws.length,
         medianMs: sorted[Math.floor(sorted.length / 2)] ?? null,
@@ -208,10 +150,19 @@ export class Presentation {
     };
   }
 
-  private render(state: SessionState, inputTime: number): void {
-    const pages = prefetchPages(state, this.deck.frames);
+  private render(inputTime: number): void {
+    if (this.ended) return;
+    const deck = this.talk.deck;
+    // Whoever runs the talk decides whether a Beamer notes panel is cropped away; follow it.
+    const heard = this.talk.peer.heard;
+    if (heard && parseSplit(heard.split) !== deck.split) {
+      deck.setSplit(parseSplit(heard.split));
+      this.cache.invalidate();
+    }
+    const state = this.state();
+    const pages = prefetchPages(state, deck.frames);
     this.cache.want(pages);
-    for (const page of pages) void this.deck.loadLinks(page);
+    for (const page of pages) void deck.loadLinks(page);
     this.view.show(state, inputTime);
   }
 
@@ -223,16 +174,8 @@ export class Presentation {
       return;
     }
     const result = this.keys.interpret(
-      {
-        key: ev.key,
-        shift: ev.shiftKey,
-        ctrl: ev.ctrlKey,
-        alt: ev.altKey,
-        meta: ev.metaKey,
-        repeat: ev.repeat,
-        time: ev.timeStamp,
-      },
-      this.host.state,
+      { key: ev.key, shift: ev.shiftKey, ctrl: ev.ctrlKey, alt: ev.altKey, meta: ev.metaKey, repeat: ev.repeat, time: ev.timeStamp },
+      this.state(),
     );
     if (result.handled) ev.preventDefault();
 
@@ -257,18 +200,14 @@ export class Presentation {
     }
     const wasLocked = this.keyboardLocked;
     this.keyboardLocked = false;
-    // With keyboard lock on, the browser leaves full screen only when Esc is held: that ends the
-    // talk (SPEC §5.3). Without the lock a single stray Esc (some clickers send one) also lands
-    // here, so any other exit keeps presenting in the window. Never fail on stage.
+    // With keyboard lock on, the browser leaves full screen only when Esc is held: that leaves
+    // the talk (SPEC §5.3). Without the lock a single stray Esc (some clickers send one) also
+    // lands here, so any other exit keeps showing the slides in the window. Never fail on stage.
     if (wasLocked && this.escapeDown) void this.end();
   };
 
   private readonly onVisibilityChange = (): void => {
     if (document.visibilityState === "visible") void this.requestWakeLock();
-  };
-
-  private readonly onPageHide = (): void => {
-    void this.end(false);
   };
 
   private async lockKeyboard(): Promise<void> {

@@ -1,8 +1,8 @@
-// The presenter view (SPEC §7, Native §6.2–6.4): the one screen the presenter looks at, whether
-// it is a second window on the room PC, a laptop or tablet joined by code, or a phone. It renders
-// its own copy of the deck and exchanges small messages with whatever runs the talk (see
-// client.ts). That side stays authoritative: this view shows what was last reported back, never
-// what it merely asked for.
+// The presenter view (SPEC §7, Native §6.2–6.4): the one screen the presenter looks at, on a
+// phone, tablet or laptop, or in the second window of two-screen mode. It renders the deck
+// itself and exchanges small messages with whichever device runs the talk, which may be this
+// one (see client.ts and core/peer.ts). It shows what the host last reported, never what it
+// merely asked for.
 import { parseDuration } from "../core/duration";
 import { DEFAULT_INK_WIDTH, NO_INK, appendToStroke, beginStroke, clearLayer, undoStroke } from "../core/ink";
 import type { InkLayer, InkState } from "../core/ink";
@@ -26,15 +26,12 @@ import { ThumbGrid } from "../shared/thumbs";
 import type { ConsoleClient } from "./client";
 
 const PING_MS = 2000;
-/** The room PC sends state at least every 5 s; past this it is treated as gone. */
+/** The host sends state every 2.5 s; past this it is treated as gone (and a successor takes over). */
 const ROOM_TIMEOUT_MS = 9000;
 const LONG_PRESS_MS = 350;
 const POINTER_INTERVAL_MS = 33; // at most ~30 messages a second, well under the relay's limit
 const SWIPE_MIN_PX = 45;
 const TAP_SLOP_PX = 10;
-/** How long with no room screen before rehearsing is offered: at once when opening, slowly mid-talk. */
-const OFFER_REHEARSAL_MS = 2500;
-const OFFER_REHEARSAL_MIDTALK_MS = 20_000;
 
 export type Layout = "wide" | "stacked" | "compact" | "buttons";
 
@@ -70,18 +67,22 @@ export interface ConsoleOptions {
   readonly notes: NoteSources;
   /** `meta.published` of this view's copy of the deck, to notice a newer publish on the room PC. Empty if unknown. */
   readonly published: string;
-  /** False on the room PC, where nothing may be stored (notes size is then not remembered). */
+  /** False unless this is the presenter's own device: nothing is stored on a shared computer. */
   readonly remember: boolean;
+  /** True when this view opened the deck itself (the second window) and must destroy it on leaving. */
+  readonly ownsDeck: boolean;
   loadNotesSize(): number | null;
   saveNotesSize(px: number): void;
   /** The user closed this presenter view. */
   onLeave(): void;
   /** The room PC has a newer publish of this deck and the user asked to reload. Absent where that can't happen. */
   onReload?: () => void;
-  /** Swap displays: only a second window on the room PC can do this. */
+  /** Swap displays: only the second window of two-screen mode can do this. */
   onSwap?: () => void;
-  /** Start or stop rehearsing without a room screen. Absent where there is no choice. */
-  onRehearse?: (on: boolean) => void;
+  /** Go back to choosing what this device shows, without leaving the talk. */
+  onChangeView?: () => void;
+  /** Development and tests only: drop the connection as a network failure would. */
+  dropForTest?: () => void;
 }
 
 export class PresenterConsole {
@@ -103,7 +104,6 @@ export class PresenterConsole {
   /** `performance.now()` when it arrived, for extrapolating the clock. */
   private viewAt = 0;
   private roomSeenAt = -Infinity;
-  private roomWaitingForStart = false;
 
   /** This view's copy of the ink on screen, kept in step by `strokes` messages. */
   private ink: InkState = NO_INK;
@@ -128,9 +128,7 @@ export class PresenterConsole {
   private readonly pings = new Set<number>();
   private rtts: number[] = [];
   private taps: number[] = [];
-  /** When this view last had a room screen (or was opened): how long it has been waiting for one. */
-  private waitingSince = performance.now();
-  private bannerAction: "reload" | "rehearse" | null = null;
+  private bannerShown = false;
   /** What "Down from" offers next time the clock's controls open. */
   private lastCountdownMs = 20 * 60_000;
   private notice = "";
@@ -173,7 +171,8 @@ export class PresenterConsole {
         ink: () => ({ page: this.ink.page.length, board: this.ink.board.length }),
         hits: () => this.hits,
         kind: () => this.client.kind,
-        drop: () => (this.client as unknown as { dropForTest?: () => void }).dropForTest?.(),
+        hosting: () => this.client.hosting,
+        drop: () => this.options.dropForTest?.(),
       };
     }
   }
@@ -193,8 +192,6 @@ export class PresenterConsole {
         this.view = body;
         this.viewAt = now;
         this.roomSeenAt = now;
-        this.roomWaitingForStart = false;
-        if (body.session) this.client.target = body.session;
         const ack = body.ack;
         if (ack && ack.sid === this.client.sid) {
           const sent = this.pending.get(ack.seq);
@@ -211,13 +208,7 @@ export class PresenterConsole {
         this.applyStrokes(envelope.body);
         break;
       case "hello":
-        if (envelope.body.role === "room") {
-          // A room PC that has the deck open but has not started, or one that just (re)connected.
-          this.roomSeenAt = now;
-          if (envelope.body.session) this.client.target = envelope.body.session;
-          else if (!this.view) this.roomWaitingForStart = true;
-          this.update();
-        }
+        if (envelope.body.role === "room") this.roomSeenAt = now; // the host, (re)announcing itself
         break;
       case "pong":
         // Every presenter view hears every pong; only the answer to our own ping is a measurement.
@@ -235,7 +226,7 @@ export class PresenterConsole {
     if (this.destroyed) return;
     this.linkStatus = status;
     if (status !== "connected") this.pending.clear();
-    else if (this.client.kind !== "relay") this.hello(); // the relay client announces itself when it connects
+    else this.hello(); // ask whoever runs the talk for the state and the ink
     this.update();
   }
 
@@ -246,32 +237,12 @@ export class PresenterConsole {
     this.tick();
   }
 
-  /** Switches to another way of running the talk (joining a room PC, or rehearsing alone). */
-  setClient(client: ConsoleClient): void {
-    this.client.close();
-    this.client = client;
-    this.linkStatus = "connecting";
-    this.view = null;
-    this.roomSeenAt = -Infinity;
-    this.roomWaitingForStart = false;
-    this.waitingSince = performance.now();
-    this.ink = NO_INK;
-    this.pending.clear();
-    this.pings.clear();
-    this.rtts = [];
-    this.taps = [];
-    this.drawMode = false;
-    this.laserMode = false;
-    $("sheet-more").hidden = true;
-    this.update();
-  }
-
   private hello(): void {
-    this.client.send({ type: "hello", body: { role: "presenter", device: deviceName(), appVersion: APP_VERSION } });
+    this.client.send({ type: "hello", body: { role: "presenter", device: deviceName(), appVersion: APP_VERSION, view: "presenter" } });
   }
 
   private ping(): void {
-    if (this.client.kind === "solo") return;
+    if (this.client.hosting) return; // this device runs the talk: nothing to measure
     const t = performance.now();
     if (this.client.send({ type: "ping", body: { t } }) > 0) {
       this.pings.add(t);
@@ -281,8 +252,10 @@ export class PresenterConsole {
 
   private get live(): boolean {
     if (this.view === null) return false;
-    if (this.client.kind !== "relay") return true;
-    return this.linkStatus === "connected" && performance.now() - this.roomSeenAt < ROOM_TIMEOUT_MS;
+    // Whoever runs the talk is heard from every few seconds, this device included. A device that
+    // follows another needs its connection; if that stays down it takes the talk over itself.
+    if (!this.client.hosting && this.linkStatus !== "connected") return false;
+    return performance.now() - this.roomSeenAt < ROOM_TIMEOUT_MS;
   }
 
   private send(command: Command): void {
@@ -514,19 +487,8 @@ export class PresenterConsole {
     $("count-down").classList.toggle("on", countdown !== null);
     $<HTMLInputElement>("count-from").disabled = !live;
 
-    // Swapping needs the window that opened this one. A view joined by code on a computer with two
-    // screens is probably beside the slides, so it says how to get the button rather than nothing.
-    const canSwap = this.options.onSwap !== undefined;
-    const besideSlides = this.client.kind === "relay" && this.layout === "wide" && window.screen.isExtended === true;
-    $("row-swap").hidden = !canSwap && !besideSlides;
-    $("swap").hidden = !canSwap;
-    $("swap-note").hidden = canSwap;
-    const canRehearse = this.options.onRehearse !== undefined;
-    const solo = this.client.kind === "solo";
-    $("row-rehearse").hidden = !canRehearse || (!solo && live);
-    $("rehearse-label").textContent = solo ? "Rehearsing on this device" : "No room screen yet";
-    $("rehearse").textContent = solo ? "Stop rehearsing" : "Rehearse here";
-    $<HTMLButtonElement>("end-talk").textContent = solo ? "End rehearsal…" : "End talk…";
+    $("row-swap").hidden = !this.options.onSwap;
+    $("row-view").hidden = !this.options.onChangeView;
 
     $("digits").textContent = this.keys.typedDigits === "" ? "" : `Go to frame ${this.keys.typedDigits}⏎`;
     if (this.overviewOpen) this.markThumbs();
@@ -540,48 +502,39 @@ export class PresenterConsole {
     const link = $("link");
     const rtt = median(this.rtts);
     const others = (this.view?.room?.devices.length ?? 1) - 1;
+    // One line on where the talk stands: is a screen showing the slides, and who else is in it.
+    const room = this.view?.room;
+    const count = room?.devices.length ?? 1;
+    const screens = room?.audiences ?? 0;
     let text: string;
     let cls: "ok" | "wait" | "" = "";
     if (now < this.noticeUntil) {
       text = this.notice;
       cls = "wait";
-    } else if (this.client.kind === "solo") {
-      text = "Rehearsing: no room screen";
-      cls = "wait";
+    } else if (!this.live) {
+      text = this.view ? "Reconnecting…" : "Joining the talk…";
     } else if (this.client.kind === "local") {
-      text = this.view ? `Slides on the other screen${others > 0 ? ` · ${others} more ${others === 1 ? "device" : "devices"}` : ""}` : "Starting…";
-      cls = this.view ? "ok" : "wait";
-    } else if (this.linkStatus === "unavailable") {
-      text = "Not available in this build";
-    } else if (this.linkStatus !== "connected") {
-      text = "Reconnecting…";
-    } else if (this.live) {
-      text = `Connected to room PC${rtt === null ? "" : ` · ${Math.round(rtt)} ms`}`;
+      text = `Slides on the other screen${count > 1 ? ` · ${count - 1} more ${count === 2 ? "device" : "devices"}` : ""}`;
       cls = "ok";
-    } else if (this.roomWaitingForStart && now - this.roomSeenAt < ROOM_TIMEOUT_MS) {
-      text = "Room PC is ready: click Start there";
-      cls = "wait";
     } else {
-      text = "Waiting for the room PC";
-      cls = "wait";
+      const others = count > 1 ? ` · ${count} devices` : "";
+      const alone = room?.relay === "none" ? " · this device only" : room?.relay !== "connected" && this.client.hosting ? " · offline" : "";
+      text = screens > 0 ? `Slides showing${screens > 1 ? ` on ${screens} screens` : ""}${others}${alone}` : `No slides screen yet${others}${alone}`;
+      cls = screens > 0 ? "ok" : "wait";
     }
     if (link.textContent !== text) link.textContent = text;
     link.classList.toggle("ok", cls === "ok");
     link.classList.toggle("wait", cls === "wait");
 
-    // Offer rehearsal when no room screen is showing the talk; a newer publish comes first.
+    // The host has a newer publish of this deck than this device does.
     const view = this.view;
-    if (this.live || this.client.kind !== "relay") this.waitingSince = now;
-    const stale = view !== null && this.options.published !== "" && view.deckPublished !== "" && view.deckPublished !== this.options.published;
-    const roomReady = this.roomWaitingForStart && now - this.roomSeenAt < ROOM_TIMEOUT_MS;
-    const waited = now - this.waitingSince > (view === null ? OFFER_REHEARSAL_MS : OFFER_REHEARSAL_MIDTALK_MS);
-    const action =
-      stale && this.options.onReload ? "reload" : this.options.onRehearse && this.client.kind === "relay" && !roomReady && waited ? "rehearse" : null;
-    if (action !== this.bannerAction || $("banner").hidden !== (action === null)) {
-      this.bannerAction = action;
-      $("banner").hidden = action === null;
-      $("banner-text").textContent = action === "reload" ? "Slides updated — reload?" : "No room screen is showing this talk.";
-      $("banner-action").textContent = action === "reload" ? "Reload" : "Rehearse here";
+    const stale =
+      view !== null && this.options.onReload !== undefined && this.options.published !== "" && view.deckPublished !== "" && view.deckPublished !== this.options.published;
+    if (stale !== this.bannerShown || $("banner").hidden === stale) {
+      this.bannerShown = stale;
+      $("banner").hidden = !stale;
+      $("banner-text").textContent = "Slides updated — reload?";
+      $("banner-action").textContent = "Reload";
     }
 
     const timer = $("timer");
@@ -598,11 +551,15 @@ export class PresenterConsole {
       // counting up once it has run out. The arrow gives the direction (Native §6.2).
       const over = left !== null && left <= -1000;
       const shown = left === null ? formatClock(elapsed) : `${over ? "−" : ""}${formatClock(Math.abs(left))}`;
-      timer.textContent = `${shown} ${!t.running ? "⏸" : left === null ? "↑" : "↓"}`;
+      // Before the first slide change the clock has not started: it shows where it will run from.
+      const waiting = !t.running && t.elapsedMs === 0;
+      timer.textContent = `${shown} ${!t.running && !waiting ? "⏸" : left === null ? "↑" : "↓"}`;
       timer.className = `timer${!t.running ? " paused" : left === null ? "" : over ? " over" : " good"}`;
       // Beside the clock's controls: the same value in words, and the elapsed time under a countdown.
       $("clock-now").textContent = left === null ? formatClock(elapsed) : `${formatClock(Math.abs(left))} ${over ? "over" : "left"}`;
-      $("clock-sub").textContent = [left === null ? "" : `${formatClock(elapsed)} elapsed`, t.running ? "" : "paused"].filter((x) => x !== "").join(" · ");
+      $("clock-sub").textContent = [left === null ? "" : `${formatClock(elapsed)} elapsed`, t.running ? "" : waiting ? "starts with the first slide change" : "paused"]
+        .filter((x) => x !== "")
+        .join(" · ");
     }
     $("wall").textContent = new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
 
@@ -610,22 +567,21 @@ export class PresenterConsole {
     // A command's answer comes back over the same path as a ping's, so half the ping round trip
     // is the return leg; the rest is tap → slide drawn.
     const oneWay = tap === null ? null : Math.max(0, tap - (rtt ?? 0) / 2);
-    $("diag").textContent =
-      this.client.kind === "relay"
-        ? `ping ${rtt === null ? "–" : `${Math.round(rtt)} ms`} · tap → slide ${oneWay === null ? "–" : `${Math.round(oneWay)} ms`} (median of ${this.taps.length})`
-        : this.client.kind === "local"
-          ? "same computer"
-          : "none (rehearsal)";
+    $("diag").textContent = this.client.hosting
+      ? "this device runs the talk"
+      : this.client.kind === "local"
+        ? "same computer"
+        : `ping ${rtt === null ? "–" : `${Math.round(rtt)} ms`} · tap → slide ${oneWay === null ? "–" : `${Math.round(oneWay)} ms`} (median of ${this.taps.length})`;
 
-    const room = this.view?.room;
     const ms = (n: number | null | undefined): string => (n === null || n === undefined ? "–" : `${n.toFixed(1)} ms`);
     $("debug").textContent = [
       `input → audience draw   n=${room?.draw.count ?? 0}`,
       `  median ${ms(room?.draw.medianMs)}   last ${ms(room?.draw.lastMs)}   max ${ms(room?.draw.maxMs)}`,
       `render-cache misses     ${room?.cacheMisses ?? 0}`,
-      `room PC relay           ${room?.relay ?? "–"}`,
-      `presenter views         ${room && room.devices.length > 0 ? room.devices.join(", ") : "–"}`,
-      `this view               ${this.client.kind}, ${this.layout}${rtt === null ? "" : `, ping ${Math.round(rtt)} ms`}`,
+      `host's connection       ${room?.relay ?? "–"}`,
+      `devices (host first)    ${room && room.devices.length > 0 ? room.devices.join(", ") : "–"}`,
+      `slides screens          ${screens}`,
+      `this view               ${this.client.hosting ? "runs the talk" : "follows"}, ${this.layout}${rtt === null ? "" : `, ping ${Math.round(rtt)} ms`}`,
       `page ${this.page + 1}   mode ${this.view?.audienceMode.kind ?? "–"}   history ${this.view?.history.length ?? 0}`,
     ].join("\n");
   }
@@ -974,11 +930,8 @@ export class PresenterConsole {
     for (const id of ["notes-larger", "m-notes-larger"]) on(id, () => this.setNotesSize(2));
     on("debug-toggle", () => ($("debug").hidden = !$("debug").hidden));
     on("swap", () => this.options.onSwap?.());
-    on("rehearse", () => this.options.onRehearse?.(this.client.kind !== "solo"));
-    on("banner-action", () => {
-      if (this.bannerAction === "reload") this.options.onReload?.();
-      else if (this.bannerAction === "rehearse") this.options.onRehearse?.(true);
-    });
+    on("show-slides", () => this.options.onChangeView?.());
+    on("banner-action", () => this.options.onReload?.());
     on("leave", () => this.options.onLeave());
     on("end-talk", () => ($("end-confirm").hidden = false));
     on("end-cancel", () => ($("end-confirm").hidden = true));
@@ -1174,7 +1127,7 @@ export class PresenterConsole {
     delete $("notes").dataset["html"];
     this.resetPanels();
     void this.wakeLock?.release().catch(() => {});
-    void this.deck.destroy();
+    if (this.options.ownsDeck) void this.deck.destroy();
     if (import.meta.env.DEV) delete (window as unknown as { __console?: unknown }).__console;
   }
 }

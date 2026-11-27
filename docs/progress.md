@@ -641,3 +641,83 @@ Verification: build; 266 unit tests (new: duration parser, countdown command and
 3. Same on the phone: tap the clock; the Clock line shows the current value; set a countdown.
 4. Laptop: **Slides** is now above the next slide, top right. Phone sideways: no Slides button.
 5. Two-screen mode on the Mac with the second display: in the second window, **More → Swap displays** should be there. If it is not, note how the window was opened.
+
+## W7. One talk, any device, choose your view (2026-11-27)
+
+Ben's idea after W6.1: stop having a "room PC" that runs the talk and "presenter views" that join it. Instead a talk is one running thing per code; any device joins it and chooses what it shows: **slides** (full screen, for the audience) or the **presenter view**. Rehearsing is then just a talk nobody is showing slides for yet, and a phone can join it like any other.
+
+### Plan
+
+1. **Core (`src/core/`)**
+   - `peer.ts`: every device runs the same DOM-free `Peer`. Exactly one peer hosts the talk (runs the existing `SessionHost`); the rest follow it. Rules:
+     - the first device in hosts, whatever its view;
+     - a device showing slides takes over from a host that is not (so the audience screen's own keys and clicker never depend on the network, as now);
+     - if the host goes (says `bye`, or is silent for 8 s), a follower takes over from the last state it heard;
+     - two hosts that meet (after a network split) settle it at once: slides beat presenter view, then the longer-connected one, then the lower id. The loser follows.
+   - `host.ts`: can start from a state handed over (page, history, mode, clock, ink); counts devices and how many show slides.
+   - `session.ts`: the clock starts the first time the slide changes (Ben), not when the talk opens.
+   - `protocol.ts`: `hello` says which view a device shows; `state` says the host's view and how long it has been connected; new `bye`.
+2. **One page.** `/talks/` is the only page: code (or PDF, or a saved talk) → choose **Presenter view** or **Show slides** (this screen, or two screens). `/talks/present` redirects there. The presenter view's More sheet gets **Show slides…**, which returns to that choice without leaving the talk.
+3. **Views attach to the talk.** `src/shared/talk.ts` owns the deck, the relay connection and the peer. The audience view and the presenter view both draw from it. The second window in two-screen mode stays a window of the same device.
+4. **Leaving and ending.** Esc twice on the slides screen, or Close in the presenter view, leaves on that device only (and wipes it); the talk goes on for the others. **End talk** ends it for every device.
+5. Remove what the new model makes meaningless: "Rehearse here", "Waiting for the room PC", the separate presenter entry screen.
+6. Tests: unit tests for the peer rules with a simulated relay and clock; e2e reworked for the single page.
+
+### Deviations from SPEC to record
+
+- SPEC §8.2 says the room PC is authoritative. Now the host is, and the host is the slides screen whenever there is one.
+- SPEC §5.1 says codes are never read from the URL on the entry screen; `#c=<code>` deep links (already supported by the presenter view) now land on the one page. The hash is never sent to a server and is removed at once.
+
+### Done (2026-11-27)
+
+- **`src/core/peer.ts`** (new): the rules for which device runs the talk, with no DOM and no timers of its own. `tests/peer.test.ts` runs them against a simulated relay and clock: first device hosts; a slides screen takes over with page, history, clock and ink intact; a second slides screen follows; a follower carries on when the host leaves or vanishes; a slides screen that lost the network keeps going and wins when it returns; of two presenter views that both host after a split, the one that reconnected (or was asleep) gives way; End talk reaches every device; old sessions' messages are ignored.
+- **`src/core/host.ts`**: starts from a handed-over state; reports all devices (host first) and how many show slides.
+- **`src/core/session.ts`**: the clock starts with the first slide change.
+- **`src/shared/talk.ts`** (new): the deck, the relay connection and the peer for one device. The slides view (`src/room/presentation.ts`) and the presenter view (`src/console/`) both attach to it.
+- **One page.** `index.html` holds the start page, the slides view and the presenter view; `src/room/main.ts` is the only entry script. `/talks/present` and `/talks/remote` redirect, keeping a `#c=` link.
+- **Presenter view:** the top line says whether a screen is showing the slides and how many devices are in the talk; **More → Show slides…**; **Leave the talk**; **End talk** (every device). Rehearse, its banner and "Waiting for the room PC" are gone.
+- Removed: `src/console/main.ts`, `src/room/room-link.ts`, the solo and relay presenter clients.
+
+Verification: build; 290 unit tests; 39 e2e tests, of which the scenarios that changed meaning were rewritten (rehearsal joined by a phone and picked up by a slides screen; the slides screen leaving and returning; choosing and changing views; a second slides screen).
+
+Two gaps the tests found and that are fixed: a key pressed in the first second after Show slides was lost (input now starts the talk at once if no host is known); a dropped connection was not shown on a following device until the host timed out.
+
+### Known issues
+
+- When the device running the talk disappears without saying so (crash, battery, network), the others wait about 8 to 10 seconds before one takes over. A deliberate leave hands over in under a second.
+- If two devices both ran the talk during a network split and neither shows slides, the one that reconnected gives way and its changes during the split are lost. If one shows slides, it always wins.
+- Which notes crop is used (Beamer notes on one side) is decided by whichever device starts the talk; the option is not offered when joining a talk already going.
+- A presenter view in a browser window opened separately still cannot swap displays. Use **More → Show slides…** and choose the other screen instead.
+- Ink drawn from the second window is carried only while that computer runs the talk (it always does unless it is a second slides screen).
+- Not tested on real hardware: everything in this milestone.
+
+### Ben checklist: W7
+
+Everything is at `benlockwood.com/talks` now. About 20 minutes; a laptop, a phone, and a second display.
+
+**A. Rehearse on the laptop, phone joins**
+
+1. Laptop: open `/talks`, type the code, click **Presenter view**. Top line: "No slides screen yet". The clock shows the countdown (or 0:00) and is not running.
+2. Press →. The clock starts.
+3. Phone: open `/talks`, type the code (tick Remember), tap **Presenter view**. It should be on the same slide; top line "No slides screen yet · 2 devices". Step from the phone and watch the laptop follow.
+
+**B. The slides screen joins**
+
+4. With A still going, on another computer (or another browser window on the second display): open `/talks`, type the code. The page should say the talk is open on 2 other devices and at which frame. Click **Show slides**.
+   - Expect: full screen on the slide the rehearsal was on, clock unchanged. Laptop and phone say "Slides showing · 3 devices".
+5. Step from the phone, the laptop, and the slides screen's own keyboard.
+6. Press Esc twice on the slides screen. It returns to the code page. Within a second the laptop and phone say "No slides screen yet · 2 devices" and still work.
+
+**C. Two screens on one computer**
+
+7. Laptop with the second display, in presenter view from A: **More → Show slides…**. Choose **The other screen**, allow window management, click **Show slides** (twice the first time: once for the permission).
+   - Expect: slides full screen on the other display, presenter view in a window on this one, same slide as before.
+8. **More → Swap displays**, and Cmd+D.
+9. **More → End talk…** and confirm. Every device, phone included, returns to the start page.
+
+**D. Network trouble** (optional, 2 minutes)
+
+10. Slides showing on one computer, phone in presenter view. Turn the phone's Wi-Fi off for 15 seconds and on again: it should say "Reconnecting…", then recover on the current slide.
+11. Close the slides screen's browser tab outright. The phone should take over within about 10 seconds.
+
+Results in `docs/spikes/W7.md`, please.

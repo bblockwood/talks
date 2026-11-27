@@ -1,40 +1,14 @@
-:root {
-  color-scheme: light dark;
-  font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
-  line-height: 1.45;
-}
-html,
-body {
-  margin: 0;
-  height: 100%;
-}
-.entry {
-  max-width: 40rem;
-  margin: 0 auto;
-  padding: 2.5rem 1.25rem 4rem;
-}
-.entry[hidden] {
-  display: none;
-}
-h1 {
-  font-size: 1.6rem;
-  margin: 0 0 1.5rem;
-}
-h2 {
+/* The start page's own pieces and the slides screen. The base theme is in console.css. */
+.entry h2 {
   font-size: 1.35rem;
   margin: 0 0 0.25rem;
 }
 .summary,
-.hint,
-.note,
 .keys {
-  opacity: 0.72;
+  color: var(--muted);
 }
-.hint,
 .keys {
   font-size: 0.875rem;
-}
-.keys {
   line-height: 2;
 }
 kbd {
@@ -43,39 +17,8 @@ kbd {
   border: 1px solid color-mix(in srgb, currentColor 35%, transparent);
   border-radius: 0.25rem;
 }
-button,
-.filepick {
-  font: inherit;
-  display: inline-block;
-  padding: 0.5rem 1rem;
-  border-radius: 0.4rem;
-  border: 1px solid color-mix(in srgb, currentColor 40%, transparent);
-  background: transparent;
-  color: inherit;
-  cursor: pointer;
-}
-button.primary {
-  background: #1d4ed8;
-  border-color: #1d4ed8;
-  color: white;
-}
-button.big {
-  font-size: 1.5rem;
-  padding: 0.9rem 3.5rem;
-}
-button:disabled {
-  opacity: 0.45;
-  cursor: default;
-}
-.filepick input {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  opacity: 0;
-}
-.filepick:focus-within {
-  outline: 2px solid #1d4ed8;
-  outline-offset: 2px;
+.problem {
+  color: var(--bad);
 }
 .choices {
   display: flex;
@@ -83,18 +26,29 @@ button:disabled {
   gap: 0.5rem;
   margin: 1rem 0;
 }
-.status {
-  min-height: 1.5em;
+/* The two things a device can show. */
+.views {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+  margin: 1.2rem 0 0.4rem;
 }
-.status.error,
-.problem {
-  color: #b91c1c;
+.views button {
+  flex: 1 1 12rem;
+  font-size: 1.15rem;
+  padding: 0.9rem 0.6rem;
 }
-@media (prefers-color-scheme: dark) {
-  .status.error,
-  .problem {
-    color: #f87171;
-  }
+.views-hint {
+  font-size: 0.85rem;
+  color: var(--muted);
+  margin: 0 0 1rem;
+}
+.talk-status {
+  font-size: 0.9rem;
+  margin: 0.8rem 0 0.2rem;
+}
+.talk-status:empty {
+  display: none;
 }
 
 /* Audience view: slides only. Nothing else is ever drawn here. */
@@ -127,41 +81,6 @@ button:disabled {
 }
 .audience.cursor-hidden {
   cursor: none;
-}
-
-/* Entry: the code field (SPEC §5.1). */
-.code-form label {
-  display: block;
-  margin-bottom: 0.4rem;
-  opacity: 0.72;
-}
-.code-row {
-  display: flex;
-  gap: 0.6rem;
-}
-.code-row input {
-  flex: 1;
-  min-width: 0;
-  font: 600 1.8rem ui-monospace, Menlo, Consolas, monospace;
-  padding: 0.6rem 0.8rem;
-  border-radius: 0.4rem;
-  border: 1px solid color-mix(in srgb, currentColor 40%, transparent);
-  background: transparent;
-  color: inherit;
-}
-.code-row button {
-  font-size: 1.2rem;
-  padding: 0 1.6rem;
-}
-.secondary {
-  font-size: 0.9rem;
-  opacity: 0.8;
-}
-.secondary .filepick {
-  padding: 0.2rem 0.6rem;
-}
-.choices[hidden] {
-  display: none;
 }
 
 .phone-status {

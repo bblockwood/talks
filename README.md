@@ -3,8 +3,10 @@
 Present a PDF slide deck from someone else's lectern computer, using only its browser.
 
 1. On your own computer, publish the deck: `npm run publish -- talk.pdf --code bunching --wait`.
-2. On the room's computer, open `https://benlockwood.com/talks`, type the code, click **Start**.
-3. On your phone, tablet or laptop, open `https://benlockwood.com/talks/present` and type the same code. That is the presenter view: your notes, the next slide, a clock, and the controls. Open it on as many devices as you like.
+2. On the room's computer, open `https://benlockwood.com/talks`, type the code, click **Show slides**.
+3. On your phone, tablet or laptop, open the same address, type the same code, and choose **Presenter view**: your notes, the next slide, a clock, and the controls. Open it on as many devices as you like.
+
+Every device that opens the same code is in the same talk, in any order. Open it on your laptop first and you are rehearsing; when the room's computer joins and shows the slides, it picks the talk up where it stands.
 
 A USB clicker or the room's keyboard works too, and keeps working if the network drops.
 
@@ -26,17 +28,17 @@ npm run revoke -- talk.pdf       # take a deck down
 - **Codes are stored only** in `~/.config/lectern/codes.json` on your computer. A code is remembered by the PDF's full path, so use `--name` for a deck whose file moves around.
 - **`--wait`** reports when the new deck is live, usually about half a minute.
 
-## On the room computer
+## Showing the slides
 
-- Type the code, or use **open a PDF from this computer** for a deck that isn't published (no phone remote in that case).
-- **Keys:** → Space Page Down next; ← Page Up previous; Shift+→/← next/previous frame; a number then Enter jumps to that frame; Delete goes back after a jump; B or `.` black; W white (the whiteboard); F freeze; T pause the clock; C clear ink; Esc twice ends the talk.
-- **Two screens** (Chrome or Edge, displays set to extend): choose "Two screens", allow window management, and Start. Slides go full screen on the projector and the presenter view opens in a second window on the other screen, with Swap displays (Ctrl+D or Cmd+D) under More.
-- **Not the room's computer?** After typing the code, "Presenter view on this device instead" opens the presenter view there.
-- Ending the talk wipes the slides from memory and returns to the code screen. Use a private window on a shared computer.
+- Type the code, or use **open a PDF from this device** for a deck that isn't published (other devices can't join in that case).
+- **Keys:** → Space Page Down next; ← Page Up previous; Shift+→/← next/previous frame; a number then Enter jumps to that frame; Delete goes back after a jump; B or `.` black; W white (the whiteboard); F freeze; T pause the clock; C clear ink; Esc twice leaves the talk on this computer.
+- **Two screens** (Chrome or Edge, displays set to extend): choose "The other screen", allow window management, and Show slides. Slides go full screen on the projector and the presenter view opens in a second window on the other screen, with Swap displays (Ctrl+D or Cmd+D) under More.
+- Leaving wipes the slides from this computer's memory and returns to the code screen; the talk goes on for your other devices. **More → End talk** in the presenter view ends it on every device. Use a private window on a shared computer.
+- The computer showing the slides runs the talk, so its keyboard and clicker keep working if the network drops.
 
 ## The presenter view
 
-One view for you, on whatever you have: a second window on the room's computer, your laptop or tablet on the lectern, your phone in your hand. Several can be open at once, and they all stay in step.
+One view for you, on whatever you have: your laptop or tablet on the lectern, your phone in your hand, or a second window on the computer showing the slides. Several can be open at once, and they all stay in step.
 
 - **It fits the screen.** A laptop or a tablet on its side gets the slide, the next slide and notes side by side; a tablet upright stacks them; a phone gets a compact column; a phone held sideways shows just two very large buttons.
 - **Stepping:** arrow keys, Space, Page Up/Down or a clicker; click the slide with a mouse; swipe, or tap Next/Prev, on a touch screen.
@@ -44,8 +46,9 @@ One view for you, on whatever you have: a second window on the room's computer, 
 - **Pointer:** press and hold on the slide, then drag. With a mouse, **Laser** (L) points wherever the mouse goes.
 - **Draw** (D) writes on the slide in three colours, or on a whiteboard (**Board**). A pen always draws, without turning Draw on. Everyone's ink shows on every presenter view.
 - **More** has the clock, the whiteboard, notes size, connection numbers, and **End talk**.
-- **Rehearse.** With no room screen running, **More → Rehearse here** runs the talk inside the presenter view. "Rehearse from a PDF on this device" on its first screen does the same with no code at all.
-- Tick **Remember on this device** to reopen a talk with one tap. Nothing is remembered on the room's computer.
+- **Rehearse** by opening the talk in the presenter view with no screen showing slides; other devices can join. The top line says "No slides screen yet". The clock starts with the first slide change.
+- **More → Show slides…** returns to the choice of views without leaving the talk, to put the slides on this device's screen or its second screen.
+- Tick **Remember on this device** to reopen a talk with one tap. Do that only on your own devices.
 
 ## Security: what this does and does not protect
 

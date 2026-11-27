@@ -96,7 +96,7 @@ test("a network failure is reported as one, not as a wrong code", async ({ page 
   await page.route("**/talks/d/**", (route) => route.abort("internetdisconnected"));
   await page.goto("./");
   await enter(page, CODE);
-  await expect(page.locator("#status")).toHaveText("Could not reach the server. Check the network connection and try again.");
+  await expect(page.locator("#status")).toHaveText("Could not reach the server. Check the connection and try again.");
   await page.unroute("**/talks/d/**");
   await page.route("**/talks/d/**", (route) => route.fulfill({ status: 503, body: "busy" }));
   await enter(page, CODE);

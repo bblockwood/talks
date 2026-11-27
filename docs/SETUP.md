@@ -52,13 +52,13 @@ Do this once, about 30 minutes total. Fable handles everything else. Dashboard m
   - Back that file up, e.g. into your password manager's secure notes.
   - Losing it isn't a disaster: republish with `--rotate-code` to get new codes.
 - **Listing them.** `npm run codes` lists them.
-- **On your phone.** Open `<your-domain>/talks/remote`, enter a code once, and tick **Remember on this device**.
+- **On your phone.** Open `<your-domain>/talks`, enter a code once, and tick **Remember on this device**.
 
 ## 4. Before every external talk
 
 1. `npm run publish -- talk.pdf --wait`, which keeps the same code on republish.
 2. On your phone, open the remote and tap the talk. This also caches the slides on the phone.
-3. Do a dry run on your laptop: open `<your-domain>/talks`, enter the code, Start, and advance from the phone.
+3. Do a dry run on your laptop: open `<your-domain>/talks`, enter the code, choose **Presenter view**, and advance from the phone.
 4. Pack:
    - A USB clicker.
    - The PDF on a USB stick.

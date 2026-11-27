@@ -1,11 +1,11 @@
 // The authoritative side of a talk (SPEC §8.2): it owns the session state, applies commands from
-// any presenter view, and tells every presenter view what happened. No DOM here: the audience
-// window wraps this with the screen, and rehearsal runs it with no screen at all.
+// any device, and tells every device what happened. No DOM here. Exactly one device in a talk
+// runs this at a time; which one, and how it hands over, is decided in peer.ts.
 import type { FrameIndex } from "./frames";
-import type { InkLayer } from "./ink";
+import type { InkLayer, InkState } from "./ink";
 import type { PageLink } from "./links";
 import { APP_VERSION, inkCommand, randomSid, stateBody } from "./protocol";
-import type { Ack, Envelope, Message, RoomInfo, StrokeOp } from "./protocol";
+import type { Ack, Envelope, Message, RoomInfo, StateBody, StrokeOp, View } from "./protocol";
 import { apply, initialState, inkLayer } from "./session";
 import type { Command, SessionState } from "./session";
 
@@ -27,13 +27,36 @@ export interface HostHooks {
   /** A presenter view asked to end the talk. */
   end(): void;
   /** Status that only the caller knows: relay connection, draw timings. */
-  status(): Omit<RoomInfo, "devices">;
+  status(): Omit<RoomInfo, "devices" | "audiences">;
+  /** What the hosting device itself shows right now. */
+  view(): View;
+  /** When (ms, this device's clock) its connection to the others opened: see `outranks` in peer.ts. */
+  since(): number;
 }
 
 export interface HostOptions {
   readonly deckPublished: string;
   readonly targetMs: number | null;
   readonly device: string;
+  /** The hosting device's own sender id: its own views are not counted as further devices. */
+  readonly self: string;
+}
+
+/**
+ * The session state a new host starts from when it takes a talk over: what the last host
+ * reported, plus this device's copy of the ink. The clock carries on from the reported time.
+ */
+export function restoreState(body: StateBody, ink: InkState, elapsedSince: number, now: number): SessionState {
+  const elapsed = body.timer.elapsedMs + (body.timer.running ? Math.max(0, elapsedSince) : 0);
+  return {
+    ...initialState,
+    committedPage: body.page,
+    audienceMode: body.audienceMode,
+    history: body.history,
+    forwardHistory: body.forwardHistory,
+    timer: { accumulatedMs: elapsed, runningSince: body.timer.running ? now : null, targetMs: body.timer.targetMs },
+    ink,
+  };
 }
 
 const DEVICE_TIMEOUT_MS = 10_000;
@@ -43,17 +66,18 @@ export class SessionHost {
   /** Random per talk; presenter views must quote it, so old recorded frames can't be replayed. */
   readonly session = randomSid();
   private current: SessionState;
-  private readonly devices = new Map<string, { device: string; at: number }>();
+  private readonly devices = new Map<string, { device: string; view: View | undefined; at: number }>();
   private readonly deck: HostDeck;
   private readonly options: HostOptions;
   private readonly hooks: HostHooks;
 
-  constructor(deck: HostDeck, options: HostOptions, hooks: HostHooks) {
+  /** `from` is the state to carry on from when taking a talk over; without it the talk starts fresh. */
+  constructor(deck: HostDeck, options: HostOptions, hooks: HostHooks, from?: SessionState) {
     this.deck = deck;
     this.options = options;
     this.hooks = hooks;
-    // The clock runs while presenting (Native §6.7).
-    this.current = { ...initialState, timer: { accumulatedMs: 0, runningSince: hooks.now(), targetMs: options.targetMs } };
+    // The clock waits for the first slide change (see session.ts).
+    this.current = from ?? { ...initialState, timer: { accumulatedMs: 0, runningSince: null, targetMs: options.targetMs } };
   }
 
   get state(): SessionState {
@@ -64,7 +88,7 @@ export class SessionHost {
   announce(): void {
     this.hooks.send({
       type: "hello",
-      body: { role: "room", device: this.options.device, appVersion: APP_VERSION, session: this.session },
+      body: { role: "room", device: this.options.device, appVersion: APP_VERSION, session: this.session, view: this.hooks.view() },
     });
     this.broadcast();
   }
@@ -96,17 +120,21 @@ export class SessionHost {
     if (!onlyPoints || ack) this.broadcast(ack);
   }
 
-  /** Handles a message from a presenter view. Anything not meant for this session is ignored. */
-  receive(envelope: Envelope): void {
+  /**
+   * Handles a message from another device, or (`own`) from one of the hosting device's own views.
+   * Anything not meant for this session is ignored.
+   */
+  receive(envelope: Envelope, own = false): void {
     const now = this.hooks.now();
+    own ||= envelope.sid === this.options.self;
     if (envelope.type === "hello") {
-      if (envelope.body.role === "room") return; // another room PC with the same code: not ours to answer
-      this.devices.set(envelope.sid, { device: envelope.body.device, at: now });
+      if (envelope.body.role === "room") return; // another host: peer.ts settles that
+      if (!own) this.devices.set(envelope.sid, { device: envelope.body.device, view: envelope.body.view, at: now });
       this.announce(); // late joiners sync: who we are, the state, and the ink so far
       this.sendInkCopy();
       return;
     }
-    const known = this.devices.get(envelope.sid);
+    const known = own ? undefined : this.devices.get(envelope.sid);
     if (known) known.at = now;
 
     if (envelope.type === "ping") {
@@ -115,7 +143,7 @@ export class SessionHost {
     }
     // Everything that changes the talk must quote this session's id.
     if (envelope.to !== this.session) return;
-    if (!known) this.devices.set(envelope.sid, { device: "", at: now });
+    if (!known && !own) this.devices.set(envelope.sid, { device: "", view: undefined, at: now });
     switch (envelope.type) {
       case "command":
         // Anyone who can decrypt is authorised: knowing the code is the credential (SPEC §8.2).
@@ -141,13 +169,21 @@ export class SessionHost {
   broadcast(ack?: Ack): void {
     const now = this.hooks.now();
     for (const [sid, d] of this.devices) if (now - d.at > DEVICE_TIMEOUT_MS) this.devices.delete(sid);
-    const room: RoomInfo = { ...this.hooks.status(), devices: [...this.devices.values()].map((d) => d.device || "device") };
+    const others = [...this.devices.values()];
+    const view = this.hooks.view();
+    const room: RoomInfo = {
+      ...this.hooks.status(),
+      devices: [this.options.device, ...others.map((d) => d.device || "device")],
+      audiences: (view === "audience" ? 1 : 0) + others.filter((d) => d.view === "audience").length,
+    };
     this.hooks.send({
       type: "state",
       body: stateBody(this.current, this.deck.frames, now, {
         deckPublished: this.options.deckPublished,
         split: this.deck.split,
         session: this.session,
+        hostView: view,
+        since: this.hooks.since(),
         room,
         ...(ack ? { ack } : {}),
       }),
@@ -177,7 +213,7 @@ export class SessionHost {
   }
 
   /** A full copy of the ink, in pieces small enough for the relay. */
-  private sendInkCopy(): void {
+  sendInkCopy(): void {
     const { ink } = this.current;
     if (ink.page.length === 0 && ink.board.length === 0) return;
     const send = (body: StrokeOp): void => this.hooks.send({ type: "strokes", body });

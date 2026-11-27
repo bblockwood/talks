@@ -6,11 +6,15 @@ import { MAX_COUNTDOWN_MS } from "./duration";
 import type { FrameIndex } from "./frames";
 import type { InkLayer } from "./ink";
 
-export const APP_VERSION = "web-w6";
+export const APP_VERSION = "web-w7";
 const IV_BYTES = 12;
 const MAX_FRAME_BYTES = 64 * 1024; // the relay drops anything larger
 
+/** On the wire, "room" is whichever device hosts the talk; anything else follows it. */
 export type Role = "room" | "presenter" | "remote";
+/** What a device shows: the slides, full screen, for the audience; or the presenter view. */
+export type View = "audience" | "presenter";
+const isView = (v: unknown): v is View => v === "audience" || v === "presenter";
 
 export interface TimerSnapshot {
   readonly running: boolean;
@@ -23,8 +27,10 @@ export interface TimerSnapshot {
 export interface RoomInfo {
   /** The room PC's relay connection: "connected", "reconnecting", "unavailable"… */
   readonly relay: string;
-  /** Presenter views heard from in the last few seconds, by device name. */
+  /** Every device in the talk, the host first, by device name. */
   readonly devices: readonly string[];
+  /** How many of them are showing the slides to an audience. */
+  readonly audiences: number;
   /** Input → audience draw timings in milliseconds, for the debug overlay (SPEC §6.4). */
   readonly draw: { readonly count: number; readonly medianMs: number | null; readonly lastMs: number | null; readonly maxMs: number | null };
   readonly cacheMisses: number;
@@ -60,12 +66,24 @@ export interface StateBody {
    * `to`, so frames recorded in an earlier session of the same talk code cannot be replayed.
    */
   readonly session: string;
+  /** What the host itself shows, and when (its clock, ms) its connection opened: see `outranks`. */
+  readonly hostView: View;
+  readonly since: number;
   readonly room?: RoomInfo;
   readonly ack?: Ack;
 }
 
+export interface HelloBody {
+  readonly role: Role;
+  readonly device: string;
+  readonly appVersion: string;
+  readonly session?: string;
+  /** What the sender shows. Absent while it is still choosing. */
+  readonly view?: View;
+}
+
 export type Message =
-  | { readonly type: "hello"; readonly body: { readonly role: Role; readonly device: string; readonly appVersion: string; readonly session?: string } }
+  | { readonly type: "hello"; readonly body: HelloBody }
   | { readonly type: "state"; readonly body: StateBody }
   | { readonly type: "command"; readonly body: Command }
   | { readonly type: "pointer"; readonly body: { readonly x: number; readonly y: number; readonly visible: boolean } }
@@ -73,7 +91,10 @@ export type Message =
   | { readonly type: "pong"; readonly body: { readonly t: number } }
   | { readonly type: "ink"; readonly body: InkMessage }
   | { readonly type: "strokes"; readonly body: StrokeOp }
-  | { readonly type: "end"; readonly body: Record<string, never> };
+  /** End the talk on every device. */
+  | { readonly type: "end"; readonly body: Record<string, never> }
+  /** The host is leaving; the talk goes on, hosted by someone else. */
+  | { readonly type: "bye"; readonly body: Record<string, never> };
 
 /**
  * Ink from a remote (SPEC §8.2): stroke begin, append and end with normalised points. `id` is
@@ -127,12 +148,14 @@ export interface StateExtras {
   readonly deckPublished?: string;
   readonly split?: string | null;
   readonly session?: string;
+  readonly hostView?: View;
+  readonly since?: number;
   readonly room?: RoomInfo;
   readonly ack?: Ack;
 }
 
 export function stateBody(state: SessionState, frames: FrameIndex, now: number, extras: StateExtras = {}): StateBody {
-  const { deckPublished = "", split = null, session = "", room, ack } = extras;
+  const { deckPublished = "", split = null, session = "", hostView = "audience", since = 0, room, ack } = extras;
   const frame = frames.frameContaining(state.committedPage);
   return {
     page: state.committedPage,
@@ -152,6 +175,8 @@ export function stateBody(state: SessionState, frames: FrameIndex, now: number, 
     split,
     ink: state.ink[inkLayer(state)].length,
     session,
+    hostView,
+    since,
     ...(room ? { room } : {}),
     ...(ack ? { ack } : {}),
   };
@@ -223,6 +248,7 @@ function parseRoomInfo(v: unknown): RoomInfo | null {
   return {
     relay: typeof v["relay"] === "string" ? v["relay"].slice(0, 24) : "",
     devices: Array.isArray(v["devices"]) ? (v["devices"] as unknown[]).filter((x): x is string => typeof x === "string").slice(0, 8).map((x) => x.slice(0, 64)) : [],
+    audiences: isIndex(v["audiences"]) ? v["audiences"] : 0,
     draw: { count: isIndex(d["count"]) ? d["count"] : 0, medianMs: ms(d["medianMs"]), lastMs: ms(d["lastMs"]), maxMs: ms(d["maxMs"]) },
     cacheMisses: isIndex(v["cacheMisses"]) ? v["cacheMisses"] : 0,
   };
@@ -294,6 +320,8 @@ function parseState(v: unknown): StateBody | null {
     split: typeof v["split"] === "string" && v["split"].length <= 8 ? v["split"] : null,
     ink: isIndex(v["ink"]) ? v["ink"] : 0,
     session: typeof v["session"] === "string" && SID.test(v["session"]) ? v["session"] : "",
+    hostView: isView(v["hostView"]) ? v["hostView"] : "audience",
+    since: isUnit(v["since"]) ? v["since"] : 0,
     ...(parseRoomInfo(v["room"]) ? { room: parseRoomInfo(v["room"]) as RoomInfo } : {}),
     ...(ack ? { ack } : {}),
   };
@@ -336,6 +364,7 @@ export function parseMessage(type: unknown, body: unknown): Message | null {
           device: typeof body["device"] === "string" ? body["device"].slice(0, 64) : "",
           appVersion: typeof body["appVersion"] === "string" ? body["appVersion"].slice(0, 32) : "",
           ...(typeof body["session"] === "string" && SID.test(body["session"]) ? { session: body["session"] } : {}),
+          ...(isView(body["view"]) ? { view: body["view"] } : {}),
         },
       };
     }
@@ -363,6 +392,7 @@ export function parseMessage(type: unknown, body: unknown): Message | null {
       return op ? { type, body: op } : null;
     }
     case "end":
+    case "bye":
       return { type, body: {} };
     default:
       return null;

@@ -67,7 +67,7 @@ async function startTwoScreens(context: BrowserContext, open: (page: Page) => Pr
 
   // First click asks for the screens (the permission prompt uses up the click); second click starts.
   await main.locator("#start").click();
-  await expect(main.locator("#status")).toHaveText("Screens found. Check the choice above, then click Start.");
+  await expect(main.locator("#status")).toHaveText("Screens found. Check the choice above, then click Show slides.");
   await expect(main.locator("#screens label")).toHaveCount(2);
   await expect(main.locator('#screens input[value="1"]')).toBeChecked(); // the projector is the default for slides
   const [presenter] = await Promise.all([context.waitForEvent("page"), main.locator("#start").click()]);
@@ -92,7 +92,7 @@ test("two screens: the presenter view in a second window drives the audience win
     presenter.evaluate((src) => (0, eval)(`(${src})`)((window as unknown as { __console: unknown }).__console) as T, pick.toString());
 
   expect(await main.evaluate(() => (window as unknown as { __askedScreen?: string }).__askedScreen)).toBe("Projector");
-  expect(presenter.url()).toMatch(/\/talks\/present\/#ch=[0-9a-f]{32}$/);
+  expect(presenter.url()).toMatch(/\/talks\/#ch=[0-9a-f]{32}$/);
   await expect.poll(() => roomPage(main)).toBe(0);
   // The audience window still shows nothing but slides.
   expect(await main.locator("#audience > :not(canvas)").count()).toBe(0);
@@ -162,7 +162,7 @@ test("two screens: the presenter view in a second window drives the audience win
   // The timings panel lives here, never on the audience view.
   await presenter.keyboard.press("Control+Shift+D");
   await expect(presenter.locator("#debug")).toContainText("input → audience draw");
-  await expect(presenter.locator("#debug")).toContainText("local, wide");
+  await expect(presenter.locator("#debug")).toContainText("follows, wide");
   await presenter.keyboard.press("Control+Shift+D");
 
   // Swap displays: the button hands its click to the audience window, which moves its full screen
@@ -170,7 +170,7 @@ test("two screens: the presenter view in a second window drives the audience win
   const asked = () => main.evaluate(() => (window as unknown as { __askedScreen?: string }).__askedScreen);
   await presenter.locator("#t-more").click();
   await expect(presenter.locator("#row-swap")).toBeVisible();
-  await expect(presenter.locator("#row-rehearse")).toBeHidden();
+  await expect(presenter.locator("#row-view")).toBeHidden();
   await presenter.locator("#swap").click();
   await expect.poll(asked).toBe("Built-in Display");
   await expect.poll(() => presenter.evaluate(() => (window as unknown as { __moves: number[][] }).__moves.at(-1))).toEqual([1280, 0]);
@@ -207,8 +207,9 @@ test("two screens plus a phone: three views of one talk; closing the second wind
 
   const phoneContext = await browser.newContext({ viewport: { width: 390, height: 844 } });
   const phone = await phoneContext.newPage();
-  await phone.goto(`present/#c=${CODE}`);
-  await expect(phone.locator("#link")).toContainText("Connected to room PC");
+  await phone.goto(`./#c=${CODE}`);
+  await phone.locator("#presenter").click();
+  await expect(phone.locator("#link")).toContainText("Slides showing");
   await expect(presenter.locator("#link")).toHaveText("Slides on the other screen · 1 more device");
   await phone.locator("#next").click();
   await expect(presenter.locator("#bar-where")).toHaveText("Frame 2/7");

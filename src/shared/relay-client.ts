@@ -1,8 +1,8 @@
 // Relay connection (SPEC §8): encrypts and orders messages, reconnects by itself with backoff
 // and jitter from 0.5 s up to 10 s. Nothing here ever blocks the caller: with the relay down,
 // `send` simply drops the message, and the room PC keeps presenting.
-import { APP_VERSION, Channel } from "../core/protocol";
-import type { Envelope, Message, Role } from "../core/protocol";
+import { Channel } from "../core/protocol";
+import type { Envelope, Message } from "../core/protocol";
 
 export const RELAY_URL: string = import.meta.env.VITE_RELAY_URL ?? "";
 
@@ -11,7 +11,8 @@ export type LinkStatus = "unavailable" | "connecting" | "connected" | "reconnect
 export interface RelayOptions {
   readonly roomId: string;
   readonly channelKey: CryptoKey;
-  readonly role: Role;
+  /** This device's sender id. */
+  readonly sid: string;
   onMessage(envelope: Envelope): void;
   onStatus(status: LinkStatus): void;
 }
@@ -28,7 +29,6 @@ export function deviceName(): string {
 }
 
 export class RelayClient {
-  readonly kind = "relay";
   readonly channel: Channel;
 
   /** This device's sender id. */
@@ -41,14 +41,12 @@ export class RelayClient {
   private retryTimer: number | undefined;
   private closed = false;
   private status: LinkStatus = "connecting";
-  /** The room PC's session id, once known. Quoted on every message so the room PC accepts it. */
-  target: string | undefined;
   /** Seal and open are asynchronous; chaining them keeps messages in order. */
   private outgoing: Promise<void> = Promise.resolve();
   private incoming: Promise<void> = Promise.resolve();
 
   constructor(private readonly options: RelayOptions) {
-    this.channel = new Channel(options.channelKey);
+    this.channel = new Channel(options.channelKey, options.sid);
     if (!RELAY_URL) {
       this.closed = true;
       this.setStatus("unavailable");
@@ -62,12 +60,15 @@ export class RelayClient {
     return this.socket?.readyState === WebSocket.OPEN;
   }
 
-  /** Sends if connected; otherwise the message is dropped. Returns the message's seq, or 0 if not sent. */
-  send(message: Message): number {
+  /**
+   * Sends if connected; otherwise the message is dropped. `to` is the talk session it is meant
+   * for. Returns the message's seq, or 0 if not sent.
+   */
+  send(message: Message, to?: string): number {
     const socket = this.socket;
     if (!socket || socket.readyState !== WebSocket.OPEN) return 0;
     const seq = this.channel.nextSeq;
-    const sealed = this.channel.seal(message, this.target);
+    const sealed = this.channel.seal(message, to);
     this.outgoing = this.outgoing
       .then(() => sealed)
       .then((frame) => {
@@ -90,13 +91,14 @@ export class RelayClient {
     this.socket?.close(4000);
   }
 
-  close(): void {
+  /** Closes once anything already handed to `send` has gone out. */
+  close(): Promise<void> {
     this.closed = true;
     window.clearTimeout(this.retryTimer);
     window.removeEventListener("online", this.reconnectNow);
     const socket = this.socket;
     this.socket = null;
-    socket?.close(1000);
+    return this.outgoing.then(() => socket?.close(1000));
   }
 
   private setStatus(status: LinkStatus): void {
@@ -126,7 +128,6 @@ export class RelayClient {
       if (this.socket !== socket) return;
       this.attempt = 0;
       this.setStatus("connected");
-      this.send({ type: "hello", body: { role: this.options.role, device: deviceName(), appVersion: APP_VERSION } });
     };
     socket.onmessage = (ev: MessageEvent) => {
       if (this.socket !== socket || !(ev.data instanceof ArrayBuffer)) return;

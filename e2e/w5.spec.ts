@@ -57,7 +57,7 @@ test("offline: the page reloads, and a deck opened before opens again and presen
   await expect(page.locator("#code")).toBeVisible();
   await openByCode(page);
   await expect(page.locator("#deck-summary")).toHaveText("9 frames, 23 pages");
-  await expect(page.locator("#phone-status")).toHaveText("Other devices can't join: keyboard and clicker only");
+  await expect(page.locator("#phone-status")).toHaveText("Not connected: other devices can't join right now.");
   await page.locator("#start").click();
   await expect(page.locator("#audience canvas").first()).toBeVisible();
   await page.keyboard.press("ArrowRight");
@@ -172,19 +172,24 @@ test("a republished deck replaces the cached one; a revoked deck is forgotten", 
 test("the presenter view reloads offline and reopens a remembered talk", async ({ browser }) => {
   const context = await browser.newContext({ viewport: { width: 390, height: 844 } });
   const phone = await context.newPage();
-  await phone.goto(`${SITE}present/`);
+  await phone.goto(SITE);
   await controlled(phone);
   await phone.locator("#code").fill(CODE);
   await phone.locator("#remember").check();
   await phone.locator("#open").click();
+  await phone.locator("#presenter").click();
   await expect(phone.locator("#console")).toBeVisible();
 
   await context.setOffline(true);
   await phone.reload();
   await expect(phone.locator("#saved .talk")).toHaveCount(1);
   await phone.locator("#saved .talk").click();
+  await phone.locator("#presenter").click();
   await expect(phone.locator("#console")).toBeVisible();
   await expect(phone.locator("#frame-line")).toHaveText("Frame 1 of 9");
-  await expect(phone.locator("#link")).toHaveText("Reconnecting…");
+  // With no connection the talk simply runs on this device.
+  await expect(phone.locator("#link")).toHaveText("No slides screen yet · offline", { timeout: 10_000 });
+  await phone.locator("#next").click();
+  await expect(phone.locator("#frame-line")).toHaveText("Frame 2 of 9");
   await context.close();
 });

@@ -144,6 +144,8 @@ The payload is a ZIP (stored, no compression) containing:
 
 ## 5. Room PC experience
 
+> **Superseded in part (Ben, 2026-11-27, W7).** There is no longer a "room PC" page and a separate presenter page. A talk is one running thing per code: every device opens `/talks/`, enters the code, and chooses what it shows, the **slides** (full screen, for the audience) or the **presenter view**. One device at a time runs the talk (the slides screen whenever there is one); the others follow it, and one of them takes over if it leaves. See `docs/decisions.md` and `docs/progress.md` (W7), and `src/core/peer.ts` for the rules.
+
 ### 5.1 Entry screen (`/talks/`)
 
 - One large code field with `autocomplete="off"` and `spellcheck="false"`. Codes are never accepted in the URL on this screen.
@@ -236,6 +238,8 @@ From `getAnnotations()`, link annotations give a rect plus one of: `dest` (resol
 
 ## 7. Phone remote (`/talks/remote`)
 
+> **Superseded in part (Ben, 2026-11-27, W7).** There is no longer a "room PC" page and a separate presenter page. A talk is one running thing per code: every device opens `/talks/`, enters the code, and chooses what it shows, the **slides** (full screen, for the audience) or the **presenter view**. One device at a time runs the talk (the slides screen whenever there is one); the others follow it, and one of them takes over if it leaves. See `docs/decisions.md` and `docs/progress.md` (W7), and `src/core/peer.ts` for the rules.
+
 > **Superseded in part (Ben, 2026-11-26, W6).** The phone remote and the presenter view of Mode B are now one **presenter view** at `/talks/present`, used as a second window on the room PC or from any other device by code, several at once, laid out for the screen it is on. `/talks/remote` redirects there. Picking a slide from the grid jumps at once everywhere; the private preview with a "Show" button below no longer exists. See `docs/decisions.md` and `docs/progress.md` (W6). The rest of this section still describes the phone-sized layout.
 
 - **Access.** Ben opens it on his phone and enters the same code. An optional "Remember on this device" stores it in localStorage on his own phone only, so he can tap a saved talk next time. A deep link `…/remote#c=<code>` is allowed here, since the hash is never sent to servers.
@@ -270,6 +274,8 @@ From `getAnnotations()`, link annotations give a rect plus one of: `dest` (resol
 - **Frame format:** `iv (12 bytes) || AES-256-GCM(channel-key, iv, JSON)`, with a fresh random iv per frame.
 
 ### 8.2 Message JSON
+
+> **Superseded in part (Ben, 2026-11-27, W7).** There is no longer a "room PC" page and a separate presenter page. A talk is one running thing per code: every device opens `/talks/`, enters the code, and chooses what it shows, the **slides** (full screen, for the audience) or the **presenter view**. One device at a time runs the talk (the slides screen whenever there is one); the others follow it, and one of them takes over if it leaves. See `docs/decisions.md` and `docs/progress.md` (W7), and `src/core/peer.ts` for the rules.
 
 Every message carries `{ "sid": <sender session id, random 64-bit>, "seq": <uint, increments per sender>, "type": …, "body": … }`. Receivers drop a message if its `seq` is not greater than the last seen for that `sid`.
 

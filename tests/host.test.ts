@@ -15,7 +15,7 @@ function setup() {
   let now = 1_000_000;
   const host = new SessionHost(
     { frames: new FrameIndex(labelsFor([1, 3, 1])), split: null, linksFor: () => undefined },
-    { deckPublished: "2026-11-26T00:00:00.000Z", targetMs: 600_000, device: "Room PC" },
+    { deckPublished: "2026-11-26T00:00:00.000Z", targetMs: 600_000, device: "Room PC", self: "0000000000000000" },
     {
       now: () => now,
       send: (m) => sent.push(m),
@@ -23,6 +23,8 @@ function setup() {
       pointer: (x, y, v) => pointers.push([x, y, v]),
       end: () => ended++,
       status: () => ({ relay: "connected", draw: { count: 0, medianMs: null, lastMs: null, maxMs: null }, cacheMisses: 0 }),
+      view: () => "audience",
+      since: () => 500_000,
     },
   );
   let seq = 0;
@@ -38,13 +40,15 @@ const hello = (device: string): Message => ({ type: "hello", body: { role: "pres
 const next: Message = { type: "command", body: { name: "next" } };
 
 describe("SessionHost", () => {
-  it("starts the clock and tells a joining presenter view who it is, the state, and its session", () => {
+  it("tells a joining device who it is, the state, and its session; the clock waits for the first slide change", () => {
     const t = setup();
     t.host.receive(t.from(A, hello("iPhone"), null));
     expect(t.sent[0]).toMatchObject({ type: "hello", body: { role: "room", device: "Room PC", session: t.host.session } });
     const state = t.states().at(-1)!;
-    expect(state).toMatchObject({ page: 0, pageCount: 5, session: t.host.session, timer: { running: true, targetMs: 600_000 } });
-    expect(state.room?.devices).toEqual(["iPhone"]);
+    expect(state).toMatchObject({ page: 0, pageCount: 5, session: t.host.session, timer: { running: false, targetMs: 600_000 }, hostView: "audience", since: 500_000 });
+    expect(state.room).toMatchObject({ devices: ["Room PC", "iPhone"], audiences: 1 });
+    t.host.receive(t.from(A, next));
+    expect(t.states().at(-1)?.timer.running).toBe(true);
     expect(t.host.session).toMatch(/^[0-9a-f]{16}$/);
   });
 
@@ -114,12 +118,12 @@ describe("SessionHost", () => {
     const t = setup();
     t.host.receive(t.from(A, hello("iPhone"), null));
     t.host.receive(t.from(B, hello("Mac"), null));
-    expect(t.states().at(-1)?.room?.devices).toEqual(["iPhone", "Mac"]);
+    expect(t.states().at(-1)?.room?.devices).toEqual(["Room PC", "iPhone", "Mac"]);
     t.tick(8000);
     t.host.receive(t.from(B, { type: "ping", body: { t: 1 } }, null));
     t.tick(4000);
     t.host.broadcast();
-    expect(t.states().at(-1)?.room?.devices).toEqual(["Mac"]);
+    expect(t.states().at(-1)?.room?.devices).toEqual(["Room PC", "Mac"]);
   });
 
   it("relays ink to every view, naming who drew it and on which layer", () => {

@@ -14,6 +14,7 @@ const SRC = path.resolve(".e2e/w3src");
 interface RoomHook {
   state(): { committedPage: number; audienceMode: { kind: string }; timer: { runningSince: number | null; targetMs: number | null } };
   session(): string;
+  role(): string;
   shownPage(): number | null | undefined;
   pointerVisible(): boolean;
   inkShown(): number;
@@ -24,6 +25,7 @@ interface ViewHook {
   drop(): void;
   layout(): string;
   kind(): string;
+  hosting(): boolean;
   shownPage(): number | null;
   ink(): { page: number; board: number };
   hits(): { page: number }[];
@@ -75,10 +77,11 @@ const LAPTOP = { width: 1280, height: 800 };
 async function openView(browser: Browser, viewport = PHONE, remember = false): Promise<Page> {
   const context = await browser.newContext({ viewport, deviceScaleFactor: viewport.width < 700 ? 2 : 1 });
   const view = await context.newPage();
-  await view.goto("present/");
+  await view.goto("./");
   await view.locator("#code").fill(CODE);
   if (remember) await view.locator("#remember").check();
   await view.locator("#open").click();
+  await view.locator("#presenter").click();
   await expect(view.locator("#console")).toBeVisible();
   return view;
 }
@@ -94,7 +97,7 @@ async function drag(page: Page, selector: string, from: [number, number], to: [n
 
 test("a phone drives the room PC: steps, notes, clock, slide grid, back, black, freeze, end", async ({ browser }) => {
   const room = await openRoom(browser);
-  await expect(room.locator("#phone-status")).toContainText("Other devices can join");
+  await expect(room.locator("#phone-status")).toContainText("Other devices join with the same code");
 
   const phone = await openView(browser, PHONE, true);
   const errors: string[] = [];
@@ -102,20 +105,22 @@ test("a phone drives the room PC: steps, notes, clock, slide grid, back, black, 
     if (m.type() === "error") errors.push(m.text());
   });
   expect(await viewHook(phone, (h) => h.layout())).toBe("compact");
-  // The room PC has the deck open but has not started: the phone says so.
-  await expect(phone.locator("#link")).toHaveText("Room PC is ready: click Start there");
-  await expect(phone.locator("#next")).toBeDisabled();
+  // The room's computer has the talk open but is still choosing: no screen shows the slides yet.
+  await expect(phone.locator("#link")).toHaveText("No slides screen yet · 2 devices");
 
   await room.locator("#start").click();
   await expect.poll(() => roomPage(room)).toBe(0);
-  await expect(phone.locator("#link")).toContainText("Connected to room PC");
+  await expect(phone.locator("#link")).toContainText("Slides showing");
   await expect(phone.locator("#frame-line")).toHaveText("Frame 1 of 7");
-  // The .pdfpc file sets a 30-minute talk: the clock shows the time left, in green.
-  await expect(phone.locator("#timer")).toHaveText(/^(30:00|29:5\d) ↓$/);
-  await expect(phone.locator("#timer")).toHaveClass(/good/);
+  // The .pdfpc file sets a 30-minute talk. The clock waits for the first slide change, then
+  // shows the time left, in green.
+  await expect(phone.locator("#timer")).toHaveText("30:00 ↓");
+  await expect(phone.locator("#timer")).toHaveClass(/paused/);
 
   await phone.locator("#next").click();
   await expect.poll(() => roomPage(room)).toBe(1);
+  await expect(phone.locator("#timer")).toHaveText(/^29:5\d ↓$/);
+  await expect(phone.locator("#timer")).toHaveClass(/good/);
   await expect(phone.locator("#frame-line")).toHaveText("Frame 2 of 7");
   // Page 2 has an embedded note, overridden by the .pdfpc file's.
   await expect(phone.locator("#notes")).toContainText("Sidecar note for frame 2");
@@ -231,7 +236,7 @@ test("a phone drives the room PC: steps, notes, clock, slide grid, back, black, 
   await phone.locator("#end-yes").click();
   await expect(room.locator("#code")).toBeVisible();
   await expect(room.locator("#audience")).toBeHidden();
-  await expect(phone.locator("#link")).toHaveText("Waiting for the room PC", { timeout: 15_000 });
+  await expect(phone.locator("#code")).toBeVisible(); // End talk ends it on every device
 
   expect(errors).toEqual([]);
   await phone.context().close();
@@ -245,7 +250,7 @@ test("a laptop joined by code gets the full presenter view and drives the room P
   laptop.on("console", (m) => {
     if (m.type() === "error") errors.push(m.text());
   });
-  await expect(laptop.locator("#link")).toContainText("Connected to room PC");
+  await expect(laptop.locator("#link")).toContainText("Slides showing");
 
   // Wide layout: slide, next slide and notes side by side; no big buttons with a mouse.
   expect(await viewHook(laptop, (h) => h.layout())).toBe("wide");
@@ -338,7 +343,7 @@ test("a laptop joined by code gets the full presenter view and drives the room P
   await laptop.keyboard.press("Control+Shift+D");
   await expect(laptop.locator("#debug")).toContainText("input → audience draw");
   await expect(laptop.locator("#debug")).toContainText(/median \d/);
-  await expect(laptop.locator("#debug")).toContainText("relay, wide");
+  await expect(laptop.locator("#debug")).toContainText("follows, wide");
   await laptop.keyboard.press("Control+Shift+D");
 
   // Esc twice here ends the talk on the room PC.
@@ -354,8 +359,8 @@ test("several presenter views at once: each drives, all stay in step, and ink re
   const room = await openRoom(browser, true);
   const laptop = await openView(browser, LAPTOP);
   const phone = await openView(browser, PHONE);
-  await expect(laptop.locator("#link")).toContainText("Connected to room PC");
-  await expect(phone.locator("#link")).toContainText("Connected to room PC");
+  await expect(laptop.locator("#link")).toContainText("Slides showing");
+  await expect(phone.locator("#link")).toContainText("Slides showing");
 
   await phone.locator("#next").click();
   await expect(laptop.locator("#bar-where")).toHaveText("Frame 2/7");
@@ -365,7 +370,7 @@ test("several presenter views at once: each drives, all stay in step, and ink re
 
   // Both are listed, on either device.
   await laptop.keyboard.press("Control+Shift+D");
-  await expect(laptop.locator("#debug")).toContainText(/presenter views\s+.+, .+/);
+  await expect(laptop.locator("#debug")).toContainText(/devices \(host first\)\s+.+, .+/);
   await laptop.keyboard.press("Control+Shift+D");
 
   // Draw on the laptop with the mouse (D): the room screen shows it, and so does the phone.
@@ -391,7 +396,7 @@ test("several presenter views at once: each drives, all stay in step, and ink re
   // A view that joins late gets a full copy of the ink on screen.
   const tablet = await openView(browser, { width: 820, height: 1180 });
   expect(await viewHook(tablet, (h) => h.layout())).toBe("stacked");
-  await expect(tablet.locator("#link")).toContainText("Connected to room PC");
+  await expect(tablet.locator("#link")).toContainText("Slides showing");
   await expect.poll(() => ink(tablet)).toEqual({ page: 1, board: 0 });
 
   // The whiteboard, from the phone: every view shows it; its ink is kept apart from the slide's.
@@ -430,7 +435,7 @@ test("several presenter views at once: each drives, all stay in step, and ink re
 test("ink on the room screen: colours, undo, the whiteboard", async ({ browser }) => {
   const room = await openRoom(browser, true);
   const phone = await openView(browser);
-  await expect(phone.locator("#link")).toContainText("Connected to room PC");
+  await expect(phone.locator("#link")).toContainText("Slides showing");
   /** Count of painted pixels on the audience's ink layer, by colour. */
   const inkPixels = () =>
     room.evaluate(() => {
@@ -476,7 +481,7 @@ test("ink on the room screen: colours, undo, the whiteboard", async ({ browser }
 test("a phone held sideways shows two very large buttons that still drive the talk", async ({ browser }) => {
   const room = await openRoom(browser, true);
   const phone = await openView(browser);
-  await expect(phone.locator("#link")).toContainText("Connected to room PC");
+  await expect(phone.locator("#link")).toContainText("Slides showing");
 
   await phone.setViewportSize({ width: 844, height: 390 });
   await expect.poll(() => viewHook(phone, (h) => h.layout())).toBe("buttons");
@@ -513,7 +518,7 @@ test("a phone held sideways shows two very large buttons that still drive the ta
 test("the layout follows the window: phone, tablet upright, tablet on its side, laptop", async ({ browser }) => {
   const room = await openRoom(browser, true);
   const view = await openView(browser, PHONE);
-  await expect(view.locator("#link")).toContainText("Connected to room PC");
+  await expect(view.locator("#link")).toContainText("Slides showing");
   const shots = process.env["LECTERN_SHOTS"];
   for (const [width, height, layout] of [
     [390, 844, "compact"],
@@ -547,98 +552,140 @@ test("the layout follows the window: phone, tablet upright, tablet on its side, 
   await room.close();
 });
 
-test("rehearsing: a presenter view runs the talk by itself, with or without a code", async ({ browser }) => {
-  // By code, with no room PC anywhere.
-  const view = await openView(browser, LAPTOP);
-  await expect(view.locator("#link")).toHaveText("Waiting for the room PC");
-  await expect(view.locator("#t-draw")).toBeDisabled();
-  // The offer appears by itself after a moment, and is also under More.
-  await expect(view.locator("#banner-text")).toHaveText("No room screen is showing this talk.");
-  await view.locator("#t-more").click();
-  await expect(view.locator("#rehearse")).toHaveText("Rehearse here");
-  await view.locator("#more-close").click();
-  await view.locator("#banner-action").click();
-  await expect(view.locator("#link")).toHaveText("Rehearsing: no room screen");
-  await expect(view.locator("#banner")).toBeHidden();
-  expect(await viewHook(view, (h) => h.kind())).toBe("solo");
-  await view.keyboard.press("ArrowRight");
-  await view.keyboard.press("ArrowRight");
-  await expect(view.locator("#bar-where")).toHaveText("Frame 3/7 · 1/3");
-  await expect(view.locator("#notes")).toContainText("every build");
-  await expect(view.locator("#timer")).toHaveText(/^(30:00|29:5\d) ↓$/); // the .pdfpc file's 30 minutes
-  // Ink, jumps and Back all work as they will in the talk.
-  await view.keyboard.press("d");
-  await drag(view, "#current", [0.3, 0.3], [0.6, 0.6]);
-  await expect.poll(() => viewHook(view, (h) => h.ink())).toEqual({ page: 1, board: 0 });
-  await view.keyboard.press("Escape");
-  await view.keyboard.type("6");
-  await view.keyboard.press("Enter");
-  await expect(view.locator("#bar-where")).toHaveText("Frame 6/7");
-  await view.locator("#t-back").click();
-  await expect(view.locator("#bar-where")).toHaveText("Frame 3/7 · 1/3");
+test("a talk nobody shows slides for is a rehearsal: devices join it, and a slides screen picks it up where it stands", async ({ browser }) => {
+  // A laptop opens the talk first and takes the presenter view: the talk runs there.
+  const laptop = await openView(browser, LAPTOP);
+  await expect(laptop.locator("#link")).toHaveText("No slides screen yet");
+  expect(await viewHook(laptop, (h) => h.hosting())).toBe(true);
+  // The clock waits for the first slide change.
+  await expect(laptop.locator("#timer")).toHaveText("30:00 ↓"); // the .pdfpc file's 30 minutes
+  await laptop.locator("#timer").click();
+  await expect(laptop.locator("#clock-sub")).toHaveText("0:00 elapsed · starts with the first slide change");
+  await expect(laptop.locator("#diag")).toHaveText("this device runs the talk");
+  await laptop.locator("#more-close").click();
+  await laptop.keyboard.press("ArrowRight");
+  await laptop.keyboard.press("ArrowRight");
+  await expect(laptop.locator("#bar-where")).toHaveText("Frame 3/7 · 1/3");
+  await expect(laptop.locator("#notes")).toContainText("every build");
+  await expect(laptop.locator("#timer")).toHaveText(/^29:5\d ↓$/);
+  // Ink, jumps and Back all work as they will in front of an audience.
+  await laptop.keyboard.press("d");
+  await drag(laptop, "#current", [0.3, 0.3], [0.6, 0.6]);
+  await expect.poll(() => viewHook(laptop, (h) => h.ink())).toEqual({ page: 1, board: 0 });
+  await laptop.keyboard.press("Escape");
+  await laptop.keyboard.type("6");
+  await laptop.keyboard.press("Enter");
+  await expect(laptop.locator("#bar-where")).toHaveText("Frame 6/7");
+  await laptop.locator("#t-back").click();
+  await expect(laptop.locator("#bar-where")).toHaveText("Frame 3/7 · 1/3");
 
-  // A room PC starts: stop rehearsing and this view joins it, at the room PC's position.
-  const room = await openRoom(browser, true);
-  await view.locator("#t-more").click();
-  await expect(view.locator("#rehearse")).toHaveText("Stop rehearsing");
-  await view.locator("#rehearse").click();
-  await expect(view.locator("#link")).toContainText("Connected to room PC");
-  await expect(view.locator("#bar-where")).toHaveText("Frame 1/7");
-  await view.context().close();
+  // A phone joins the rehearsal like any other talk, and drives it.
+  const phone = await openView(browser);
+  await expect(phone.locator("#link")).toHaveText("No slides screen yet · 2 devices");
+  await expect(phone.locator("#frame-line")).toHaveText("Frame 3 of 7");
+  expect(await viewHook(phone, (h) => h.hosting())).toBe(false);
+  await phone.locator("#next").click();
+  await expect(laptop.locator("#bar-where")).toHaveText("Frame 3/7 · 2/3");
+
+  // The room's computer opens the talk: it is told one is going, and Show slides picks it up
+  // exactly where it stands. From then on the slides screen runs the talk.
+  const room = await openRoom(browser);
+  await expect(room.locator("#talk-status")).toContainText("open on 2 other devices, at frame 3. No screen is showing the slides yet.");
+  await room.locator("#start").click();
+  await expect.poll(() => roomPage(room)).toBe(3);
+  await expect.poll(() => roomHook(room, (h) => h.role())).toBe("host");
+  expect(await roomHook(room, (h) => h.state().timer.runningSince)).not.toBeNull(); // the clock came along
+  expect(await roomHook(room, (h) => h.state().timer.targetMs)).toBe(30 * 60_000);
+  await expect(laptop.locator("#link")).toHaveText("Slides showing · 3 devices");
+  await expect.poll(() => viewHook(laptop, (h) => h.hosting())).toBe(false);
+  await phone.locator("#next").click();
+  await expect.poll(() => roomPage(room)).toBe(4);
+  await expect(laptop.locator("#bar-where")).toHaveText("Frame 3/7 · 3/3");
+
+  // The slides screen leaves (Esc twice): it is wiped, and the talk carries on without it.
+  await room.keyboard.press("Escape");
+  await room.keyboard.press("Escape");
+  await expect(room.locator("#code")).toBeVisible();
+  await expect(laptop.locator("#link")).toHaveText("No slides screen yet · 2 devices", { timeout: 10_000 });
+  await expect(laptop.locator("#bar-where")).toHaveText("Frame 3/7 · 3/3");
+  await laptop.keyboard.press("ArrowRight");
+  await expect(phone.locator("#frame-line")).toHaveText("Frame 4 of 7");
+  await laptop.context().close();
+  await phone.context().close();
   await room.close();
 
-  // From a PDF on this device: no code, no network.
+  // From a PDF on this device: no code, no network, this device only.
   const context = await browser.newContext({ viewport: PHONE });
-  const phone = await context.newPage();
+  const solo = await context.newPage();
   const requests: string[] = [];
-  phone.on("websocket", (ws) => {
+  solo.on("websocket", (ws) => {
     if (ws.url().includes(":8787")) requests.push(ws.url());
   });
-  await phone.goto("present/");
-  await phone.locator("#file").setInputFiles("fixtures/overlays.pdf");
-  await expect(phone.locator("#console")).toBeVisible();
-  await expect(phone.locator("#link")).toHaveText("Rehearsing: no room screen");
-  await phone.locator("#next").click();
-  await expect(phone.locator("#frame-line")).toHaveText("Frame 2 of 9");
-  await phone.locator("#t-more").click();
-  await expect(phone.locator("#end-talk")).toHaveText("End rehearsal…");
-  await phone.locator("#end-talk").click();
-  await phone.locator("#end-yes").click();
-  await expect(phone.locator("#code")).toBeVisible();
+  await solo.goto("./");
+  await solo.locator("#file").setInputFiles("fixtures/overlays.pdf");
+  await expect(solo.locator("#phone-status")).toHaveText("A PDF from this device: other devices can't join.");
+  await solo.locator("#presenter").click();
+  await expect(solo.locator("#link")).toHaveText("No slides screen yet · this device only");
+  await solo.locator("#next").click();
+  await expect(solo.locator("#frame-line")).toHaveText("Frame 2 of 9");
+  await solo.locator("#t-more").click();
+  await solo.locator("#end-talk").click();
+  await solo.locator("#end-yes").click();
+  await expect(solo.locator("#code")).toBeVisible();
   expect(requests).toEqual([]); // nothing was sent anywhere
-  expect(await phone.evaluate(() => localStorage.getItem("lectern.savedTalks"))).toBeNull();
+  expect(await solo.evaluate(() => localStorage.getItem("lectern.savedTalks"))).toBeNull();
   await context.close();
 });
 
-test("the talk page offers the presenter view for a device that is not the room's computer", async ({ browser }) => {
+test("each device chooses what it shows, and can change its mind without leaving the talk", async ({ browser }) => {
   const room = await openRoom(browser, true);
   const context = await browser.newContext({ viewport: LAPTOP });
   const page = await context.newPage();
   await page.goto("./");
   await page.locator("#code").fill(CODE);
   await page.locator("#code").press("Enter");
-  await expect(page.locator("#presenter-line")).toBeVisible();
-  await page.locator("#as-presenter").click();
+  await expect(page.locator("#talk-status")).toContainText("open on 1 other device, at frame 1. A screen is showing the slides.");
+  await page.locator("#presenter").click();
   await expect(page.locator("#console")).toBeVisible();
-  expect(page.url()).toBe("http://localhost:5173/talks/present/"); // the code is taken out of the address bar
-  await expect(page.locator("#link")).toContainText("Connected to room PC");
+  await expect(page.locator("#link")).toHaveText("Slides showing · 2 devices");
   expect(await page.evaluate(() => localStorage.length)).toBe(0); // not remembered unless asked
+  await page.keyboard.press("ArrowRight");
+  await expect.poll(() => roomPage(room)).toBe(1);
+
+  // More → Show slides…: back to the choice, still in the talk. This device then shows the slides
+  // too, as a second screen following the first.
+  await page.locator("#t-more").click();
+  await page.locator("#show-slides").click();
+  await expect(page.locator("#ready")).toBeVisible();
+  await expect(page.locator("#console")).toBeHidden();
+  await page.locator("#start").click();
+  await expect.poll(() => roomPage(page)).toBe(1);
+  expect(await roomHook(page, (h) => h.role())).toBe("follower");
+  await room.keyboard.press("ArrowRight");
+  await expect.poll(() => roomPage(page)).toBe(2);
+  await page.keyboard.press("ArrowRight"); // its keys drive the talk through the first screen
+  await expect.poll(() => roomPage(room)).toBe(3);
 
   // A deck opened from a file has no code, so there is nothing to join from elsewhere.
   const other = await context.newPage();
   await other.goto("./");
   await other.locator("#file").setInputFiles("fixtures/overlays.pdf");
   await expect(other.locator("#ready")).toBeVisible();
-  await expect(other.locator("#presenter-line")).toBeHidden();
-  await expect(other.locator("#phone-status")).toHaveText("Other devices can't join: keyboard and clicker only");
+  await expect(other.locator("#phone-status")).toHaveText("A PDF from this device: other devices can't join.");
   await context.close();
   await room.close();
 });
 
-test("the old /remote address still leads to the presenter view", async ({ page }) => {
+test("the old /remote and /present addresses lead to the one page, and keep a code link", async ({ page }) => {
   await page.goto("remote/");
-  await expect(page).toHaveURL(/\/talks\/present\/$/);
+  await expect(page).toHaveURL(/\/talks\/$/);
   await expect(page.locator("#code")).toBeVisible();
+  await page.goto("present/");
+  await expect(page).toHaveURL(/\/talks\/$/);
+  await expect(page.locator("#code")).toBeVisible();
+  await page.goto(`present/#c=${CODE}`);
+  await expect(page.locator("#ready")).toBeVisible();
+  expect(page.url()).toBe("http://localhost:5173/talks/"); // the code is taken out of the address bar
 });
 
 test("relay refuses other origins, bad room ids and non-WebSocket requests", async ({ request }) => {
@@ -663,11 +710,12 @@ test("only ciphertext crosses the relay", async ({ browser }) => {
     ws.on("framesent", (f) => frames.push(f.payload));
     ws.on("framereceived", (f) => frames.push(f.payload));
   });
-  await phone.goto("present/");
+  await phone.goto("./");
   await phone.locator("#code").fill(CODE);
   await phone.locator("#open").click();
+  await phone.locator("#presenter").click();
   await room.locator("#start").click();
-  await expect(phone.locator("#link")).toContainText("Connected to room PC");
+  await expect(phone.locator("#link")).toContainText("Slides showing");
   await phone.locator("#next").click();
   await expect(phone.locator("#frame-line")).toHaveText("Frame 2 of 7");
 
@@ -685,7 +733,7 @@ test("only ciphertext crosses the relay", async ({ browser }) => {
 test("a presenter view recovers by itself when the connection drops, and resyncs", async ({ browser }) => {
   const room = await openRoom(browser, true);
   const phone = await openView(browser);
-  await expect(phone.locator("#link")).toContainText("Connected to room PC");
+  await expect(phone.locator("#link")).toContainText("Slides showing");
   await phone.locator("#next").click();
   await expect(phone.locator("#frame-line")).toHaveText("Frame 2 of 7");
 
@@ -697,7 +745,7 @@ test("a presenter view recovers by itself when the connection drops, and resyncs
   await expect.poll(() => roomPage(room)).toBe(3);
 
   // No one touches the phone: it reconnects (backoff starts at 0.5 s) and picks up the current state.
-  await expect(phone.locator("#link")).toContainText("Connected to room PC", { timeout: 10_000 });
+  await expect(phone.locator("#link")).toContainText("Slides showing", { timeout: 10_000 });
   await expect(phone.locator("#build-line")).toHaveText("Build 2 of 3");
   await phone.locator("#next").click();
   await expect.poll(() => roomPage(room)).toBe(4);
@@ -706,29 +754,34 @@ test("a presenter view recovers by itself when the connection drops, and resyncs
   await room.close();
 });
 
-test("a room PC that restarts is a new session: the view follows it and old commands mean nothing", async ({ browser }) => {
+test("when the slides screen leaves, the talk carries on; when it returns it picks the talk up, and old commands mean nothing", async ({ browser }) => {
   const room = await openRoom(browser, true);
   const phone = await openView(browser);
-  await expect(phone.locator("#link")).toContainText("Connected to room PC");
+  await expect(phone.locator("#link")).toContainText("Slides showing");
   await phone.locator("#next").click();
   await expect.poll(() => roomPage(room)).toBe(1);
   const first = await roomHook(room, (h) => h.session());
 
-  // End and start again on the room PC: a new session id.
+  // The slides screen leaves. The phone carries the talk on from where it was.
   await room.keyboard.press("Escape");
   await room.keyboard.press("Escape");
+  await expect(room.locator("#code")).toBeVisible();
+  await expect(phone.locator("#link")).toHaveText("No slides screen yet", { timeout: 10_000 });
+  await expect(phone.locator("#frame-line")).toHaveText("Frame 2 of 7");
+  await phone.locator("#next").click();
+  await expect(phone.locator("#frame-line")).toHaveText("Frame 3 of 7");
+
+  // It comes back: the talk is where the phone left it, under a new session id.
   await room.locator("#code").fill(CODE);
   await room.locator("#code").press("Enter");
   await room.locator("#start").click();
-  await expect.poll(() => roomPage(room)).toBe(0);
+  await expect.poll(() => roomPage(room)).toBe(2);
+  await expect.poll(() => roomHook(room, (h) => h.role())).toBe("host");
   const second = await roomHook(room, (h) => h.session());
   expect(second).not.toBe(first);
-
-  // The phone picks up the new session by itself and drives it.
-  await expect(phone.locator("#frame-line")).toHaveText("Frame 1 of 7");
-  await expect(phone.locator("#link")).toContainText("Connected to room PC");
+  await expect(phone.locator("#link")).toHaveText("Slides showing · 2 devices");
   await phone.locator("#next").click();
-  await expect.poll(() => roomPage(room)).toBe(1);
+  await expect.poll(() => roomPage(room)).toBe(3);
   await phone.context().close();
   await room.close();
 });
@@ -742,7 +795,7 @@ test("the room PC keeps presenting when the relay is unreachable", async ({ brow
   await room.locator("#code").fill(CODE);
   await room.locator("#code").press("Enter");
   await expect(room.locator("#ready")).toBeVisible();
-  await expect(room.locator("#phone-status")).toHaveText("Other devices can't join: keyboard and clicker only");
+  await expect(room.locator("#phone-status")).toHaveText("Not connected: other devices can't join right now.");
   await room.locator("#start").click();
   await expect.poll(() => roomPage(room)).toBe(0);
   await room.keyboard.press("PageDown");
@@ -753,9 +806,10 @@ test("the room PC keeps presenting when the relay is unreachable", async ({ brow
 test("a link opens the presenter view; a newer publish on the room PC offers a reload", async ({ browser }) => {
   const context = await browser.newContext({ viewport: PHONE });
   const phone = await context.newPage();
-  await phone.goto(`present/#c=${CODE}`);
+  await phone.goto(`./#c=${CODE}`);
+  await phone.locator("#presenter").click();
   await expect(phone.locator("#console")).toBeVisible();
-  expect(phone.url()).toBe("http://localhost:5173/talks/present/"); // the code is taken out of the address bar
+  expect(phone.url()).toBe("http://localhost:5173/talks/"); // the code is taken out of the address bar
   expect(await phone.evaluate(() => localStorage.length)).toBe(0); // not remembered unless asked
 
   // Ben republishes; the room PC opens the new copy while the phone still has the old one.
@@ -766,7 +820,7 @@ test("a link opens the presenter view; a newer publish on the room PC offers a r
     await expect(phone.locator("#banner")).toBeVisible();
     await expect(phone.locator("#banner-text")).toHaveText("Slides updated — reload?");
     await phone.locator("#banner-action").click();
-    await expect(phone.locator("#link")).toContainText("Connected to room PC");
+    await expect(phone.locator("#link")).toContainText("Slides showing");
     await expect(phone.locator("#banner")).toBeHidden();
     await room.close();
   } finally {
@@ -778,7 +832,7 @@ test("a link opens the presenter view; a newer publish on the room PC offers a r
 test("a wrong code is refused, and a saved talk can be reopened and forgotten", async ({ browser }) => {
   const context = await browser.newContext({ viewport: PHONE });
   const phone = await context.newPage();
-  await phone.goto("present/");
+  await phone.goto("./");
   await phone.locator("#code").fill("definitely-wrong");
   await phone.locator("#open").click();
   await expect(phone.locator("#status")).toHaveText("No talk found for that code.");
@@ -786,11 +840,13 @@ test("a wrong code is refused, and a saved talk can be reopened and forgotten", 
   await phone.locator("#code").fill(CODE);
   await phone.locator("#remember").check();
   await phone.locator("#open").click();
+  await phone.locator("#presenter").click();
   await expect(phone.locator("#console")).toBeVisible();
   await phone.locator("#t-more").click();
   await phone.locator("#leave").click();
   await expect(phone.locator("#saved .talk")).toHaveCount(1);
   await phone.locator("#saved .talk").click(); // one tap reopens it
+  await phone.locator("#presenter").click();
   await expect(phone.locator("#console")).toBeVisible();
   await expect(phone.locator("#sheet-more")).toBeHidden(); // a fresh view, not the last one's leftovers
   await phone.locator("#t-more").click();

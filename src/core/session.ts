@@ -51,6 +51,9 @@ export interface TimerState {
   readonly targetMs: number | null;
 }
 
+/** True until the clock first runs: it then starts by itself with the first slide change. */
+export const clockUnused = (timer: TimerState): boolean => timer.runningSince === null && timer.accumulatedMs === 0;
+
 export function elapsedMs(timer: TimerState, now: number): number {
   return timer.accumulatedMs + (timer.runningSince === null ? 0 : Math.max(0, now - timer.runningSince));
 }
@@ -118,9 +121,13 @@ export interface DeckContext {
  */
 export function apply(state: SessionState, command: Command, deck: DeckContext, now = 0): SessionState {
   const next = applyCommand(state, command, deck, now);
+  if (next.committedPage === state.committedPage) return next;
+  // The clock starts the first time the slide changes (Ben, 2026-11-27), so opening a talk early
+  // and setting things up costs no time. After that only the timer commands touch it.
+  const timer = clockUnused(next.timer) ? { ...next.timer, runningSince: now } : next.timer;
   // Ink belongs to the page it was drawn on: leaving the page clears it. The whiteboard is kept.
-  if (next.committedPage !== state.committedPage && next.ink.page.length > 0) return { ...next, ink: { ...next.ink, page: [] } };
-  return next;
+  const ink = next.ink.page.length > 0 ? { ...next.ink, page: [] } : next.ink;
+  return timer === next.timer && ink === next.ink ? next : { ...next, timer, ink };
 }
 
 function applyCommand(state: SessionState, command: Command, deck: DeckContext, now: number): SessionState {
@@ -151,8 +158,9 @@ function applyCommand(state: SessionState, command: Command, deck: DeckContext, 
       return { ...state, timer: { ...state.timer, accumulatedMs: 0, runningSince: now } };
     case "timerSetTarget": {
       // The time left is the countdown minus the time already elapsed, so it can be set mid-talk.
-      // Setting a countdown starts the clock if it had been paused (Native §6.7).
-      const start = command.targetMs !== null && state.timer.runningSince === null;
+      // Setting a countdown starts the clock if it had been paused (Native §6.7), but not before
+      // the talk has begun.
+      const start = command.targetMs !== null && state.timer.runningSince === null && !clockUnused(state.timer);
       if (command.targetMs === state.timer.targetMs && !start) return state;
       return { ...state, timer: { ...state.timer, targetMs: command.targetMs, ...(start ? { runningSince: now } : {}) } };
     }
