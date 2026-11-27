@@ -758,3 +758,7 @@ Verification: build; 290 unit tests; 40 e2e tests (new: a PDF talk joined by cod
 2. Room computer (or laptop): open `/talks`, type that code. After "Receiving slides… %" the same page appears. Click **Audience view**. The phone should say "Slides showing · 2 devices" and drive it.
 3. Laptop with second display: open a talk, click **Both views** (twice the first time). Check **Swap displays** at the bottom right of the presenter view.
 4. On the slides window, leave full screen (Esc, or the green button on a Mac). Arrow keys should step without going back to full screen. Move the mouse: **Full screen** appears top right; click it.
+
+### Live check (2026-11-27)
+
+Against the live site and relay, headless Chromium: a phone-sized page opened a 339 KB PDF from disk and showed its join code; a second page entered the code, received the slides in 0.8 s, saw "open on 1 other device", and took the talk over with Audience view; the phone drove it and ended it for both. No page errors. Not tried live: a deck of several megabytes.
