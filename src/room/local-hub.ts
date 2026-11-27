@@ -20,17 +20,31 @@ export class LocalHub {
   /** Which screen has the slides and which the presenter window, when the browser told us. */
   private placement: { audience: ScreenDetailed; presenter: ScreenDetailed } | null = null;
 
+  private presentation: Presentation | null = null;
+  /** Said once to the presenter window, when the browser could not place the windows itself. */
+  private hint: string | null = null;
+
   constructor(
     private readonly talk: Talk,
-    private readonly presentation: Presentation,
     deck: PresenterDeck,
   ) {
     this.deck = deck;
     this.channel = openLocalChannel(this.channelName);
     this.channel.onmessage = (ev: MessageEvent) => this.onFrame(ev.data as LocalFrame);
     window.addEventListener("message", this.onWindowMessage);
+  }
+
+  /** Ties this to the slides view once it is showing: its swap key, and going away with it. */
+  attach(presentation: Presentation): void {
+    if (this.closed) return;
+    this.presentation = presentation;
     presentation.onSwapKey = () => void this.swap();
     presentation.onEnding = () => this.close();
+  }
+
+  /** Something to tell the presenter window when it first appears. */
+  setHint(text: string): void {
+    this.hint = text;
   }
 
   /**
@@ -68,7 +82,12 @@ export class LocalHub {
     switch (frame.k) {
       case "deck-request":
         // A copy per request, so a reloaded presenter window can ask again.
-        if (this.deck) this.post({ k: "deck", deck: { ...this.deck, pdf: this.deck.pdf.slice(0) } });
+        if (this.deck) this.post({ k: "deck", deck: { ...this.deck, pdf: this.deck.pdf.slice(0), canSwap: this.placement !== null } });
+        if (this.hint) {
+          const text = this.hint;
+          this.hint = null;
+          window.setTimeout(() => this.post({ k: "notice", text }), 1200); // once its view is up
+        }
         break;
       case "msg": {
         // Validated exactly like a message from the relay.
@@ -97,7 +116,7 @@ export class LocalHub {
   /** Swap displays (Native §6.1): slides move to the presenter's screen and the presenter window to the other. */
   async swap(): Promise<void> {
     const placement = this.placement;
-    if (this.closed || !placement) return;
+    if (this.closed || !placement || !this.presentation) return;
     try {
       await this.presentation.moveToScreen(placement.presenter);
     } catch {
@@ -124,8 +143,10 @@ export class LocalHub {
     window.removeEventListener("message", this.onWindowMessage);
     this.stopListening?.();
     this.stopListening = null;
-    this.presentation.onSwapKey = null;
-    this.presentation.onEnding = null;
+    if (this.presentation) {
+      this.presentation.onSwapKey = null;
+      this.presentation.onEnding = null;
+    }
     this.deck = null;
     this.channel.close();
     try {

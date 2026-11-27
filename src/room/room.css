@@ -66,8 +66,18 @@ kbd {
   display: none;
   opacity: 0.85;
 }
-.audience.windowed:not(.cursor-hidden) .fs-button {
+.audience.windowed:not(.cursor-hidden) .fs-button,
+.audience.windowed.setup .fs-button {
   display: block;
+}
+/* The code is hidden as it is typed, in case the screen is already on the projector. */
+#code.masked {
+  -webkit-text-security: disc;
+}
+.entry .check.small {
+  margin: 0.5rem 0;
+  font-size: 0.9rem;
+  color: var(--muted);
 }
 .talk-status {
   font-size: 0.9rem;

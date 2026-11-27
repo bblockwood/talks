@@ -190,7 +190,7 @@ test("the cursor hides after two seconds without movement", async ({ page }) => 
   await expect(page.locator("#audience")).toHaveClass(/cursor-hidden/, { timeout: 4000 });
 });
 
-test("Esc twice ends, wipes and returns to the entry screen", async ({ page }) => {
+test("Esc twice comes back to the choice of views, one click from the slides again; Leave wipes", async ({ page }) => {
   await open(page, "Basic 16:9");
   await start(page);
   await page.keyboard.press("ArrowRight");
@@ -203,11 +203,27 @@ test("Esc twice ends, wipes and returns to the entry screen", async ({ page }) =
 
   await page.keyboard.press("Escape");
   await page.keyboard.press("Escape");
-  await expect(page.locator("#choose")).toBeVisible();
+  await expect(page.locator("#ready")).toBeVisible();
   await expect(page.locator("#audience")).toBeHidden();
   expect(await page.evaluate(() => document.fullscreenElement)).toBeNull();
   expect(await page.evaluate(() => window.__lectern)).toBeUndefined();
   expect(await page.locator("#audience canvas").count()).toBe(0);
+  await expect(page.locator("#preview canvas")).toHaveCount(1); // the slide the talk is on
+
+  // One click and the slides are back where they were.
+  await page.locator("#start").click();
+  await expect.poll(() => committed(page)).toBe(1);
+  expect(await page.evaluate(() => document.fullscreenElement?.id)).toBe("audience");
+  await page.keyboard.press("ArrowRight");
+  await expect.poll(() => committed(page)).toBe(2);
+
+  // Leave this talk: everything is dropped and the page starts over.
+  await page.keyboard.press("Escape");
+  await page.keyboard.press("Escape");
+  await page.locator("#another").click();
+  await expect(page.locator("#choose")).toBeVisible();
+  await expect(page.locator("#ready")).toBeHidden();
+  expect(await page.locator("#preview canvas").count()).toBe(0);
 });
 
 test("a PDF from this computer opens; a malformed one fails politely", async ({ page }) => {

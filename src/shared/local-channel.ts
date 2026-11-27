@@ -14,6 +14,8 @@ export interface PresenterDeck {
   noteOverrides: NoteOverride[];
   pdfpcText: string | null;
   pptxNotes: { index: number; text: string }[];
+  /** True when the browser placed the two windows itself and can exchange them (Swap displays). */
+  canSwap?: boolean;
 }
 
 export type LocalFrame =

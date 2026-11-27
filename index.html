@@ -34,6 +34,7 @@
             spellcheck="false"
             enterkeyhint="go"
           />
+          <label class="check small"><input id="show-code" type="checkbox" /> Show the code as I type</label>
           <label class="check"><input id="remember" type="checkbox" /> Remember on this device (only on your own)</label>
           <button id="open" class="primary wide">Open</button>
         </form>
@@ -73,7 +74,11 @@
           <div id="screens" class="screens"></div>
         </div>
         <p id="mirror-note" class="hint" hidden>
-          Both views need a second screen that extends this one (not mirroring it), in Chrome or Edge.
+          Both views need a second screen that extends this one (not mirroring it).
+        </p>
+        <p id="manual-note" class="hint" hidden>
+          Both views: this browser can't place windows on screens itself. It opens the slides and the presenter view
+          in two windows; drag the slides to the projector and click Full screen there.
         </p>
         <p id="fs-problem" class="problem" hidden>
           This browser refused full screen. Press <kbd>F11</kbd> to make the browser full screen yourself, then:
@@ -83,7 +88,7 @@
           <kbd>→</kbd> <kbd>Space</kbd> <kbd>Page Down</kbd> next · <kbd>←</kbd> <kbd>Page Up</kbd> previous ·
           <kbd>Shift</kbd>+<kbd>→</kbd>/<kbd>←</kbd> next/previous frame · number then <kbd>Enter</kbd> jump to frame ·
           <kbd>Delete</kbd> back after a jump · <kbd>B</kbd> black · <kbd>W</kbd> white · <kbd>F</kbd> freeze · <kbd>T</kbd> pause clock ·
-          <kbd>Esc</kbd> twice to leave
+          <kbd>Esc</kbd> twice to come back to this page
         </p>
         <p><button id="another">Leave this talk</button></p>
       </section>

@@ -174,8 +174,11 @@ export class Peer {
 
   // ---------------------------------------------------------------- this device
 
-  /** Chooses what this device shows. Until this is called the peer only listens. */
-  setView(view: View): void {
+  /**
+   * Chooses what this device shows. Until this is called the peer only listens. Null means it is
+   * back to choosing: it stays in the talk (and goes on running it, if it was) but shows nothing.
+   */
+  setView(view: View | null): void {
     if (this.closed) return;
     this.currentView = view;
     if (this.sessionHost) {
@@ -183,6 +186,7 @@ export class Peer {
       return;
     }
     this.hello(); // tells the host what this device now shows
+    if (view === null) return;
     if (this.followed) this.currentRole = "follower";
     this.settle();
   }

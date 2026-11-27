@@ -762,3 +762,22 @@ Verification: build; 290 unit tests; 40 e2e tests (new: a PDF talk joined by cod
 ### Live check (2026-11-27)
 
 Against the live site and relay, headless Chromium: a phone-sized page opened a 339 KB PDF from disk and showed its join code; a second page entered the code, received the slides in 0.8 s, saw "open on 1 other device", and took the talk over with Audience view; the phone drove it and ended it for both. No page errors. Not tried live: a deck of several megabytes.
+
+## W7.2. Three more from Ben (2026-11-27)
+
+1. **Codes are hidden as typed** (dots), with a box to show them. Saved talks are listed by title only. A PDF talk's join code is shown only on the device that started it.
+2. **Esc twice on the slides returns to the choice of views**, with the preview on the slide the talk is on; one click shows them again. The device stays in the talk meanwhile, and the others see "No slides screen yet". **Leave this talk** is what wipes.
+3. **Both views in Safari and Firefox.** These browsers can't place windows on screens, so Both views opens the presenter view in a second window and starts the slides windowed in the first, with a Full screen button that stays until used; the user drags the slides window to the projector and clicks it. The presenter window says so for a few seconds. Chrome falls back to the same if window management is refused.
+
+Verification: build; 291 unit tests; 41 e2e tests (new: the hand-placed two-window mode with the placement API removed; code masking; Esc twice and back). The hand-placed flow was also run once in Playwright's WebKit engine (the engine Safari uses): the code field masks, the second window opens from the click, the presenter window drives the slides, and the Full screen button works. That is not Safari itself: popup blocking and full screen on a second display need a real Mac with a projector.
+
+### Known issues
+
+- After Esc twice the deck stays in memory on that computer until **Leave this talk** is clicked or the window is closed. On a shared computer, do one of those.
+- In Safari, pressing Esc once leaves full screen (Safari gives pages no way to hold the key); the slides stay in the window and the Full screen button brings them back.
+
+### Ben checklist: W7.2
+
+1. Type a code on the start page: dots, not letters. Tick "Show the code as I type" to see it.
+2. Audience view, step a few slides, Esc twice: the choice page shows the slide you were on. Click Audience view: same slide, full screen.
+3. Safari on the Mac with the second display: open a talk, click **Both views**. Allow pop-ups if Safari asks, and click again. Drag the slides window to the projector, click **Full screen** on it, and drive from the other window.

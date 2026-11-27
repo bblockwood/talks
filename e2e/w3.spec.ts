@@ -602,9 +602,20 @@ test("a talk nobody shows slides for is a rehearsal: devices join it, and a slid
   await expect.poll(() => roomPage(room)).toBe(4);
   await expect(laptop.locator("#bar-where")).toHaveText("Frame 3/7 · 3/3");
 
-  // The slides screen leaves (Esc twice): it is wiped, and the talk carries on without it.
+  // Esc twice on the slides screen: back to its choice of views, still in the talk. The others
+  // see that no screen is showing slides. One click and they are back.
   await room.keyboard.press("Escape");
   await room.keyboard.press("Escape");
+  await expect(room.locator("#ready")).toBeVisible();
+  await expect(laptop.locator("#link")).toHaveText("No slides screen yet · 3 devices");
+  await room.locator("#start").click();
+  await expect.poll(() => roomPage(room)).toBe(4);
+  await expect(laptop.locator("#link")).toHaveText("Slides showing · 3 devices");
+
+  // It leaves the talk: it is wiped, and the talk carries on without it.
+  await room.keyboard.press("Escape");
+  await room.keyboard.press("Escape");
+  await room.locator("#another").click();
   await expect(room.locator("#code")).toBeVisible();
   await expect(laptop.locator("#link")).toHaveText("No slides screen yet · 2 devices", { timeout: 10_000 });
   await expect(laptop.locator("#bar-where")).toHaveText("Frame 3/7 · 3/3");
@@ -649,7 +660,7 @@ test("a PDF opened on one device gets a code; a device that joins with it is sen
   await expect(room.locator("#deck-title")).toHaveText(/.+/);
   await expect(room.locator("#deck-summary")).toHaveText("9 frames, 23 pages");
   await expect(room.locator("#talk-status")).toContainText(`open on 1 other device, at frame ${frame}`);
-  await expect(room.locator("#join-code")).toHaveText(code);
+  await expect(room.locator("#join-code")).toHaveCount(0); // not shown where it was typed: that screen may be the projector
   // Only ciphertext crossed: no PDF header, in the clear or in base64.
   const wire = Buffer.concat(frames.map((f) => (typeof f === "string" ? Buffer.from(f) : f))).toString("latin1");
   expect(frames.length).toBeGreaterThan(1);
@@ -812,9 +823,10 @@ test("when the slides screen leaves, the talk carries on; when it returns it pic
   await expect.poll(() => roomPage(room)).toBe(1);
   const first = await roomHook(room, (h) => h.session());
 
-  // The slides screen leaves. The phone carries the talk on from where it was.
+  // The slides screen leaves the talk. The phone carries it on from where it was.
   await room.keyboard.press("Escape");
   await room.keyboard.press("Escape");
+  await room.locator("#another").click();
   await expect(room.locator("#code")).toBeVisible();
   await expect(phone.locator("#link")).toHaveText("No slides screen yet", { timeout: 10_000 });
   await expect(phone.locator("#frame-line")).toHaveText("Frame 2 of 7");

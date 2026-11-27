@@ -299,3 +299,42 @@ test("an ordinary deck shows no split line; mirrored displays get a one-line not
   await expect(page.locator("#mirror-note")).toContainText("extend");
   await context.close();
 });
+
+test("a browser that cannot place windows (Safari, Firefox): Both views opens two windows to place by hand", async ({ browser }) => {
+  const context = await browser.newContext({ viewport: { width: 1280, height: 720 } });
+  await context.addInitScript(() => {
+    delete (window as unknown as { getScreenDetails?: unknown }).getScreenDetails;
+  });
+  const main = await context.newPage();
+  await main.goto("./");
+  await byCode(main);
+  await expect(main.locator("#ready")).toBeVisible();
+  await expect(main.locator("#both")).toBeEnabled();
+  await expect(main.locator("#manual-note")).toBeVisible();
+
+  // One click: the presenter view opens in a second window, the slides start in this one.
+  const [presenter] = await Promise.all([context.waitForEvent("page"), main.locator("#both").click()]);
+  await expect(presenter.locator("#console")).toBeVisible({ timeout: 15_000 });
+  await expect(main.locator("#audience")).toBeVisible();
+  expect(await main.evaluate(() => document.fullscreenElement)).toBeNull(); // in its window, to be dragged across
+  await expect(main.locator("#audience .fs-button")).toBeVisible(); // and it stays until used
+  await main.waitForTimeout(2500);
+  await expect(main.locator("#audience .fs-button")).toBeVisible();
+  await expect(presenter.locator("#link")).toHaveText("Drag the slides window to the projector, then click Full screen on it.");
+  await expect(presenter.locator("#swap")).toBeHidden(); // nothing to swap: the windows are placed by hand
+
+  await presenter.keyboard.press("ArrowRight");
+  await expect.poll(() => roomPage(main)).toBe(1);
+  await main.locator("#audience .fs-button").click();
+  await expect.poll(() => main.evaluate(() => document.fullscreenElement?.id)).toBe("audience");
+  await main.mouse.move(400, 300);
+  await expect(main.locator("#audience .fs-button")).toBeHidden();
+
+  // Esc twice on the slides: back to the choice, and the second window goes with them.
+  const closed = presenter.waitForEvent("close");
+  await main.keyboard.press("Escape");
+  await main.keyboard.press("Escape");
+  await expect(main.locator("#ready")).toBeVisible();
+  await closed;
+  await context.close();
+});

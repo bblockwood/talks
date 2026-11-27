@@ -75,8 +75,13 @@ test("a published deck opens with its code and presents", async ({ page }) => {
 
   await page.keyboard.press("Escape");
   await page.keyboard.press("Escape");
+  await page.locator("#another").click();
   await expect(page.locator("#code")).toBeVisible();
   await expect(page.locator("#code")).toHaveValue("");
+  // The code is hidden as it is typed, without being a password field a browser would offer to save.
+  expect(await page.locator("#code").evaluate((el: HTMLInputElement) => [el.type, getComputedStyle(el).getPropertyValue("-webkit-text-security")])).toEqual(["text", "disc"]);
+  await page.locator("#show-code").check();
+  expect(await page.locator("#code").evaluate((el) => getComputedStyle(el).getPropertyValue("-webkit-text-security"))).toBe("none");
   expect(problems).toEqual([]);
 });
 

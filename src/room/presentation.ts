@@ -16,6 +16,13 @@ export interface PresentationOptions {
   readonly fullscreen: boolean;
   /** Two-screen mode: the screen to put the slides on. Omitted, full screen uses the current screen. */
   readonly screen?: ScreenDetailed;
+  /**
+   * The browser can't place windows on screens itself, so the user will drag this one to the
+   * projector: the Full screen button then stays in view until it has been used once.
+   */
+  readonly setup?: boolean;
+  /** Esc twice: the slides are off this screen, but the device is still in the talk, choosing a view. */
+  readonly onStopped: () => void;
   /** Called once this device has left the talk and everything decrypted has been dropped. */
   readonly onEnded: () => void;
 }
@@ -73,6 +80,7 @@ export class Presentation {
       void root.requestFullscreen({ navigationUI: "hide" }).catch(() => {});
     });
     root.append(back);
+    root.classList.toggle("setup", options.setup === true);
     this.showWindowed();
 
     window.addEventListener("keydown", this.onKeyDown, { capture: true });
@@ -124,9 +132,8 @@ export class Presentation {
     await this.root.requestFullscreen({ navigationUI: "hide", screen });
   }
 
-  /** Leave (SPEC §5.3): out of full screen, locks released, every decrypted byte and pixel dropped. */
-  async end(navigate = true): Promise<void> {
-    if (this.ended) return;
+  /** Takes the slides off this screen: out of full screen, locks released, pixels dropped. */
+  private async takeDown(): Promise<void> {
     this.ended = true;
     window.removeEventListener("keydown", this.onKeyDown, { capture: true });
     window.removeEventListener("keyup", this.onKeyUp, { capture: true });
@@ -134,17 +141,36 @@ export class Presentation {
     document.removeEventListener("visibilitychange", this.onVisibilityChange);
     if (import.meta.env.DEV) delete (window as unknown as { __lectern?: unknown }).__lectern;
 
-    this.onEnding?.();
+    this.onEnding?.(); // two screens: the presenter window goes too
     this.onSwapKey = null;
     this.onEnding = null;
-    const leaving = this.talk.close();
+    this.talk.audience = null;
     this.view.wipe();
-    this.cache.wipe();
     this.root.hidden = true;
+    this.root.classList.remove("windowed", "setup");
     navigator.keyboard?.unlock?.();
     void this.wakeLock?.release().catch(() => {});
     this.wakeLock = null;
     if (document.fullscreenElement) await document.exitFullscreen().catch(() => {});
+  }
+
+  /**
+   * Esc twice (Ben, 2026-11-27): the slides come off this screen and the device goes back to
+   * choosing a view, still in the talk and with the deck in memory, so one click shows them again.
+   */
+  async stop(): Promise<void> {
+    if (this.ended) return;
+    await this.takeDown();
+    this.talk.peer.setView(null);
+    this.options.onStopped();
+  }
+
+  /** Leave (SPEC §5.3): this device is out of the talk and every decrypted byte and pixel is dropped. */
+  async end(navigate = true): Promise<void> {
+    if (this.ended) return;
+    const leaving = this.talk.close();
+    await this.takeDown();
+    this.cache.wipe();
     await leaving;
     await this.talk.deck.destroy();
     if (navigate) this.options.onEnded();
@@ -194,7 +220,7 @@ export class Presentation {
     );
     if (result.handled) ev.preventDefault();
 
-    if (result.end) void this.end();
+    if (result.end) void this.stop();
     else if (result.command) this.dispatch(result.command, ev.timeStamp);
   };
 
@@ -207,6 +233,7 @@ export class Presentation {
     const windowed = document.fullscreenElement !== this.root && document.fullscreenEnabled;
     const was = this.root.classList.contains("windowed");
     this.root.classList.toggle("windowed", windowed);
+    if (!windowed) this.root.classList.remove("setup");
     if (windowed && !was) this.view.wake();
   }
 
@@ -218,10 +245,10 @@ export class Presentation {
     }
     const wasLocked = this.keyboardLocked;
     this.keyboardLocked = false;
-    // With keyboard lock on, the browser leaves full screen only when Esc is held: that leaves
-    // the talk (SPEC §5.3). Without the lock a single stray Esc (some clickers send one) also
-    // lands here, so any other exit keeps showing the slides in the window. Never fail on stage.
-    if (wasLocked && this.escapeDown) void this.end();
+    // With keyboard lock on, the browser leaves full screen only when Esc is held: that stops
+    // showing the slides (SPEC §5.3). Without the lock a single stray Esc (some clickers send
+    // one) also lands here, so any other exit keeps showing them in the window. Never fail on stage.
+    if (wasLocked && this.escapeDown) void this.stop();
   };
 
   private readonly onVisibilityChange = (): void => {

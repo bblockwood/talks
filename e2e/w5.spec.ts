@@ -77,6 +77,7 @@ test("offline: the page reloads, and a deck opened before opens again and presen
   // A code never opened on this device is not found offline, and says it is the network.
   await page.keyboard.press("Escape");
   await page.keyboard.press("Escape");
+  await page.locator("#another").click();
   await expect(page.locator("#code")).toBeVisible();
   await page.locator("#code").fill("never-opened-here");
   await page.locator("#code").press("Enter");

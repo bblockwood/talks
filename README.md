@@ -32,10 +32,12 @@ npm run revoke -- talk.pdf       # take a deck down
 
 - Type the code, or use **open a PDF from this device** for a deck that isn't published. That talk is given a one-word code, shown on the page; a device that enters it is sent the slides, encrypted, through the relay.
 - Then choose **Audience view**, **Presenter view**, or **Both views** (two screens).
-- **Keys:** → Space Page Down next; ← Page Up previous; Shift+→/← next/previous frame; a number then Enter jumps to that frame; Delete goes back after a jump; B or `.` black; W white (the whiteboard); F freeze; T pause the clock; C clear ink; Esc twice leaves the talk on this computer.
+- **Keys:** → Space Page Down next; ← Page Up previous; Shift+→/← next/previous frame; a number then Enter jumps to that frame; Delete goes back after a jump; B or `.` black; W white (the whiteboard); F freeze; T pause the clock; C clear ink; Esc twice takes the slides off the screen and returns to the choice of views, one click from showing them again.
 - **Both views** (Chrome or Edge, displays set to extend): click it, allow window management, check the screens, click it again. Slides go full screen on the projector and the presenter view opens in a second window on the other screen, with **Swap displays** (Ctrl+D or Cmd+D) at its bottom right.
+- In Safari or Firefox, which can't place windows on screens, **Both views** opens the two windows and you drag the slides to the projector and click **Full screen** there. No Swap displays in that case.
 - If the slides drop out of full screen they stay in the window and keys still drive them; move the mouse for a **Full screen** button.
-- Leaving wipes the slides from this computer's memory and returns to the code screen; the talk goes on for your other devices. **More → End talk** in the presenter view ends it on every device. Use a private window on a shared computer.
+- The code is hidden as you type it, in case the screen is already on the projector: anyone who reads it could drive the talk.
+- **Leave this talk** wipes the slides from this computer's memory and returns to the code screen; the talk goes on for your other devices. Do this (or close the window) when you are done on a shared computer. **More → End talk** in the presenter view ends it on every device. Use a private window on a shared computer.
 - The computer showing the slides runs the talk, so its keyboard and clicker keep working if the network drops.
 
 ## The presenter view

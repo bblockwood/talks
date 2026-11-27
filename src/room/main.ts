@@ -69,12 +69,24 @@ function setStatus(text: string, error = false): void {
 
 const twoScreensPossible = (): boolean => typeof window.getScreenDetails === "function" && window.screen.isExtended === true;
 
-/** "Both views" needs two screens the browser can tell apart; mirrored displays look like one. */
+/** True when the browser can't place windows on screens itself (Safari, Firefox), or was not allowed to. */
+let placeByHand = false;
+const canPlaceByHand = (): boolean =>
+  layoutFor(window.innerWidth, window.innerHeight) === "wide" && window.matchMedia("(pointer: fine)").matches && typeof window.open === "function";
+
+/**
+ * "Both views". Where the browser can place windows (Chrome, Edge) it needs two screens it can
+ * tell apart; mirrored displays look like one. Elsewhere, on a computer, the two windows are
+ * opened and the user drags them to their screens.
+ */
 function showBoth(): void {
+  const managed = typeof window.getScreenDetails === "function";
   const possible = twoScreensPossible();
-  $<HTMLButtonElement>("both").disabled = !possible;
-  $("mirror-note").hidden = possible || layoutFor(window.innerWidth, window.innerHeight) !== "wide";
-  $("both-panel").hidden = !possible || !screens;
+  const byHand = (!managed || placeByHand) && canPlaceByHand();
+  $<HTMLButtonElement>("both").disabled = !possible && !byHand;
+  $("mirror-note").hidden = possible || byHand || !managed || layoutFor(window.innerWidth, window.innerHeight) !== "wide";
+  $("manual-note").hidden = !byHand;
+  $("both-panel").hidden = !possible || !screens || byHand;
 }
 
 function listScreens(): void {
@@ -104,7 +116,10 @@ async function detectScreens(): Promise<boolean> {
     screens = await window.getScreenDetails();
   } catch {
     screens = null;
-    setStatus("The browser did not allow window management, so both views can't be placed. Choose one view for this screen.", true);
+    // Not allowed to place windows: fall back to opening them for the user to drag.
+    placeByHand = true;
+    showBoth();
+    setStatus("The browser did not allow window management. Click Both views again to open the two windows and place them yourself.");
     return false;
   }
   if (screens.screens.length < 2) {
@@ -188,8 +203,9 @@ function showTalkStatus(): void {
   phone.replaceChildren();
   if (talk.relayStatus === "none") phone.textContent = "Other devices can't join: this build has no relay.";
   else if (!canJoin) phone.textContent = "Not connected: other devices can't join right now.";
-  else if (joinCode) {
-    // A talk started from a PDF: its code was made for it and is shown, so another device can join.
+  else if (joinCode && talk.source.originator) {
+    // A talk started from a PDF on this device: its code was made here and is shown, so another
+    // device can join. A device that joined with it does not show it: its screen may be the projector.
     const code = document.createElement("strong");
     code.id = "join-code";
     code.textContent = joinCode;
@@ -235,11 +251,10 @@ function showSaved(): void {
     row.className = "saved-row";
     const open = document.createElement("button");
     open.className = "talk";
+    // The title only: the code is not put on a screen that may be mirrored to the room.
     const title = document.createElement("span");
     title.textContent = saved.title;
-    const code = document.createElement("small");
-    code.textContent = saved.code;
-    open.append(title, code);
+    open.append(title);
     open.addEventListener("click", () => openByCode(saved.code, true));
     const drop = document.createElement("button");
     drop.textContent = "Forget";
@@ -427,7 +442,7 @@ function showPresenter(): void {
       ownsDeck: false,
       loadNotesSize: () => (own ? loadNotesSize() : null),
       saveNotesSize,
-      ...(current.source.joinCode ? { joinHint: `code ${current.source.joinCode}` } : {}),
+      ...(current.source.joinCode && current.source.originator ? { joinHint: `code ${current.source.joinCode}` } : {}),
       onLeave: leave,
       onChangeView: () => {
         active?.destroy();
@@ -448,11 +463,13 @@ function showPresenter(): void {
 
 // ---------------------------------------------------------------- the slides
 
-// Called straight from the click handlers: full screen needs the user gesture.
+// Called straight from the click handlers: full screen and new windows need the user gesture.
 function start(fullscreen: boolean, both = false): void {
   const current = talk;
-  if (!current || !cache || starting || active || presentation) return;
-  const twoScreens = fullscreen && both && twoScreensPossible();
+  const pages = cache;
+  if (!current || !pages || starting || active || presentation) return;
+  const byHand = both && (typeof window.getScreenDetails !== "function" || placeByHand) && canPlaceByHand();
+  const twoScreens = fullscreen && both && !byHand && twoScreensPossible();
   if (twoScreens && !screens) {
     // The permission prompt uses up the click, so choosing screens and starting are two clicks.
     setStatus("Your browser asks to manage windows: click Allow.");
@@ -462,15 +479,32 @@ function start(fullscreen: boolean, both = false): void {
     return;
   }
   const placement = twoScreens ? chosenScreens() : null;
+  const forWindow = (): PresenterDeck => ({ pdf: current.source.pdf.slice(0), title: current.source.title, split: current.deck.split, ...current.source.notes });
+
+  // By hand: the presenter view opens in a second window at once (a new window must come straight
+  // from the click), and the slides start in this window, to be dragged to the projector.
+  let hub: LocalHub | null = null;
+  if (byHand) {
+    hub = new LocalHub(current, forWindow());
+    hub.setHint("Drag the slides window to the projector, then click Full screen on it.");
+    if (!hub.open(null)) hub = null; // blocked: this device simply shows the slides
+  }
+
   starting = true;
-  const starter = Presentation.start(current, cache, audience, {
-    fullscreen,
+  const starter = Presentation.start(current, pages, audience, {
+    fullscreen: fullscreen && !byHand,
     ...(placement ? { screen: placement.audience } : {}),
+    ...(byHand ? { setup: true } : {}),
+    onStopped: () => {
+      presentation = null;
+      showReady();
+    },
     onEnded: () => window.location.replace(import.meta.env.BASE_URL),
   });
   void starter.then((started) => {
     starting = false;
     if (!started) {
+      hub?.close();
       fsProblem.hidden = false;
       return;
     }
@@ -480,9 +514,10 @@ function start(fullscreen: boolean, both = false): void {
     if (placement) {
       // The presenter view opens on the other screen from the same click, right after full screen
       // is granted. If the browser blocks it, this device simply shows the slides.
-      const forWindow: PresenterDeck = { pdf: current.source.pdf.slice(0), title: current.source.title, split: current.deck.split, ...current.source.notes };
-      new LocalHub(current, started, forWindow).open(placement.presenter, placement.audience);
+      hub = new LocalHub(current, forWindow());
+      if (!hub.open(placement.presenter, placement.audience)) hub = null;
     }
+    hub?.attach(started);
   });
 }
 
@@ -530,16 +565,21 @@ function joinLocal(channelName: string): void {
             saveNotesSize: () => {},
             onLeave: () => window.close(),
             // The click or key press happened here, but it is the slides window that must change
-            // its full screen, so the gesture is handed over with `delegate: "fullscreen"`.
-            onSwap: () => {
-              const opener = window.opener as Window | null;
-              if (!opener) return;
-              try {
-                opener.postMessage(SWAP_MESSAGE, { targetOrigin: window.location.origin, delegate: "fullscreen" } as WindowPostMessageOptions);
-              } catch {
-                opener.postMessage(SWAP_MESSAGE, window.location.origin); // a browser without capability delegation
-              }
-            },
+            // its full screen, so the gesture is handed over with `delegate: "fullscreen"`. Only
+            // where the browser placed the windows: otherwise they are dragged by hand.
+            ...(handed.canSwap
+              ? {
+                  onSwap: () => {
+                    const opener = window.opener as Window | null;
+                    if (!opener) return;
+                    try {
+                      opener.postMessage(SWAP_MESSAGE, { targetOrigin: window.location.origin, delegate: "fullscreen" } as WindowPostMessageOptions);
+                    } catch {
+                      opener.postMessage(SWAP_MESSAGE, window.location.origin); // a browser without capability delegation
+                    }
+                  },
+                }
+              : {}),
           },
           client,
         );
@@ -600,6 +640,21 @@ if (import.meta.env.DEV) {
     }
   });
 }
+
+// The code is hidden as it is typed (Ben, 2026-11-27): the screen may already be on the projector,
+// and anyone who reads the code can drive the talk. Not a password field, which browsers offer to
+// save; where the browser can't mask a text field, a password field that asks not to be saved.
+const maskable = typeof CSS !== "undefined" && CSS.supports("-webkit-text-security", "disc");
+function maskCode(hidden: boolean): void {
+  if (maskable) codeInput.classList.toggle("masked", hidden);
+  else {
+    codeInput.type = hidden ? "password" : "text";
+    codeInput.autocomplete = "off";
+  }
+}
+const showCode = $<HTMLInputElement>("show-code");
+showCode.addEventListener("change", () => maskCode(!showCode.checked));
+maskCode(true);
 
 $("boot").remove();
 const channelName = channelNameFromHash(window.location.hash);

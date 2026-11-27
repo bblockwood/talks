@@ -278,6 +278,20 @@ describe("a talk across devices", () => {
     expect(laptop.page()).toBe(1);
   });
 
+  it("a slides screen that goes back to choosing stays in the talk and keeps running it, but no longer counts as showing slides", () => {
+    const t = talk();
+    const room = t.join("Room PC", A, "audience");
+    const phone = t.join("Phone", B, "presenter");
+    phone.peer.send(next);
+    room.peer.setView(null);
+    expect(t.hosts()).toEqual(["Room PC"]);
+    expect(phone.state()).toMatchObject({ page: 1, hostView: "presenter", room: { audiences: 0, devices: ["Room PC", "Phone"] } });
+    phone.peer.send(next);
+    expect(room.page()).toBe(2);
+    room.peer.setView("audience");
+    expect(phone.state()).toMatchObject({ page: 2, hostView: "audience", room: { audiences: 1 } });
+  });
+
   it("End talk ends it on every device; leaving does not", () => {
     const t = talk();
     const room = t.join("Room PC", A, "audience");
