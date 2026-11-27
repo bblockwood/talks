@@ -9,6 +9,13 @@
     />
     <meta name="robots" content="noindex" />
     <meta name="theme-color" content="#111418" />
+    <!-- Added to an iPad's or phone's Home Screen, the page opens without the browser's bars. -->
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <link rel="apple-touch-icon" href="/icon-180.png" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="Lectern" />
     <title>Lectern</title>
     <link rel="stylesheet" href="/src/console/console.css" />
     <link rel="stylesheet" href="/src/room/room.css" />
@@ -114,7 +121,7 @@
           <p class="keys">
             <kbd>→</kbd> <kbd>Space</kbd> <kbd>Page Down</kbd> next · <kbd>←</kbd> <kbd>Page Up</kbd> previous ·
             <kbd>Shift</kbd>+<kbd>→</kbd>/<kbd>←</kbd> next/previous frame · number then <kbd>Enter</kbd> jump to frame ·
-            <kbd>Delete</kbd> back after a jump · <kbd>B</kbd> black · <kbd>W</kbd> white · <kbd>F</kbd> freeze · <kbd>T</kbd> pause clock ·
+            <kbd>Delete</kbd> back after a jump · <kbd>B</kbd> black · <kbd>W</kbd> white · <kbd>T</kbd> pause clock ·
             <kbd>Esc</kbd> twice to come back to this page
           </p>
         </section>
@@ -138,9 +145,8 @@
         </div>
         <div class="bar-right">
           <span id="pill" class="pill" hidden></span>
-          <button id="link" class="linkstate" aria-live="polite">Connecting…</button>
+          <button id="link" class="linkstate" aria-live="polite" title="Devices in this talk, how others join, leaving and ending">Connecting…</button>
           <button id="fs" class="fs" hidden>Full screen</button>
-          <button id="t-more">More</button>
           <!-- Last, so it is always at the bottom right corner of a laptop's presenter view. -->
           <button id="swap" class="swap" title="Slides to the other screen, this view to that one (Ctrl+D, or Cmd+D on a Mac)" hidden>Swap displays</button>
         </div>
@@ -170,10 +176,9 @@
                   </span>
                   <button id="ink-undo" class="tool">Undo</button>
                   <button id="ink-clear" class="tool">Clear <kbd>C</kbd></button>
-                  <button id="ink-board" class="tool">Board</button>
                 </span>
                 <button id="t-black" class="tool" title="Black screen (B)">Black <kbd>B</kbd></button>
-                <button id="t-freeze" class="tool" title="Freeze the slides screen (F)">Freeze <kbd>F</kbd></button>
+                <button id="t-white" class="tool" title="White screen to draw on (W)">White <kbd>W</kbd></button>
                 <span id="mode-hint" class="mode-hint"></span>
                 <span class="spacer"></span>
                 <button id="t-back" class="tool" hidden>Back<span class="dest" id="back-dest"></span> <kbd>⌫</kbd></button>
@@ -253,47 +258,10 @@
       <div id="sheet-more" class="sheet" hidden>
         <div class="sheet-panel">
           <header class="sheet-head">
-            <strong>More</strong>
+            <strong>This talk</strong>
             <button id="more-close" class="primary">Close</button>
           </header>
           <div class="rows">
-            <div id="clock-home">
-              <div id="clock-box" class="clock-box">
-            <div class="row">
-              <span>
-                Clock <strong id="clock-now" class="clock-now"></strong>
-                <small id="clock-sub" class="clock-sub"></small>
-              </span>
-              <span class="pair">
-                <button id="clock-toggle">Pause</button>
-                <button id="clock-reset">Reset</button>
-              </span>
-            </div>
-            <div class="row">
-              <span>Counts</span>
-              <span class="count">
-                <button id="count-up">Up</button>
-                <button id="count-down">Down from</button>
-                <input
-                  id="count-from"
-                  type="text"
-                  placeholder="20:00"
-                  aria-label="Count down from"
-                  autocomplete="off"
-                  autocapitalize="none"
-                  autocorrect="off"
-                  spellcheck="false"
-                  enterkeyhint="done"
-                />
-              </span>
-            </div>
-            <p id="count-hint" class="count-hint" hidden>Minutes (45), minutes:seconds (45:00) or hours (1h30).</p>
-              </div>
-            </div>
-            <div class="row">
-              <span>Slides screen</span>
-              <span><button id="m-white">Whiteboard</button></span>
-            </div>
             <div class="row" id="row-join">
               <span>Other devices join at</span>
               <span id="join-text" class="diag"></span>
@@ -326,7 +294,39 @@
       </div>
 
       <!-- The clock's own small pop-up, by the clock: the same controls as under More. -->
-      <div id="clock-pop" class="pop" hidden><div id="clock-pop-panel" class="pop-panel"></div></div>
+      <div id="clock-pop" class="pop" hidden>
+        <div id="clock-pop-panel" class="pop-panel">
+            <div class="row">
+              <span>
+                Clock <strong id="clock-now" class="clock-now"></strong>
+                <small id="clock-sub" class="clock-sub"></small>
+              </span>
+              <span class="pair">
+                <button id="clock-toggle">Pause</button>
+                <button id="clock-reset">Reset</button>
+              </span>
+            </div>
+            <div class="row">
+              <span>Counts</span>
+              <span class="count">
+                <button id="count-up">Up</button>
+                <button id="count-down">Down from</button>
+                <input
+                  id="count-from"
+                  type="text"
+                  placeholder="20:00"
+                  aria-label="Count down from"
+                  autocomplete="off"
+                  autocapitalize="none"
+                  autocorrect="off"
+                  spellcheck="false"
+                  enterkeyhint="done"
+                />
+              </span>
+            </div>
+            <p id="count-hint" class="count-hint" hidden>Minutes (45), minutes:seconds (45:00) or hours (1h30).</p>
+        </div>
+      </div>
 
       <div id="end-confirm" class="modal" role="dialog" aria-modal="true" hidden>
         <div class="modal-panel">

@@ -147,10 +147,10 @@ test("two screens: the presenter view in a second window drives the audience win
   await presenter.mouse.up();
   await expect.poll(inkShown).toBe(1);
   expect(await roomPage(main)).toBe(before); // drawing never advances the slide
-  await presenter.locator("#ink-board").click();
-  await expect(presenter.locator("#pill")).toHaveText("WHITEBOARD");
+  await presenter.locator("#t-white").click();
+  await expect(presenter.locator("#pill")).toHaveText("WHITE");
   expect(await room(main, (h) => h.state().audienceMode.kind)).toBe("white");
-  await presenter.locator("#ink-board").click();
+  await presenter.locator("#t-white").click();
   await presenter.keyboard.press("c");
   await expect.poll(inkShown).toBe(0);
   await presenter.keyboard.press("Escape"); // leaves Draw, does not start ending the talk
@@ -166,7 +166,7 @@ test("two screens: the presenter view in a second window drives the audience win
   // Swap displays: the button hands its click to the audience window, which moves its full screen
   // to the other screen; the presenter window moves the opposite way. Ctrl+D does the same.
   const asked = () => main.evaluate(() => (window as unknown as { __askedScreen?: string }).__askedScreen);
-  await presenter.locator("#t-more").click();
+  await presenter.locator("#link").click();
   await expect(presenter.locator("#row-join")).toBeHidden(); // this window is not a device of its own
   await presenter.locator("#more-close").click();
   // Swap displays is always in view, at the bottom right, not under More.

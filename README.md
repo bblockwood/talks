@@ -32,12 +32,12 @@ npm run revoke -- talk.pdf       # take a deck down
 
 - **Open a PDF from this device**, or drop one on the page. The talk is given a one-word code, shown under its first slide; a device that enters that code is sent the slides, encrypted, through the relay. A published talk opens by typing its code.
 - Then choose **Audience view**, **Presenter view**, or **Both views** (two screens). The line under the buttons says what Both views does on this device, or why it can't. The talk code sits under the preview: in full where it was made, as dots with **Display code** where it was typed in or where the slides have been showing.
-- **Keys:** → Space Page Down next; ← Page Up previous; Shift+→/← next/previous frame; a number then Enter jumps to that frame; Delete goes back after a jump; B or `.` black; W white (the whiteboard); F freeze; T pause the clock; C clear ink; Esc twice takes the slides off the screen and returns to the choice of views, one click from showing them again.
+- **Keys:** → Space Page Down next; ← Page Up previous; Shift+→/← next/previous frame; a number then Enter jumps to that frame; Delete goes back after a jump; B or `.` black; W white (to draw on); T pause the clock; C clear ink; Esc twice takes the slides off the screen and returns to the choice of views, one click from showing them again.
 - **Both views** (Chrome or Edge, displays set to extend): click it, allow window management, check the screens, click it again. Slides go full screen on the projector and the presenter view opens in a second window on the other screen, with **Swap displays** (Ctrl+D or Cmd+D) at its bottom right.
 - In Safari or Firefox, which can't place windows on screens, **Both views** opens the two windows and you drag the slides to the projector and click **Full screen** there. No Swap displays in that case.
 - If the slides drop out of full screen they stay in the window and keys still drive them; move the mouse for a **Full screen** button.
 - The code is hidden as you type it, in case the screen is already on the projector: anyone who reads it could drive the talk.
-- **Leave this talk** wipes the slides from this computer's memory and returns to the code screen; the talk goes on for your other devices. Do this (or close the window) when you are done on a shared computer. **More → End talk** in the presenter view ends it on every device. Use a private window on a shared computer.
+- **Leave this talk** wipes the slides from this computer's memory and returns to the code screen; the talk goes on for your other devices. Do this (or close the window) when you are done on a shared computer. **End talk**, under the presenter view's status line, ends it on every device. Use a private window on a shared computer.
 - The computer showing the slides runs the talk, so its keyboard and clicker keep working if the network drops.
 
 ## The presenter view
@@ -54,9 +54,11 @@ One view for you, on whatever you have: your laptop or tablet on the lectern, yo
 - **Back** appears under the slide after a jump and says where it goes ("Back to Frame 12").
 - **Click the clock** to pause it, reset it, or count down from a time.
 - **?** shows the keyboard shortcuts.
-- **More** has the clock, the whiteboard, connection numbers, and **End talk**, which asks first. Enter closes it.
+- **Black** and **White** sit under the slide; your own slide goes black or white too, so you see what the audience sees. Draw on the white screen as on a whiteboard.
+- **Tap the status line** ("Slides showing · 2 devices") for how other devices join, connection numbers, Change view, Leave, and **End talk**, which asks first.
+- **On an iPad or phone, add the page to the Home Screen** (Share → Add to Home Screen) to have it fill the screen. Safari's own full screen is not used there: it closes on any downward swipe.
 - **Rehearse** by opening the talk in the presenter view with no screen showing slides; other devices can join. The top line says "No slides screen yet". The clock starts with the first slide change.
-- **More → Change view** (or Esc twice) returns to the choice of views without leaving the talk, to put the slides on this device's screen or its second screen.
+- **Status line → Change view** (or Esc twice) returns to the choice of views without leaving the talk, to put the slides on this device's screen or its second screen.
 - Tick **Remember on this device** to reopen a talk with one tap. Do that only on your own devices.
 
 ## Security: what this does and does not protect

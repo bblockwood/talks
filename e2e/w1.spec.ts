@@ -104,7 +104,7 @@ test("presents a deck: builds, frames, jump by number, back", async ({ page }) =
   expect(offsite).toEqual([]);
 });
 
-test("black, white and freeze", async ({ page }) => {
+test("black and white; F does nothing", async ({ page }) => {
   await open(page, "Basic 16:9");
   await start(page);
 
@@ -121,15 +121,12 @@ test("black, white and freeze", async ({ page }) => {
   await page.keyboard.press(".");
   await expect.poll(() => shown(page)).toBe(0);
 
-  // Frozen: the presenter moves on, the audience stays.
+  // Freeze is gone (Ben, 2026-11-27): F leaves the slides following along.
   await page.keyboard.press("f");
   await page.keyboard.press("ArrowRight");
   await page.keyboard.press("ArrowRight");
-  await page.waitForTimeout(300);
-  expect(await committed(page)).toBe(2);
-  expect(await shown(page)).toBe(0);
-  await page.keyboard.press("f");
   await expect.poll(() => shown(page)).toBe(2);
+  expect(await committed(page)).toBe(2);
 });
 
 test("clicking a link follows it, Delete goes back, clicks elsewhere do nothing", async ({ page }) => {

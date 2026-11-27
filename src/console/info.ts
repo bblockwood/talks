@@ -29,7 +29,7 @@ export const KEYS_INFO = [
   "- **Back after a jump:** `Delete` or `Backspace`; on a Mac also `⌘[`, and `⌘]` for forward",
   "- **Overview:** `Tab`. **Search:** `Ctrl`+`F` or `⌘F`",
   "- **Laser:** `L`. **Draw:** `D`. **Clear the ink:** `C`",
-  "- **Black:** `B` or `.` **Whiteboard:** `W`. **Freeze:** `F`",
+  "- **Black:** `B` or `.` **White,** to draw on: `W`",
   "- **Pause the clock:** `T`",
   "- **Swap displays** (two screens): `Ctrl`+`D` or `⌘D`",
   "- **Back to the choice of views:** `Esc` twice. One `Esc` closes whatever is open",

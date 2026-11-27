@@ -17,7 +17,7 @@ export class SlideSurface {
   private drawn: { page: number; x: number; y: number; width: number; height: number } | null = null;
   private dot: { x: number; y: number } | null = null;
   private ink: readonly Stroke[] = [];
-  private blank = false;
+  private blank: "white" | "black" | null = null;
   private readonly deckRef: Deck;
 
   constructor(
@@ -71,8 +71,8 @@ export class SlideSurface {
     this.paint();
   }
 
-  /** Shows a blank white board in place of the slide (the whiteboard). */
-  setBlank(blank: boolean): void {
+  /** Shows a white board (with its ink) or a black screen in place of the slide, as the audience sees it. */
+  setBlank(blank: "white" | "black" | null): void {
     if (blank === this.blank) return;
     this.blank = blank;
     this.drawn = null;
@@ -167,9 +167,11 @@ export class SlideSurface {
     if (!ctx) return;
     ctx.fillStyle = "#000";
     ctx.fillRect(0, 0, this.width, this.height);
-    ctx.fillStyle = "#fff";
-    ctx.fillRect(fit.x, fit.y, fit.width, fit.height);
-    drawStrokes(ctx, this.ink, fit);
+    if (this.blank === "white") {
+      ctx.fillStyle = "#fff";
+      ctx.fillRect(fit.x, fit.y, fit.width, fit.height);
+      drawStrokes(ctx, this.ink, fit);
+    }
     this.drawn = { page: this.page, x: fit.x, y: fit.y, width: fit.width, height: fit.height };
   }
 }

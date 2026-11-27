@@ -241,6 +241,7 @@ button.wide {
   --bg: #000;
   --panel: #1a1a1c;
   --line: #333338;
+  --rim: #4a4a52;
   position: fixed;
   inset: 0;
   background: var(--bg);
@@ -850,9 +851,16 @@ button.wide {
 .bar-right {
   display: contents;
 }
+/* The status line is a button: it opens who is in the talk, how to join, leaving and ending. */
 .bar .linkstate {
   order: -1;
-  flex: 1 1 auto;
+  flex: 0 1 auto;
+  margin-right: auto;
+  padding: 0.3rem 0.7rem;
+  border: 1px solid var(--rim);
+  border-radius: 0.6rem;
+  background: var(--panel);
+  color: var(--text);
 }
 .bar-where {
   display: flex;
@@ -921,9 +929,10 @@ button.wide {
 }
 
 /* Tools: under the current slide. Each shows its key, and lights in its own colour. */
+/* Every button has a rim, like Prev and Next, so it reads as a button on a black screen. */
 .tool {
-  background: rgb(255 255 255 / 0.08);
-  border-color: transparent;
+  background: var(--panel);
+  border-color: var(--rim);
   border-radius: 0.5rem;
   padding: 0.45rem 0.85rem;
   font-weight: 600;
@@ -945,13 +954,12 @@ button.wide {
   background: rgb(0 0 0 / 0.15);
 }
 #t-laser.on,
-#t-black.on {
+#t-black.on,
+#t-white.on {
   background: #ef4444;
   border-color: #ef4444;
 }
-#t-draw.on,
-#t-freeze.on,
-#ink-board.on {
+#t-draw.on {
   background: #f59e0b;
   border-color: #f59e0b;
 }
@@ -987,7 +995,7 @@ button.wide {
   border: 3px solid var(--line);
 }
 .mode-hint {
-  flex: 0 1 auto;
+  flex: none;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -1081,8 +1089,7 @@ button.wide {
 .console[data-layout="compact"] .modebar .spacer,
 .console[data-layout="compact"] .tool kbd,
 .console[data-layout="compact"] .tool .dest,
-.console[data-layout="compact"] #t-forward,
-.console[data-layout="compact"] #t-laser {
+.console[data-layout="compact"] #t-forward {
   display: none;
 }
 .console[data-layout="compact"] .linkstate {
@@ -1093,10 +1100,14 @@ button.wide {
   aspect-ratio: var(--slide-aspect, 16 / 9);
   max-height: 38dvh;
 }
+.console[data-layout="compact"] .modebar {
+  gap: 0.3rem;
+}
 .console[data-layout="compact"] .modebar > .tool {
-  flex: 1;
-  padding: 0.6rem 0;
-  font-size: 0.85rem;
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: 0.6rem 0.2rem;
+  font-size: 0.8rem;
 }
 .console[data-layout="compact"] .drawbar {
   order: 10;
@@ -1163,8 +1174,7 @@ button.wide {
 
 /* ------------------------------------------------------------ stacked: a tablet held upright */
 .console[data-layout="stacked"] .where,
-.console[data-layout="stacked"] .mode-hint,
-.console[data-layout="stacked"] #t-laser {
+.console[data-layout="stacked"] .mode-hint {
   display: none;
 }
 .console[data-layout="stacked"] #current {
@@ -1219,7 +1229,7 @@ button.wide {
 }
 .console[data-layout="wide"] .bar .linkstate {
   order: 0;
-  flex: 0 1 auto;
+  margin-right: 0;
 }
 .console[data-layout="wide"] #bar-frame,
 .console[data-layout="wide"] .timer {
@@ -1285,6 +1295,29 @@ button.wide {
 .console[data-layout="wide"] .hdivider {
   flex: 0 0 0.75rem;
   cursor: row-resize;
+}
+/* A much larger area to grab than the line that shows, reaching over the edges of the panes
+   beside it: a finger is not a mouse pointer. */
+.console[data-layout="wide"] .divider,
+.console[data-layout="wide"] .hdivider {
+  z-index: 4;
+}
+.console[data-layout="wide"] .divider::before,
+.console[data-layout="wide"] .hdivider::before {
+  content: "";
+  position: absolute;
+}
+.console[data-layout="wide"] .divider::before {
+  top: 0;
+  bottom: 0;
+  left: -0.6rem;
+  right: -0.6rem;
+}
+.console[data-layout="wide"] .hdivider::before {
+  left: 0;
+  right: 0;
+  top: -0.5rem;
+  bottom: -0.5rem;
 }
 .console[data-layout="wide"] .divider::after,
 .console[data-layout="wide"] .hdivider::after {
@@ -1355,9 +1388,8 @@ button.wide {
     display: none;
   }
 }
-/* No keyboard, no mouse to point with. */
+/* No keyboard: no key badges. */
 @media (pointer: coarse) {
-  #t-laser,
   .tool kbd {
     display: none;
   }
@@ -1369,4 +1401,30 @@ button.wide {
 .modebar.tighter .dest,
 .modebar.tightest kbd {
   display: none;
+}
+
+/* While the presenter view is up the page itself never scrolls or bounces (an iPad would let the
+   whole view slide under a finger); only the notes, the outline, the overview and the sheets scroll. */
+html.presenting,
+html.presenting body {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  overscroll-behavior: none;
+}
+html.presenting .console {
+  touch-action: none;
+}
+html.presenting .notes,
+html.presenting .grid,
+html.presenting .results,
+html.presenting .sheet-panel,
+html.presenting .modal-panel {
+  touch-action: pan-y;
+  overscroll-behavior: contain;
+}
+html.presenting input {
+  touch-action: manipulation;
 }

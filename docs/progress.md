@@ -863,3 +863,35 @@ Verification: build; 295 unit tests; 42 e2e tests (the laptop test now measures 
 7. Press **?**.
 8. Phone and iPad upright: check nothing is cramped or cut off, especially the row under the slide while drawing.
 9. Projector, Both views: Swap displays is in the bottom right corner.
+
+## W9.1. iPad and general feedback (2026-11-27)
+
+Ben's eleven points, all done:
+
+1–2. **iPad full screen.** Safari's swipe-down exit and its X button can't be turned off by a page. The presenter view no longer enters full screen on an iPad or iPhone, and the page can be added to the Home Screen, where it fills the screen with neither.
+3. **No scrolling page.** While the presenter view is up the page is fixed; only the notes, outline, overview and sheets scroll.
+4. **Laser button on touch screens** (and phones). With it on, a finger on the slide points immediately and never steps; the buttons still step.
+5. **Vertical divider.** Its grab area is now about 30 px wide and sits above the panes beside it (the horizontal one likewise). I could not reproduce the failure on a computer, where it dragged before and after; my guess is that touches were landing on the slide next to it.
+6. **Freeze removed** (button and F key).
+7. **Black and white show on the presenter's own slide.**
+8. **Rims on all tool buttons.**
+9. **White button** beside Black; the Whiteboard row and the Board button are gone.
+10. **Clock controls only in the clock's pop-up.**
+11. **No More button.** The status line is a button that opens "This talk": how to join, connection, shortcuts, timings, Change view, Leave, End talk.
+
+Verification: build; 295 unit tests; 43 e2e tests (new: the touch laser, driven with real touch events; dividers; the page can't scroll; black and white on the presenter's slide).
+
+### Known issues
+
+- **Nothing here has run on an iPad.** Items 1–3 and 5 are fixes for behaviour only an iPad shows; the tests cover a touch-emulating desktop browser.
+- Added to the Home Screen, the page is a separate "app" to iPadOS: talks remembered in Safari are not remembered there, and the reverse.
+- An Android tablet or phone still uses full screen.
+
+### Ben checklist: W9.1 (iPad)
+
+1. Safari, presenter view: no full screen, no X. Swipe in every direction on the slide, the bars and the gaps: the page should not move.
+2. Share → **Add to Home Screen**, open Lectern from there, open a talk: it should fill the screen with no Safari bars.
+3. Drag the vertical divider between the slide and the right column. If it still won't move, tell me whether the slide reacts instead.
+4. Tap **Laser**, touch and drag on the slide, lift. Tap Next while Laser is on.
+5. **Black**, then **White**: your slide follows. Draw on the white screen.
+6. Tap the status line: the sheet has no clock and no whiteboard row. Tap the clock: its controls are there.

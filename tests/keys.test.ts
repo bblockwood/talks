@@ -51,11 +51,9 @@ describe("audience mode keys", () => {
     const black: SessionState = { ...initialState, audienceMode: { kind: "black" } };
     expect(press("w", {}, black).command).toEqual({ name: "setAudienceMode", mode: { kind: "white" } });
   });
-  it("F freezes the committed page and unfreezes", () => {
+  it("F does nothing: freeze was dropped", () => {
     const at7: SessionState = { ...initialState, committedPage: 7 };
-    expect(press("f", {}, at7).command).toEqual({ name: "setAudienceMode", mode: { kind: "frozen", page: 7 } });
-    const frozen: SessionState = { ...at7, audienceMode: { kind: "frozen", page: 7 } };
-    expect(press("f", {}, frozen).command).toEqual({ name: "setAudienceMode", mode: { kind: "live" } });
+    expect(press("f", {}, at7).command).toBeUndefined();
   });
   it("toggles ignore auto-repeat", () => {
     expect(press("b", { repeat: true })).toEqual({ handled: true });

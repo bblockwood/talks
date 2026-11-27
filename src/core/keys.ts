@@ -30,6 +30,8 @@ const NEXT = new Set(["ArrowRight", "ArrowDown", " ", "PageDown", "n", "N"]);
 const PREVIOUS = new Set(["ArrowLeft", "ArrowUp", "PageUp", "p", "P"]);
 /** Keys that belong to later milestones (overview, laser, draw, timer) or would disturb the talk (F5 reloads). */
 const SWALLOWED = new Set(["Tab", "F5", "l", "L", "d", "D", "?"]);
+// Freeze (F) was dropped on 2026-11-27 (Ben): not useful enough for what it cost. The session
+// still understands a frozen screen, so nothing else had to change.
 
 const HANDLED: KeyResult = { handled: true };
 const IGNORED: KeyResult = { handled: false };
@@ -104,14 +106,6 @@ export class KeyInterpreter {
       if (input.repeat) return HANDLED;
       return run({ name: "setAudienceMode", mode: mode === "white" ? LIVE : { kind: "white" } });
     }
-    if (key === "f" || key === "F") {
-      if (input.repeat) return HANDLED;
-      return run({
-        name: "setAudienceMode",
-        mode: mode === "frozen" ? LIVE : { kind: "frozen", page: state.committedPage },
-      });
-    }
-
     // C clears the ink on screen (Native §6.5).
     if (key === "c" || key === "C") return input.repeat ? HANDLED : run({ name: "inkClear" });
 

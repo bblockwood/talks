@@ -1,0 +1,13 @@
+{
+  "name": "Lectern",
+  "short_name": "Lectern",
+  "start_url": "/talks/",
+  "scope": "/talks/",
+  "display": "standalone",
+  "background_color": "#000000",
+  "theme_color": "#000000",
+  "icons": [
+    { "src": "/talks/icon-180.png", "sizes": "180x180", "type": "image/png" },
+    { "src": "/talks/icon-512.png", "sizes": "512x512", "type": "image/png" }
+  ]
+}

@@ -29,6 +29,13 @@ import type { ThumbMode } from "../shared/thumbs";
 import type { ConsoleClient } from "./client";
 import { KEYS_INFO, NOTES_INFO, outlineInfo } from "./info";
 
+/**
+ * An iPad or iPhone. Safari's full screen there leaves on any downward swipe and draws its own
+ * close button over the page, and neither can be turned off, so the presenter view does not use
+ * it (Ben, 2026-11-27). Added to the Home Screen, the page fills the screen anyway.
+ */
+const APPLE_TOUCH = /iPad|iPhone|iPod/.test(navigator.platform) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+
 const PING_MS = 2000;
 /** The host sends state every 2.5 s; past this it is treated as gone (and a successor takes over). */
 const ROOM_TIMEOUT_MS = 9000;
@@ -137,6 +144,8 @@ export class PresenterConsole {
   private outlineBuilt = false;
   private keyboardLocked = false;
   private splits = { left: 0.68, top: 0.42 };
+  /** A touch screen: the laser follows a finger on the slide rather than a mouse over it. */
+  private readonly touch = window.matchMedia("(pointer: coarse)").matches;
   private pageTexts: string[] | null = null;
   private hits: SearchHit[] = [];
   private selectedHit = 0;
@@ -176,6 +185,7 @@ export class PresenterConsole {
     this.next = new SlideSurface($("next-slide"), this.deck, 4);
 
     this.resetPanels();
+    document.documentElement.classList.add("presenting"); // the page itself must not scroll
     this.applyLayout();
     this.bind();
     this.timers.push(
@@ -361,8 +371,10 @@ export class PresenterConsole {
   }
 
   private showInk(): void {
-    const board = this.view?.audienceMode.kind === "white";
-    this.current.setBlank(board);
+    // Black or white on the slides screen shows black or white here too: what the audience sees.
+    const mode = this.view?.audienceMode.kind;
+    const board = mode === "white";
+    this.current.setBlank(board ? "white" : mode === "black" ? "black" : null);
     this.current.setInk(board ? this.ink.board : this.ink.page);
   }
 
@@ -487,20 +499,18 @@ export class PresenterConsole {
     // BLACK / WHITEBOARD / FROZEN show only in those modes.
     const pill = $("pill");
     pill.hidden = mode === "live";
-    pill.textContent = mode === "white" ? "WHITEBOARD" : mode.toUpperCase();
+    pill.textContent = mode.toUpperCase();
     pill.className = `pill ${mode}`;
 
-    for (const id of ["prev", "next", "t-black", "t-freeze", "m-white", "clock-toggle", "clock-reset", "count-up", "count-down", "end-talk", "t-draw", "t-laser", "ink-board"]) {
+    for (const id of ["prev", "next", "t-black", "t-white", "clock-toggle", "clock-reset", "count-up", "count-down", "end-talk", "t-draw", "t-laser"]) {
       $<HTMLButtonElement>(id).disabled = !live;
     }
     $("t-black").classList.toggle("on", mode === "black");
-    $("t-freeze").classList.toggle("on", mode === "frozen");
-    $("m-white").classList.toggle("on", mode === "white");
-    $("ink-board").classList.toggle("on", mode === "white");
+    $("t-white").classList.toggle("on", mode === "white");
     $("t-draw").classList.toggle("on", this.drawMode);
     $("t-laser").classList.toggle("on", this.laserMode);
     $("drawbar").hidden = !this.drawMode;
-    $("mode-hint").textContent = this.laserMode ? "Move the mouse over the slide" : this.drawMode ? "Draw on the slide; C clears, so does the next slide" : "";
+    $("mode-hint").textContent = this.laserMode ? (this.touch ? "Touch the slide to point" : "Move the mouse over the slide") : this.drawMode ? "Draw on the slide; C clears, so does the next slide" : "";
     $("current").classList.toggle("drawing", this.drawMode);
     $("current").classList.toggle("laser", this.laserMode);
     for (const el of document.querySelectorAll<HTMLElement>(".ink-color")) {
@@ -755,7 +765,7 @@ export class PresenterConsole {
 
   /** The presenter view fills the screen when the browser allows; otherwise a button at the top offers it. */
   private get canFullscreen(): boolean {
-    return this.options.fullscreen !== false && document.fullscreenEnabled;
+    return this.options.fullscreen !== false && document.fullscreenEnabled && !APPLE_TOUCH;
   }
 
   private showFullscreen(): void {
@@ -820,9 +830,7 @@ export class PresenterConsole {
   }
 
   private markThumbs(scroll = false): void {
-    const view = this.view;
-    const frozen = view?.audienceMode.kind === "frozen" ? view.audienceMode.page : null;
-    this.thumbs?.mark(this.page, frozen, scroll);
+    this.thumbs?.mark(this.page, null, scroll);
     // Frames or Builds: only a deck with builds has the choice.
     $("ov-mode").hidden = this.deck.frames.frameCount === this.deck.pageCount;
     $("ov-frames").classList.toggle("on", this.thumbMode === "frames");
@@ -899,25 +907,22 @@ export class PresenterConsole {
     this.update();
   }
 
-  private toggleMode(kind: "black" | "white" | "frozen"): void {
+  private toggleMode(kind: "black" | "white"): void {
     const now = this.view?.audienceMode.kind;
     if (now === kind) this.send({ name: "setAudienceMode", mode: { kind: "live" } });
-    else if (kind === "frozen") this.send({ name: "setAudienceMode", mode: { kind: "frozen", page: this.view?.page ?? 0 } });
     else this.send({ name: "setAudienceMode", mode: { kind } });
   }
 
-  /** The clock's controls live under More; a click on the clock borrows them into a small pop-up beside it. */
+  /** A click on the clock opens its controls in a small pop-up beside it. */
   private openClock(): void {
     $("sheet-more").hidden = true;
     this.prepareClock();
-    $("clock-pop-panel").append($("clock-box"));
     $("clock-pop").hidden = false;
     this.tick();
   }
 
   private closeClock(): void {
     $("clock-pop").hidden = true;
-    $("clock-home").append($("clock-box"));
   }
 
   private prepareClock(): void {
@@ -1115,9 +1120,7 @@ export class PresenterConsole {
     on("t-back", () => this.send({ name: "back" }));
     on("t-forward", () => this.send({ name: "forward" }));
     on("t-black", () => this.toggleMode("black"));
-    on("t-freeze", () => this.toggleMode("frozen"));
-    on("m-white", () => this.toggleMode("white"));
-    on("ink-board", () => this.toggleMode("white"));
+    on("t-white", () => this.toggleMode("white"));
     on("clock-toggle", () => this.send({ name: "timerToggle" }));
     on("clock-reset", () => this.send({ name: "timerReset" }));
     const countFrom = $<HTMLInputElement>("count-from");
@@ -1178,11 +1181,10 @@ export class PresenterConsole {
     const openMore = (): void => {
       $("end-confirm").hidden = true;
       this.closeClock();
-      this.prepareClock();
       $("sheet-more").hidden = false;
       this.tick();
     };
-    on("t-more", openMore);
+    // The status line is the way in: who is in the talk, how others join, leaving and ending.
     on("timer", () => this.openClock());
     on("link", openMore);
     on("keys-show", () => {
@@ -1332,8 +1334,14 @@ export class PresenterConsole {
           this.beginInk(ev.clientX, ev.clientY);
           return;
         }
-        // Press and hold, then drag, to point. A finger does this instead of the Laser toggle; a
-        // mouse can do either.
+        // With Laser on, a finger or pen on the slide points at once, and nothing it does steps.
+        if (this.live && this.laserMode && ev.pointerType !== "mouse") {
+          ev.preventDefault();
+          pointing = true;
+          sendPointer(ev.clientX, ev.clientY, true);
+          return;
+        }
+        // Press and hold, then drag, to point: the quick way, without the Laser button.
         if (this.live && !this.laserMode) {
           pressTimer = window.setTimeout(() => {
             if (!start) return;
@@ -1409,7 +1417,6 @@ export class PresenterConsole {
     for (const id of ["sheet-more", "end-confirm", "info", "banner", "pill", "overview", "drawbar", "debug", "count-hint", "outline", "fs", "clock-pop", "digits", "t-back", "t-forward"]) {
       $(id).hidden = true;
     }
-    $("clock-home").append($("clock-box"));
     $("search-count").textContent = "";
     for (const id of ["t-slides", "side-slides"]) $(id).classList.remove("on");
     $("outline").replaceChildren();
@@ -1433,6 +1440,7 @@ export class PresenterConsole {
     if (this.destroyed) return;
     this.destroyed = true;
     this.abort.abort();
+    document.documentElement.classList.remove("presenting");
     for (const t of this.timers) window.clearInterval(t);
     window.clearInterval(this.inkTimer);
     this.thumbs?.destroy();
