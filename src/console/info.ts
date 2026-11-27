@@ -32,6 +32,6 @@ export const KEYS_INFO = [
   "- **Black:** `B` or `.` **White,** to draw on: `W`",
   "- **Pause the clock:** `T`",
   "- **Swap displays** (two screens): `Ctrl`+`D` or `⌘D`",
-  "- **Back to the choice of views:** `Esc` twice. One `Esc` closes whatever is open",
-  "- **Timings:** `Ctrl`+`Shift`+`D`. **This card:** `?`",
+  "- **Exit to the choice of views:** `Esc` twice. One `Esc` closes whatever is open",
+  "- **Connection diagnostics:** `Ctrl`+`Shift`+`D`. **This card:** `?`",
 ].join("\n");

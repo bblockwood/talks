@@ -7,6 +7,7 @@ import { prefetchPages } from "../core/prefetch";
 import { initialState } from "../core/session";
 import type { Command } from "../core/session";
 import { parseSplit } from "../core/split";
+import { APPLE_TOUCH, setStage } from "../shared/device";
 import type { RenderCache } from "../shared/render-cache";
 import type { Talk } from "../shared/talk";
 import { AudienceView } from "./audience";
@@ -66,6 +67,11 @@ export class Presentation {
     const deck = talk.deck;
     this.view = new AudienceView(root, cache, deck);
     this.view.onLink = (page, index) => this.dispatch({ name: "followLink", page, index }, performance.now());
+    // A touch screen showing the slides (an iPad mirrored to the projector) runs the talk by
+    // touch: tap or swipe to step. With no Esc key, a long press is the way back to the choice of views.
+    this.view.onStep = (name) => this.dispatch({ name }, performance.now());
+    this.view.onHold = () => void this.stop();
+    setStage(true);
 
     // Out of full screen, the slides stay in the window and every key still just drives them
     // (Ben, 2026-11-27). The way back is a button that shows only while the mouse is moving,
@@ -145,6 +151,7 @@ export class Presentation {
     this.onSwapKey = null;
     this.onEnding = null;
     this.talk.audience = null;
+    setStage(false);
     this.view.wipe();
     this.root.hidden = true;
     this.root.classList.remove("windowed", "setup");
@@ -230,7 +237,8 @@ export class Presentation {
 
   /** Marks the slides as windowed or not, and on leaving full screen shows the way back for a moment. */
   private showWindowed(): void {
-    const windowed = document.fullscreenElement !== this.root && document.fullscreenEnabled;
+    // No button on an iPad or iPhone, where the slides never use Safari's full screen.
+    const windowed = document.fullscreenElement !== this.root && document.fullscreenEnabled && !APPLE_TOUCH;
     const was = this.root.classList.contains("windowed");
     this.root.classList.toggle("windowed", windowed);
     if (!windowed) this.root.classList.remove("setup");

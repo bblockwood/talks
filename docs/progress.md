@@ -899,3 +899,16 @@ Verification: build; 295 unit tests; 43 e2e tests (new: the touch laser, driven 
 ### W9.2. Six small things (2026-11-27)
 
 Ben: "Everything worked." Then: more room at the top of the Home Screen version (the iPad's status bar fades over it); no orange rim on the slide in Draw mode; Undo as an icon; a plain pause mark on the clock in place of the emoji; A−/A+ also size "No notes for this slide"; "notes, controls" under Presenter view; a tap on the current slide advances. All done. The top padding is about 18 px beyond the safe area and can only be judged on the iPad.
+
+### W9.3. Seven more (2026-11-27)
+
+1–2. "No notes for this slide" is the size of the buttons under the slide by default (A−/A+ still scale it); the pane headings, the Notes and Outline tabs and the Overview button share that size and weight.
+3. More room at the top in the Home Screen version (about 35 px beyond the safe area).
+4. The page behind either view is black while it is up (it was dark grey, which is what I take the lighter bar at the bottom of the iPad to be).
+5. The sheet is "Connection settings": talk code, where to join, connection, connection diagnostics. **Exit** sits beside the status line; **Leave this talk** and **End talk on every device…** are on the page where a view is chosen, which also says that `?` shows the keys.
+6. Slides on a touch screen: tap advances or follows a link, swipe steps either way, and a finger held still for 1.5 s returns to the choice of views (my addition: there was no other way out without a keyboard).
+7. No Full screen button on the slides on an iPad or iPhone, and the slides no longer try Safari's full screen there.
+
+Verification: build; 295 unit tests; 44 e2e tests (new: slides run by real touch events).
+
+Known issues: items 3, 4 and 7 can only be judged on the iPad. If the grey bar in item 4 is still there, it is something else: the status bar itself has a faint grey background on purpose, as in the Mac app.

@@ -20,6 +20,7 @@ import { initialState } from "../core/session";
 import type { Command, SessionState } from "../core/session";
 import { parseSplit } from "../core/split";
 import type { Deck } from "../shared/deck";
+import { APPLE_TOUCH, setStage } from "../shared/device";
 import type { PresenterDeck } from "../shared/local-channel";
 import { deviceName } from "../shared/relay-client";
 import type { LinkStatus } from "../shared/relay-client";
@@ -28,13 +29,6 @@ import { ThumbGrid } from "../shared/thumbs";
 import type { ThumbMode } from "../shared/thumbs";
 import type { ConsoleClient } from "./client";
 import { KEYS_INFO, NOTES_INFO, outlineInfo } from "./info";
-
-/**
- * An iPad or iPhone. Safari's full screen there leaves on any downward swipe and draws its own
- * close button over the page, and neither can be turned off, so the presenter view does not use
- * it (Ben, 2026-11-27). Added to the Home Screen, the page fills the screen anyway.
- */
-const APPLE_TOUCH = /iPad|iPhone|iPod/.test(navigator.platform) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
 
 const PING_MS = 2000;
 /** The host sends state every 2.5 s; past this it is treated as gone (and a successor takes over). */
@@ -87,12 +81,12 @@ export interface ConsoleOptions {
   /** Where the dividers between the panes were left, as fractions; only kept on the presenter's own device. */
   loadSplits?: () => { left: number; top: number } | null;
   saveSplits?: (splits: { left: number; top: number }) => void;
-  /** The user closed this presenter view. */
-  onLeave(): void;
   /** The room PC has a newer publish of this deck and the user asked to reload. Absent where that can't happen. */
   onReload?: () => void;
   /** How another device joins, when that can be shown: "code maple". */
   readonly joinHint?: string;
+  /** The talk's code, for the connection sheet. This view is never the audience's. */
+  readonly talkCode?: string;
   /** Swap displays: only the second window of two-screen mode can do this. */
   onSwap?: () => void;
   /** Go back to choosing what this device shows, without leaving the talk (Esc twice, or Change view). */
@@ -185,7 +179,7 @@ export class PresenterConsole {
     this.next = new SlideSurface($("next-slide"), this.deck, 4);
 
     this.resetPanels();
-    document.documentElement.classList.add("presenting"); // the page itself must not scroll
+    setStage(true); // the page itself must not scroll
     this.applyLayout();
     this.bind();
     this.timers.push(
@@ -502,7 +496,7 @@ export class PresenterConsole {
     pill.textContent = mode.toUpperCase();
     pill.className = `pill ${mode}`;
 
-    for (const id of ["prev", "next", "t-black", "t-white", "clock-toggle", "clock-reset", "count-up", "count-down", "end-talk", "t-draw", "t-laser"]) {
+    for (const id of ["prev", "next", "t-black", "t-white", "clock-toggle", "clock-reset", "count-up", "count-down", "t-draw", "t-laser"]) {
       $<HTMLButtonElement>(id).disabled = !live;
     }
     $("t-black").classList.toggle("on", mode === "black");
@@ -555,10 +549,12 @@ export class PresenterConsole {
     $<HTMLInputElement>("count-from").disabled = !live;
 
     $("swap").hidden = !this.options.onSwap;
-    $("change-view").hidden = !this.options.onChangeView;
+    $("exit").hidden = !this.options.onChangeView;
     $("row-join").hidden = this.client.kind === "local";
     const where = `${window.location.host}${import.meta.env.BASE_URL.replace(/\/$/, "")}`;
-    $("join-text").textContent = `${where}, ${this.options.joinHint ?? "with the same talk code"}`;
+    $("row-code").hidden = this.client.kind === "local" || !this.options.talkCode;
+    $("sheet-code").textContent = this.options.talkCode ?? "";
+    $("join-text").textContent = where;
 
     this.showDigits();
     this.fitTools();
@@ -972,14 +968,6 @@ export class PresenterConsole {
     if (this.options.remember) this.options.saveNotesSize(this.notesSize);
   }
 
-  private endTalk(): void {
-    this.client.send({ type: "end", body: {} });
-    $("end-confirm").hidden = true;
-    $("sheet-more").hidden = true;
-    this.view = null;
-    this.update();
-  }
-
   /** The session state the key map needs: where we are and what the room screen is doing. */
   private keyState(): SessionState {
     const view = this.view;
@@ -988,13 +976,12 @@ export class PresenterConsole {
 
   private readonly onKeyDown = (ev: KeyboardEvent): void => {
     if ($("console").hidden) return;
-    // A pop-up takes the keys while it is open: Esc closes it, and Enter closes the information one.
-    // Ending the talk is never one key press away.
-    const modal = !$("end-confirm").hidden ? "end-confirm" : !$("info").hidden ? "info" : null;
+    // A pop-up takes the keys while it is open: Esc or Enter closes it.
+    const modal = !$("info").hidden ? "info" : null;
     if (modal && !ev.ctrlKey && !ev.altKey && !ev.metaKey && (ev.key === "Escape" || ev.key === "Enter" || ev.key === " " || ev.key === "Tab")) {
       ev.preventDefault();
       ev.stopPropagation();
-      if (ev.key === "Escape" || (ev.key === "Enter" && modal === "info")) $(modal).hidden = true;
+      if (ev.key === "Escape" || ev.key === "Enter") $(modal).hidden = true;
       return;
     }
     if (ev.ctrlKey && ev.shiftKey && (ev.key === "D" || ev.key === "d")) {
@@ -1194,7 +1181,6 @@ export class PresenterConsole {
     });
 
     const openMore = (): void => {
-      $("end-confirm").hidden = true;
       this.closeClock();
       $("sheet-more").hidden = false;
       this.tick();
@@ -1202,10 +1188,6 @@ export class PresenterConsole {
     // The status line is the way in: who is in the talk, how others join, leaving and ending.
     on("timer", () => this.openClock());
     on("link", openMore);
-    on("keys-show", () => {
-      $("sheet-more").hidden = true;
-      this.showInfo("Keyboard shortcuts", KEYS_INFO);
-    });
     $("clock-pop").addEventListener(
       "click",
       (ev) => {
@@ -1237,23 +1219,17 @@ export class PresenterConsole {
     });
     on("debug-close", () => ($("debug").hidden = true));
     on("swap", () => this.options.onSwap?.());
-    on("change-view", () => this.options.onChangeView?.());
+    on("exit", () => this.options.onChangeView?.());
     on("fs", () => this.enterFullscreen());
     document.addEventListener("fullscreenchange", () => this.showFullscreen(), { signal });
-    for (const id of ["end-confirm", "info"]) {
-      $(id).addEventListener(
-        "click",
-        (ev) => {
-          if (ev.target === ev.currentTarget) $(id).hidden = true; // a click outside the pop-up
-        },
-        { signal },
-      );
-    }
+    $("info").addEventListener(
+      "click",
+      (ev) => {
+        if (ev.target === ev.currentTarget) $("info").hidden = true; // a click outside the pop-up
+      },
+      { signal },
+    );
     on("banner-action", () => this.options.onReload?.());
-    on("leave", () => this.options.onLeave());
-    on("end-talk", () => ($("end-confirm").hidden = false));
-    on("end-cancel", () => ($("end-confirm").hidden = true));
-    on("end-yes", () => this.endTalk());
 
     document.addEventListener(
       "visibilitychange",
@@ -1430,7 +1406,7 @@ export class PresenterConsole {
 
   /** The page elements outlive a console (the same device can open another talk), so start and end clean. */
   private resetPanels(): void {
-    for (const id of ["sheet-more", "end-confirm", "info", "banner", "pill", "overview", "drawbar", "debug", "count-hint", "outline", "fs", "clock-pop", "digits", "t-back", "t-forward"]) {
+    for (const id of ["sheet-more", "info", "banner", "pill", "overview", "drawbar", "debug", "count-hint", "outline", "fs", "clock-pop", "digits", "t-back", "t-forward"]) {
       $(id).hidden = true;
     }
     $("search-count").textContent = "";
@@ -1456,7 +1432,7 @@ export class PresenterConsole {
     if (this.destroyed) return;
     this.destroyed = true;
     this.abort.abort();
-    document.documentElement.classList.remove("presenting");
+    setStage(false);
     for (const t of this.timers) window.clearInterval(t);
     window.clearInterval(this.inkTimer);
     this.thumbs?.destroy();

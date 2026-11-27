@@ -12,6 +12,7 @@ import { LocalClient, TalkClient } from "../console/client";
 import { PresenterConsole, layoutFor } from "../console/console";
 import { forget, loadNotesSize, loadSaved, loadSplits, remember, saveNotesSize, saveSplits } from "../console/saved";
 import { DeckError, openDeck } from "../shared/deck";
+import { APPLE_TOUCH } from "../shared/device";
 import { makeJoinCode, receiveDeck } from "../shared/deck-share";
 import { NetworkError, NoTalkError, fetchDeck } from "../shared/fetch-deck";
 import { SWAP_MESSAGE, channelNameFromHash } from "../shared/local-channel";
@@ -475,8 +476,8 @@ function showPresenter(): void {
       loadSplits: () => (own ? loadSplits() : null),
       saveSplits,
       ...(current.source.joinCode && current.source.originator ? { joinHint: `code ${current.source.joinCode}` } : {}),
-      onLeave: leave,
-      // Esc twice, or Change view: back to the choice of views, still in the talk.
+      ...((current.source.joinCode ?? code) !== "" ? { talkCode: current.source.joinCode ?? code } : {}),
+      // Exit, or Esc twice: back to the choice of views, still in the talk.
       onChangeView: () => {
         active?.destroy();
         active = null;
@@ -601,7 +602,6 @@ function joinLocal(channelName: string): void {
             ownsDeck: true,
             loadNotesSize: () => null,
             saveNotesSize: () => {},
-            onLeave: () => window.close(),
             // Esc twice here takes the slides down too: the first window returns to the choice of views.
             onChangeView: () => client.requestStop(),
             // A window the browser placed must stay a window, or Swap displays can't move it.
@@ -650,12 +650,32 @@ fileInput.addEventListener("change", () => {
   fileInput.value = "";
   if (file) openPdf(() => file.arrayBuffer(), file.name.replace(/\.pdf$/i, ""));
 });
-startButton.addEventListener("click", () => start(document.fullscreenEnabled));
+// On an iPad or iPhone the slides fill the page rather than Safari's full screen (see device.ts).
+const canFullscreen = (): boolean => document.fullscreenEnabled && !APPLE_TOUCH;
+startButton.addEventListener("click", () => start(canFullscreen()));
 presenterButton.addEventListener("click", showPresenter);
 $("start-windowed").addEventListener("click", () => start(false));
-$("both").addEventListener("click", () => start(document.fullscreenEnabled, true));
+$("both").addEventListener("click", () => start(canFullscreen(), true));
 $("split-toggle").addEventListener("click", () => applySplit(talk?.deck.split ? null : suggestedSplit));
 $("another").addEventListener("click", leave);
+
+// End talk on every device: asked first, in a pop-up that Enter never confirms.
+const endConfirm = $("end-confirm");
+$("end-all").addEventListener("click", () => {
+  endConfirm.hidden = false;
+  $("end-cancel").focus();
+});
+$("end-cancel").addEventListener("click", () => (endConfirm.hidden = true));
+endConfirm.addEventListener("click", (ev) => {
+  if (ev.target === ev.currentTarget) endConfirm.hidden = true;
+});
+window.addEventListener("keydown", (ev) => {
+  if (!endConfirm.hidden && ev.key === "Escape") endConfirm.hidden = true;
+});
+$("end-yes").addEventListener("click", () => {
+  endConfirm.hidden = true;
+  talk?.peer.endForEveryone(); // every device, this one included, returns to the start page
+});
 $("reveal-code").addEventListener("click", () => {
   codeRevealed = !codeRevealed;
   showCodeLine();

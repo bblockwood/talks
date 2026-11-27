@@ -249,9 +249,23 @@ test("a phone drives the room PC: steps, notes, clock, slide grid, back, black, 
   expect(await phone.evaluate(() => localStorage.getItem("lectern.savedTalks"))).toContain(CODE);
   expect(await room.evaluate(() => localStorage.length + sessionStorage.length)).toBe(0);
 
-  // End talk, with a confirm.
-  await phone.locator("#end-talk").click();
+  // The sheet is about the connection only: the code, where to join, the numbers.
+  await expect(phone.locator("#sheet-more")).toContainText("Connection settings");
+  await expect(phone.locator("#sheet-code")).toHaveText(CODE);
+  await expect(phone.locator("#join-text")).toHaveText("localhost:5173/talks");
+  for (const id of ["end-talk", "leave", "change-view", "keys-show"]) await expect(phone.locator(`#${id}`)).toHaveCount(0);
+  await phone.locator("#more-close").click();
+
+  // Exit goes back to the page where a view is chosen; leaving and ending are there. End talk
+  // asks first, in the middle of the screen, and Enter never confirms it.
+  await phone.locator("#exit").click();
+  await expect(phone.locator("#ready")).toBeVisible();
+  await expect(room.locator("#audience")).toBeVisible(); // the talk goes on
+  await phone.locator("#end-all").click();
   await expect(phone.locator("#end-confirm")).toBeVisible();
+  await phone.keyboard.press("Enter");
+  await expect(room.locator("#audience")).toBeVisible();
+  await phone.locator("#end-all").click();
   await phone.locator("#end-yes").click();
   await expect(room.locator("#code")).toBeVisible();
   await expect(room.locator("#audience")).toBeHidden();
@@ -463,19 +477,10 @@ test("a laptop joined by code gets the full presenter view and drives the room P
   await laptop.keyboard.press("Enter");
   await expect(laptop.locator("#sheet-more")).toBeHidden();
   expect(await roomPage(room)).toBe(sectionStart);
-  // End talk asks in a pop-up, in the middle of the window whatever the sheet is scrolled to.
-  await laptop.locator("#link").click();
-  await laptop.locator("#end-talk").click();
-  const ask = (await laptop.locator("#end-confirm .modal-panel").boundingBox())!;
-  expect(ask.y).toBeGreaterThan(100);
-  expect(ask.y + ask.height).toBeLessThan(700);
-  await laptop.keyboard.press("Enter"); // never ends the talk
-  await expect(laptop.locator("#end-confirm")).toBeVisible();
-  await laptop.keyboard.press("Escape");
-  await expect(laptop.locator("#end-confirm")).toBeHidden();
-  await laptop.keyboard.press("Escape"); // closes More
-  await expect(laptop.locator("#sheet-more")).toBeHidden();
-  await laptop.waitForTimeout(1100);
+  // Exit sits by the status line, at the bottom right.
+  const exitBox = (await laptop.locator("#exit").boundingBox())!;
+  expect(exitBox.x).toBeGreaterThan(1280 * 0.7);
+  expect(exitBox.y).toBeGreaterThan(800 - 90);
 
   // The presenter view went full screen with the click that chose it. Out of full screen, a
   // button at the top offers the way back.
@@ -665,6 +670,59 @@ test("on a touch screen the Laser button makes a finger on the slide point, and 
   await room.close();
 });
 
+test("slides shown on a touch screen are run by touch: tap, swipe either way, links, and a long press to leave", async ({ browser }) => {
+  const context = await browser.newContext({ viewport: { width: 1180, height: 820 }, hasTouch: true });
+  const pad = await context.newPage();
+  await pad.goto("./");
+  await pad.locator("#file").setInputFiles("fixtures/links-appendix.pdf");
+  await pad.locator("#start").click();
+  await expect.poll(() => roomPage(pad)).toBe(0);
+  const touch = await context.newCDPSession(pad);
+  const at = (x: number, y: number) => [{ x: Math.round(x), y: Math.round(y) }];
+  const tap = async (x: number, y: number) => {
+    await touch.send("Input.dispatchTouchEvent", { type: "touchStart", touchPoints: at(x, y) });
+    await touch.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
+  };
+  const swipe = async (from: number, to: number) => {
+    await touch.send("Input.dispatchTouchEvent", { type: "touchStart", touchPoints: at(from, 400) });
+    for (let i = 1; i <= 4; i++) await touch.send("Input.dispatchTouchEvent", { type: "touchMove", touchPoints: at(from + ((to - from) * i) / 4, 400) });
+    await touch.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
+  };
+  await tap(900, 700); // a tap advances, once
+  await expect.poll(() => roomPage(pad)).toBe(1);
+  await pad.waitForTimeout(400);
+  expect(await roomPage(pad)).toBe(1);
+  await swipe(700, 400); // swipe left: forward
+  await expect.poll(() => roomPage(pad)).toBe(2);
+  await swipe(400, 700); // swipe right: back
+  await expect.poll(() => roomPage(pad)).toBe(1);
+  // A tap on a link follows it rather than stepping. Page 2 of this deck has internal links.
+  const link = await pad.evaluate(() => {
+    type Link = { rect: { x: number; y: number; width: number; height: number }; action: { kind: string; page?: number } };
+    const hook = (window as unknown as { __lectern: { links(page: number): Link[] | undefined } }).__lectern;
+    // Beamer's navigation bar sits in the bottom strip; take a link from the slide body.
+    const found = (hook.links(1) ?? []).find((l) => l.action.kind === "goToPage" && (l.action.page ?? 0) > 2 && l.rect.y < 0.85);
+    // The slide is 4:3, letterboxed in the window.
+    const box = document.querySelector("#audience canvas")!.getBoundingClientRect();
+    const w = Math.min(box.width, (box.height * 4) / 3);
+    const h = Math.min(box.height, (box.width * 3) / 4);
+    const left = box.left + (box.width - w) / 2;
+    const top = box.top + (box.height - h) / 2;
+    return found ? { x: left + (found.rect.x + found.rect.width / 2) * w, y: top + (found.rect.y + found.rect.height / 2) * h, to: found.action.page } : null;
+  });
+  if (link) {
+    await tap(link.x, link.y);
+    await expect.poll(() => roomPage(pad)).toBe(link.to);
+  }
+  expect(link).not.toBeNull();
+  // No Esc key on a tablet: a finger held still returns to the choice of views.
+  await touch.send("Input.dispatchTouchEvent", { type: "touchStart", touchPoints: at(600, 300) });
+  await expect(pad.locator("#ready")).toBeVisible({ timeout: 4000 });
+  await touch.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
+  await expect(pad.locator("#end-all")).toBeVisible();
+  await context.close();
+});
+
 test("a phone held sideways shows two very large buttons that still drive the talk", async ({ browser }) => {
   const room = await openRoom(browser, true);
   const phone = await openView(browser);
@@ -838,7 +896,8 @@ test("a PDF opened on one device gets a code; a device that joins with it is sen
   await expect.poll(() => viewHook(phone, (h) => h.shownPage())).toBe(2);
   const frame = /Frame (\d+) \/ 9/.exec((await phone.locator("#frame-line").textContent()) ?? "")?.[1];
   await phone.locator("#link").click();
-  await expect(phone.locator("#join-text")).toHaveText(`localhost:5173/talks, code ${code}`);
+  await expect(phone.locator("#sheet-code")).toHaveText(code);
+  await expect(phone.locator("#join-text")).toHaveText("localhost:5173/talks");
   await phone.locator("#more-close").click();
 
   // On the room's computer: the code, and nothing else. The slides arrive through the relay.
@@ -913,10 +972,9 @@ test("each device chooses what it shows, and can change its mind without leaving
   await page.keyboard.press("ArrowRight");
   await expect.poll(() => roomPage(room)).toBe(1);
 
-  // More → Change view: back to the choice, still in the talk. This device then shows the slides
-  // too, as a second screen following the first.
-  await page.locator("#link").click();
-  await page.locator("#change-view").click();
+  // Exit: back to the choice, still in the talk. This device then shows the slides too, as a
+  // second screen following the first.
+  await page.locator("#exit").click();
   await expect(page.locator("#ready")).toBeVisible();
   await expect(page.locator("#console")).toBeHidden();
   await page.locator("#start").click();
@@ -1104,15 +1162,15 @@ test("a wrong code is refused, and a saved talk can be reopened and forgotten", 
   await phone.locator("#open").click();
   await phone.locator("#presenter").click();
   await expect(phone.locator("#console")).toBeVisible();
-  await phone.locator("#link").click();
-  await phone.locator("#leave").click();
+  await phone.locator("#exit").click();
+  await phone.locator("#another").click();
   await expect(phone.locator("#saved .talk")).toHaveCount(1);
   await phone.locator("#saved .talk").click(); // one tap reopens it
   await phone.locator("#presenter").click();
   await expect(phone.locator("#console")).toBeVisible();
   await expect(phone.locator("#sheet-more")).toBeHidden(); // a fresh view, not the last one's leftovers
-  await phone.locator("#link").click();
-  await phone.locator("#leave").click();
+  await phone.locator("#exit").click();
+  await phone.locator("#another").click();
   await phone.getByRole("button", { name: "Forget" }).click();
   await expect(phone.locator("#saved")).toBeHidden();
   expect(await phone.evaluate(() => localStorage.getItem("lectern.savedTalks"))).toBeNull();

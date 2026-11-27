@@ -204,3 +204,16 @@ kbd {
 .secondary button {
   padding: 0.2rem 0.6rem;
 }
+
+.leave-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+}
+.controls .hint {
+  margin: 0.5rem 0 0;
+}
+/* Touches on the slides are taps and swipes for the talk, never scrolling or zooming. */
+.audience {
+  touch-action: none;
+}

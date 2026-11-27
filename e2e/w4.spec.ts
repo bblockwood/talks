@@ -168,6 +168,7 @@ test("two screens: the presenter view in a second window drives the audience win
   const asked = () => main.evaluate(() => (window as unknown as { __askedScreen?: string }).__askedScreen);
   await presenter.locator("#link").click();
   await expect(presenter.locator("#row-join")).toBeHidden(); // this window is not a device of its own
+  await expect(presenter.locator("#row-code")).toBeHidden();
   await presenter.locator("#more-close").click();
   // Swap displays is always in view, at the bottom right, not under More.
   const swap = (await presenter.locator("#swap").boundingBox())!;

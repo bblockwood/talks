@@ -124,8 +124,12 @@
             <kbd>Delete</kbd> back after a jump · <kbd>B</kbd> black · <kbd>W</kbd> white · <kbd>T</kbd> pause clock ·
             <kbd>Esc</kbd> twice to come back to this page
           </p>
+          <p class="hint">In the presenter view, type <kbd>?</kbd> to see the keys at any time.</p>
         </section>
-        <p><button id="another">Leave this talk</button></p>
+        <p class="leave-row">
+          <button id="another" title="This device leaves and forgets the slides; the talk goes on for the others">Leave this talk</button>
+          <button id="end-all" class="dangerous" title="Every device returns to the start page and forgets the slides">End talk on every device…</button>
+        </p>
       </section>
 
       <p id="status" class="status" role="status" aria-live="polite"></p>
@@ -147,6 +151,7 @@
           <span id="pill" class="pill" hidden></span>
           <button id="link" class="linkstate" aria-live="polite" title="Devices in this talk, how others join, leaving and ending">Connecting…</button>
           <button id="fs" class="fs" hidden>Full screen</button>
+          <button id="exit" class="exit" title="Back to the page where a view is chosen, still in the talk (Esc twice)" hidden>Exit</button>
           <!-- Last, so it is always at the bottom right corner of a laptop's presenter view. -->
           <button id="swap" class="swap" title="Slides to the other screen, this view to that one (Ctrl+D, or Cmd+D on a Mac)" hidden>Swap displays</button>
         </div>
@@ -260,10 +265,14 @@
       <div id="sheet-more" class="sheet" hidden>
         <div class="sheet-panel">
           <header class="sheet-head">
-            <strong>This talk</strong>
+            <strong>Connection settings</strong>
             <button id="more-close" class="primary">Close</button>
           </header>
           <div class="rows">
+            <div class="row" id="row-code">
+              <span>Talk code</span>
+              <strong id="sheet-code" class="sheet-code"></strong>
+            </div>
             <div class="row" id="row-join">
               <span>Other devices join at</span>
               <span id="join-text" class="diag"></span>
@@ -273,23 +282,8 @@
               <span id="diag" class="diag">–</span>
             </div>
             <div class="row">
-              <span>Keyboard shortcuts</span>
-              <span><button id="keys-show" title="?">Show</button></span>
-            </div>
-            <div class="row">
-              <span>Details</span>
-              <span><button id="debug-toggle" title="Ctrl+Shift+D">Timings</button></span>
-            </div>
-            <div class="row">
-              <span>This device</span>
-              <span class="pair">
-                <button id="change-view" hidden>Change view</button>
-                <button id="leave">Leave the talk</button>
-              </span>
-            </div>
-            <div class="row danger">
-              <span>Every device</span>
-              <span><button id="end-talk" class="dangerous">End talk…</button></span>
+              <span>Connection diagnostics</span>
+              <span><button id="debug-toggle" title="Ctrl+Shift+D">Show</button></span>
             </div>
           </div>
         </div>
@@ -330,16 +324,6 @@
         </div>
       </div>
 
-      <div id="end-confirm" class="modal" role="dialog" aria-modal="true" hidden>
-        <div class="modal-panel">
-          <p>End the talk on every device? Each one returns to the start page and forgets the slides.</p>
-          <p class="modal-actions">
-            <button id="end-cancel">Cancel</button>
-            <button id="end-yes" class="dangerous solid">End talk</button>
-          </p>
-        </div>
-      </div>
-
       <div id="info" class="modal" role="dialog" aria-modal="true" hidden>
         <div class="modal-panel wide">
           <header class="sheet-head">
@@ -353,6 +337,17 @@
       <div id="debug" class="debug" hidden>
         <button id="debug-close" class="x" aria-label="Close timings" title="Close">×</button>
         <pre id="debug-text"></pre>
+      </div>
+    </div>
+
+    <!-- Asked on the page where a view is chosen. -->
+    <div id="end-confirm" class="modal" role="dialog" aria-modal="true" hidden>
+      <div class="modal-panel">
+        <p>End the talk on every device? Each one returns to the start page and forgets the slides.</p>
+        <p class="modal-actions">
+          <button id="end-cancel">Cancel</button>
+          <button id="end-yes" class="dangerous solid">End talk</button>
+        </p>
       </div>
     </div>
     <script type="module" src="/src/room/main.ts"></script>

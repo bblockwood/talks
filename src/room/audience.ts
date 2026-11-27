@@ -24,9 +24,20 @@ interface Shown {
   height: number;
 }
 
+const HOLD_MS = 1500;
+const SWIPE_MIN_PX = 45;
+const TAP_SLOP_PX = 10;
+
 export class AudienceView {
   /** A click landed on a navigational link of the page on screen. */
   onLink: ((page: number, index: number) => void) | null = null;
+  /** A tap (next) or a sideways swipe on a touch screen. */
+  onStep: ((name: "next" | "previous") => void) | null = null;
+  /** A finger held still on a touch screen for a while. */
+  onHold: (() => void) | null = null;
+  private touch: { id: number; x: number; y: number; t: number } | null = null;
+  private holdTimer: number | undefined;
+  private lastTouchAt = -Infinity;
 
   private readonly canvas: HTMLCanvasElement;
   private readonly context: CanvasRenderingContext2D;
@@ -64,6 +75,10 @@ export class AudienceView {
 
     root.addEventListener("mousemove", this.onMouseMove);
     root.addEventListener("click", this.onClick);
+    root.addEventListener("pointerdown", this.onPointerDown);
+    root.addEventListener("pointermove", this.onPointerMove);
+    root.addEventListener("pointerup", this.onPointerUp);
+    root.addEventListener("pointercancel", this.onPointerCancel);
     root.classList.add("cursor-hidden");
   }
 
@@ -166,6 +181,14 @@ export class AudienceView {
     this.inkDrawn = null;
     this.cache.onReady = null;
     this.onLink = null;
+    this.onStep = null;
+    this.onHold = null;
+    window.clearTimeout(this.holdTimer);
+    this.touch = null;
+    this.root.removeEventListener("pointerdown", this.onPointerDown);
+    this.root.removeEventListener("pointermove", this.onPointerMove);
+    this.root.removeEventListener("pointerup", this.onPointerUp);
+    this.root.removeEventListener("pointercancel", this.onPointerCancel);
     this.state = null;
     this.shown = null;
     release(this.canvas);
@@ -318,7 +341,51 @@ export class AudienceView {
     this.root.classList.toggle("cursor-link", this.linkAt(ev) !== null);
   };
 
+  // Touch (Ben, 2026-11-27): a tap follows a link or else advances; a sideways swipe steps either
+  // way; a finger held still for a second and a half asks to leave the slides.
+  private readonly onPointerDown = (ev: PointerEvent): void => {
+    if (ev.pointerType === "mouse" || this.touch || (ev.target instanceof Element && ev.target.closest("button"))) return;
+    this.touch = { id: ev.pointerId, x: ev.clientX, y: ev.clientY, t: performance.now() };
+    window.clearTimeout(this.holdTimer);
+    this.holdTimer = window.setTimeout(() => {
+      if (!this.touch) return;
+      this.touch = null;
+      this.lastTouchAt = performance.now();
+      this.onHold?.();
+    }, HOLD_MS);
+  };
+
+  private readonly onPointerMove = (ev: PointerEvent): void => {
+    const start = this.touch;
+    if (start && ev.pointerId === start.id && Math.hypot(ev.clientX - start.x, ev.clientY - start.y) > TAP_SLOP_PX) window.clearTimeout(this.holdTimer);
+  };
+
+  private readonly onPointerUp = (ev: PointerEvent): void => {
+    const start = this.touch;
+    if (!start || ev.pointerId !== start.id) return;
+    this.touch = null;
+    window.clearTimeout(this.holdTimer);
+    this.lastTouchAt = performance.now(); // the browser's own click for this touch is ignored
+    const dx = ev.clientX - start.x;
+    const dy = ev.clientY - start.y;
+    if (Math.abs(dx) >= SWIPE_MIN_PX && Math.abs(dx) > Math.abs(dy) * 1.5) {
+      this.onStep?.(dx < 0 ? "next" : "previous"); // swipe left = forward
+    } else if (Math.hypot(dx, dy) <= TAP_SLOP_PX && performance.now() - start.t < 500) {
+      const hit = this.linkAt(ev);
+      if (hit) this.onLink?.(hit.page, hit.index);
+      else this.onStep?.("next");
+    }
+  };
+
+  private readonly onPointerCancel = (ev: PointerEvent): void => {
+    if (this.touch && ev.pointerId === this.touch.id) {
+      this.touch = null;
+      window.clearTimeout(this.holdTimer);
+    }
+  };
+
   private readonly onClick = (ev: MouseEvent): void => {
+    if (performance.now() - this.lastTouchAt < 700) return; // already handled as a touch
     // Clicks on link areas follow links; clicks elsewhere do nothing (SPEC §5.3).
     const hit = this.linkAt(ev);
     if (hit) this.onLink?.(hit.page, hit.index);

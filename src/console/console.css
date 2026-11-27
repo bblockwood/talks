@@ -417,7 +417,8 @@ button.wide {
   border-radius: 0;
   background: none;
   padding: 0.15rem 0.1rem;
-  font-weight: 500;
+  font-size: 1rem;
+  font-weight: 600;
   color: var(--muted);
 }
 .tab.on-tab {
@@ -488,8 +489,10 @@ button.wide {
 .notes p {
   margin: 0 0 0.6em;
 }
+/* The size of the buttons under the slide by default; A− and A+ still change it. */
 .notes .empty {
   color: var(--muted);
+  font-size: 0.73em;
 }
 .notes .li {
   display: flex;
@@ -869,7 +872,7 @@ button.wide {
 }
 .bar .fs,
 .bar .swap,
-.bar #t-more {
+.bar .exit {
   flex: none;
   padding: 0.3rem 0.8rem;
   font-size: 0.9rem;
@@ -886,9 +889,10 @@ button.wide {
   min-height: 1.9rem;
   flex: none;
 }
+/* Headings, tabs and buttons in the panes share one text size and weight. */
 .panetitle {
   font-size: 1rem;
-  font-weight: 500;
+  font-weight: 600;
   color: var(--muted);
 }
 .current-head {
@@ -936,7 +940,6 @@ button.wide {
 }
 .tool.small {
   padding: 0.2rem 0.6rem;
-  font-size: 0.875rem;
 }
 .tool kbd {
   font: 600 0.75rem ui-rounded, system-ui, sans-serif;
@@ -1403,6 +1406,7 @@ button.wide {
    whole view slide under a finger); only the notes, the outline, the overview and the sheets scroll. */
 html.presenting,
 html.presenting body {
+  background: #000;
   position: fixed;
   inset: 0;
   width: 100%;
@@ -1454,9 +1458,18 @@ html.presenting input {
 @media (display-mode: standalone) {
   .console,
   .console[data-layout="wide"] {
-    padding-top: calc(env(safe-area-inset-top) + 1.1rem);
+    padding-top: calc(env(safe-area-inset-top) + 2.2rem);
   }
   .entry {
     padding-top: calc(2rem + env(safe-area-inset-top));
   }
+}
+
+.sheet-code {
+  font: 600 1.2rem ui-monospace, Menlo, Consolas, monospace;
+  user-select: text;
+  -webkit-user-select: text;
+}
+.console[data-layout="compact"] .notes .empty {
+  font-size: 0.9em;
 }
