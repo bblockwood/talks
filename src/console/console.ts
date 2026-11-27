@@ -490,12 +490,6 @@ export class PresenterConsole {
       }
     }
 
-    // BLACK / WHITEBOARD / FROZEN show only in those modes.
-    const pill = $("pill");
-    pill.hidden = mode === "live";
-    pill.textContent = mode.toUpperCase();
-    pill.className = `pill ${mode}`;
-
     for (const id of ["prev", "next", "t-black", "t-white", "clock-toggle", "clock-reset", "count-up", "count-down", "t-draw", "t-laser"]) {
       $<HTMLButtonElement>(id).disabled = !live;
     }
@@ -541,12 +535,16 @@ export class PresenterConsole {
       $("forward-dest").textContent = ` to ${destination(forward)}`;
       forwardButton.title = `Forward to ${destination(forward)}, where Back came from`;
     }
-    $("clock-toggle").textContent = view?.timer.running === false ? "Resume" : "Pause";
     const countdown = view?.timer.targetMs ?? null;
+    // Before the first slide change the clock has not started, and starts by itself.
+    const notStarted = view?.timer.running === false && view.timer.elapsedMs === 0;
+    $("clock-toggle").textContent = notStarted ? "Start" : view?.timer.running === false ? "Resume" : "Pause";
     if (countdown !== null) this.lastCountdownMs = countdown;
     $("count-up").classList.toggle("on", view !== null && countdown === null);
     $("count-down").classList.toggle("on", countdown !== null);
     $<HTMLInputElement>("count-from").disabled = !live;
+    this.showCountDraft();
+    this.showDevices();
 
     $("swap").hidden = !this.options.onSwap;
     $("exit").hidden = !this.options.onChangeView;
@@ -924,6 +922,49 @@ export class PresenterConsole {
     else this.send({ name: "setAudienceMode", mode: { kind } });
   }
 
+  /**
+   * The length field is a draft (Ben, 2026-11-27): typing changes nothing on the clock. Set (or
+   * Enter, or a preset) applies it. Set is lit only when the draft is a length the clock is not
+   * already counting down from.
+   */
+  private showCountDraft(): void {
+    const ms = parseDuration($<HTMLInputElement>("count-from").value);
+    const target = this.view?.timer.targetMs ?? null;
+    $<HTMLButtonElement>("count-set").disabled = !this.live || ms === null || ms === target;
+    for (const el of $("count-presets").children) el.classList.toggle("on", Number((el as HTMLElement).dataset["ms"]) === target);
+  }
+
+  /** Who is in the talk, under the connection settings: a dot and a line for each device. */
+  private showDevices(): void {
+    const room = this.view?.room;
+    const box = $("devices");
+    const mine = deviceName();
+    const names = room?.devices ?? [];
+    // This device is the first when it runs the talk; otherwise the one with its name, if only one has it.
+    const self = this.client.hosting ? 0 : names.filter((n) => n === mine).length === 1 ? names.indexOf(mine) : -1;
+    const lines = names.map((name, i) => {
+      const view = room?.views[i] ?? "";
+      const what = view === "audience" ? "showing the slides" : view === "presenter" ? "presenter view" : "choosing a view";
+      const notes = [what, i === 0 ? "runs the talk" : "", i === self ? "this device" : ""].filter((x) => x !== "").join(" · ");
+      return { cls: !this.live ? "wait" : view === "" ? "wait" : "ok", text: `${name || "device"}: ${notes}` };
+    });
+    if (this.client.kind === "local") lines.push({ cls: this.live ? "ok" : "wait", text: "This window: presenter view on the same computer" });
+    if (!this.live) lines.unshift({ cls: "bad", text: this.view ? "Not connected to the talk: reconnecting…" : "Joining the talk…" });
+    else if (room?.relay === "none") lines.push({ cls: "off", text: "No other device can join: this build has no relay" });
+    else if (room && room.relay !== "connected") lines.push({ cls: "bad", text: "The device running the talk is offline: no other device can join right now" });
+    const key = JSON.stringify(lines);
+    if (box.dataset["key"] === key) return;
+    box.dataset["key"] = key;
+    box.replaceChildren(
+      ...lines.map((line) => {
+        const row = document.createElement("div");
+        row.className = `device ${line.cls}`;
+        row.textContent = line.text;
+        return row;
+      }),
+    );
+  }
+
   /** A click on the clock opens its controls in a small pop-up beside it. */
   private openClock(): void {
     $("sheet-more").hidden = true;
@@ -954,7 +995,7 @@ export class PresenterConsole {
       return;
     }
     this.lastCountdownMs = ms;
-    this.send({ name: "timerSetTarget", targetMs: ms });
+    if (ms !== (this.view?.timer.targetMs ?? null)) this.send({ name: "timerSetTarget", targetMs: ms });
     if (close) {
       $("sheet-more").hidden = true;
       this.closeClock();
@@ -1135,17 +1176,34 @@ export class PresenterConsole {
       if (this.view?.timer.targetMs !== null) this.send({ name: "timerSetTarget", targetMs: null });
     });
     on("count-down", () => this.countDown(false));
-    // Applied as it is typed, so there is nothing to confirm; a half-typed "20:" is left alone.
+    on("count-set", () => this.countDown(false));
+    // Typing only edits the draft: the running clock is not touched until Set or Enter.
     countFrom.addEventListener(
       "input",
       () => {
         clearCountError();
-        const ms = parseDuration(countFrom.value);
-        if (ms === null) return;
-        this.lastCountdownMs = ms;
-        this.send({ name: "timerSetTarget", targetMs: ms });
+        this.showCountDraft();
       },
       { signal },
+    );
+    // Common lengths, one tap each.
+    $("count-presets").replaceChildren(
+      ...[10, 15, 20, 30, 45, 60, 90].map((minutes) => {
+        const preset = document.createElement("button");
+        preset.type = "button";
+        preset.textContent = String(minutes);
+        preset.dataset["ms"] = String(minutes * 60_000);
+        preset.title = `${minutes} minutes`;
+        preset.addEventListener(
+          "click",
+          () => {
+            countFrom.value = formatClock(minutes * 60_000);
+            this.countDown(false);
+          },
+          { signal },
+        );
+        return preset;
+      }),
     );
 
     on("t-draw", () => this.setDraw(!this.drawMode));
@@ -1406,7 +1464,7 @@ export class PresenterConsole {
 
   /** The page elements outlive a console (the same device can open another talk), so start and end clean. */
   private resetPanels(): void {
-    for (const id of ["sheet-more", "info", "banner", "pill", "overview", "drawbar", "debug", "count-hint", "outline", "fs", "clock-pop", "digits", "t-back", "t-forward"]) {
+    for (const id of ["sheet-more", "info", "banner", "overview", "drawbar", "debug", "count-hint", "outline", "fs", "clock-pop", "digits", "t-back", "t-forward"]) {
       $(id).hidden = true;
     }
     $("search-count").textContent = "";

@@ -283,20 +283,6 @@ button.wide {
 .linkstate.wait::before {
   background: var(--warn);
 }
-.pill {
-  background: #f59e0b;
-  color: #111;
-  font-weight: 700;
-  font-size: 0.8rem;
-  padding: 0.1rem 0.6rem;
-  border-radius: 1rem;
-  white-space: nowrap;
-}
-.pill.black,
-.pill.white {
-  background: #dc2626;
-  color: white;
-}
 .timer {
   font: 600 1.25rem ui-monospace, Menlo, Consolas, monospace;
   font-variant-numeric: tabular-nums;
@@ -1239,10 +1225,6 @@ button.wide {
 .console[data-layout="wide"] .wall {
   font-size: 1.4rem;
 }
-.console[data-layout="wide"] .pill {
-  font-size: 1rem;
-  padding: 0.25rem 0.8rem;
-}
 .console[data-layout="wide"] .pop-panel {
   top: auto;
   right: auto;
@@ -1472,4 +1454,106 @@ html.presenting input {
 }
 .console[data-layout="compact"] .notes .empty {
   font-size: 0.9em;
+}
+
+/* ------------------------------------------------------------ the clock's pop-up */
+.clock-panel {
+  padding: 0.9rem 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+.clock-read {
+  text-align: center;
+}
+.clock-read .clock-now {
+  display: block;
+  margin: 0;
+  font: 600 2rem ui-monospace, Menlo, Consolas, monospace;
+  font-variant-numeric: tabular-nums;
+}
+.clock-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.5rem;
+}
+.clock-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.75rem;
+  color: var(--muted);
+}
+.clock-row .seg {
+  margin-left: 0;
+}
+.clock-row .seg button {
+  padding: 0.4rem 0.8rem;
+  font-size: 0.95rem;
+  color: var(--text);
+}
+.clock-row .count {
+  flex-wrap: nowrap;
+}
+.presets {
+  display: flex;
+  gap: 0.35rem;
+}
+.presets button {
+  flex: 1;
+  padding: 0.4rem 0;
+  font-size: 0.9rem;
+  font-variant-numeric: tabular-nums;
+}
+.presets button.on {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: white;
+}
+.presets::before {
+  content: "min";
+  align-self: center;
+  margin-right: 0.2rem;
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+.clock-note {
+  margin: 0;
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+.clock-panel .count-hint {
+  margin: 0;
+  text-align: left;
+}
+
+/* ------------------------------------------------------------ devices, under the connection settings */
+.devices-box {
+  padding: 0.75rem 0 0.2rem;
+}
+.devices-head {
+  margin-bottom: 0.4rem;
+}
+.device {
+  padding: 0.2rem 0;
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+.device::before {
+  content: "";
+  display: inline-block;
+  width: 0.6em;
+  height: 0.6em;
+  margin-right: 0.5em;
+  border-radius: 50%;
+  background: #6b7280;
+}
+.device.ok::before {
+  background: var(--ok);
+}
+.device.wait::before {
+  background: var(--warn);
+}
+.device.bad::before {
+  background: var(--bad);
 }

@@ -143,7 +143,7 @@ describe("message validation", () => {
       history: [0, 3],
       timer: { accumulatedMs: 60_000, runningSince: 1_000_000, targetMs: 1_800_000 },
     };
-    const room = { relay: "connected", devices: ["iPhone", "Mac"], audiences: 1, draw: { count: 3, medianMs: 1.5, lastMs: 0.4, maxMs: 9 }, cacheMisses: 1 };
+    const room = { relay: "connected", devices: ["iPhone", "Mac"], views: ["presenter", "audience"], audiences: 1, draw: { count: 3, medianMs: 1.5, lastMs: 0.4, maxMs: 9 }, cacheMisses: 1 };
     const body = stateBody(state, frames, 1_030_000, {
       deckPublished: "2026-11-26T00:00:00.000Z",
       session: "0011223344556677",

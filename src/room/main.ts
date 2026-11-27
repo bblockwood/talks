@@ -90,15 +90,13 @@ function showBoth(): void {
   const byHand = (!managed || placeByHand) && canPlaceByHand();
   $<HTMLButtonElement>("both").disabled = !possible && !byHand;
   $("both-panel").hidden = !possible || !screens || byHand;
-  // What Both views does here, or why it can't.
-  const computer = layoutFor(window.innerWidth, window.innerHeight) === "wide" && window.matchMedia("(pointer: fine)").matches;
-  $("both-note").textContent = byHand
+  // Under the buttons: what Both views does here. Where it can't be used, the button says why.
+  $("both-small").textContent = possible || byHand ? "on two screens" : "(requires two screens)";
+  const note = $("both-note");
+  note.hidden = !possible && !byHand;
+  note.textContent = byHand
     ? "Both views opens the slides and the presenter view in two windows. This browser can't place windows on screens itself: drag the slides window to the projector and click Full screen there."
-    : possible
-      ? "Both views puts the slides full screen on one screen and the presenter view on the other. The browser asks once for permission to place windows."
-      : computer
-        ? "Both views is unavailable: it needs a second screen that extends this one. No second screen was found, or it is mirroring this one."
-        : "Both views is unavailable: it needs a computer with a second screen, such as a laptop on a projector.";
+    : "Both views puts the slides full screen on one screen and the presenter view on the other. The browser asks once for permission to place windows.";
 }
 
 function listScreens(): void {

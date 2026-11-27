@@ -104,7 +104,7 @@
         <div class="views">
           <button id="start" class="primary">Audience view<small>the slides, full screen</small></button>
           <button id="presenter" class="primary">Presenter view<small>notes, controls</small></button>
-          <button id="both" class="primary">Both views<small>on two screens</small></button>
+          <button id="both" class="primary">Both views<small id="both-small">on two screens</small></button>
         </div>
         <p id="both-note" class="hint both-note"></p>
         <div id="both-panel" class="modes" hidden>
@@ -148,7 +148,6 @@
           <span id="wall" class="wall"></span>
         </div>
         <div class="bar-right">
-          <span id="pill" class="pill" hidden></span>
           <button id="link" class="linkstate" aria-live="polite" title="Devices in this talk, how others join, leaving and ending">Connecting…</button>
           <button id="fs" class="fs" hidden>Full screen</button>
           <button id="exit" class="exit" title="Back to the page where a view is chosen, still in the talk (Esc twice)" hidden>Exit</button>
@@ -285,42 +284,53 @@
               <span>Connection diagnostics</span>
               <span><button id="debug-toggle" title="Ctrl+Shift+D">Show</button></span>
             </div>
+            <div id="devices-box" class="devices-box">
+              <div class="devices-head">Devices in this talk</div>
+              <div id="devices" class="devices"></div>
+            </div>
           </div>
         </div>
       </div>
 
       <!-- The clock's own small pop-up, by the clock: the same controls as under More. -->
       <div id="clock-pop" class="pop" hidden>
-        <div id="clock-pop-panel" class="pop-panel">
-            <div class="row">
-              <span>
-                Clock <strong id="clock-now" class="clock-now"></strong>
-                <small id="clock-sub" class="clock-sub"></small>
-              </span>
-              <span class="pair">
-                <button id="clock-toggle">Pause</button>
-                <button id="clock-reset">Reset</button>
-              </span>
-            </div>
-            <div class="row">
-              <span>Counts</span>
-              <span class="count">
-                <button id="count-up">Up</button>
-                <button id="count-down">Down from</button>
-                <input
-                  id="count-from"
-                  type="text"
-                  placeholder="20:00"
-                  aria-label="Count down from"
-                  autocomplete="off"
-                  autocapitalize="none"
-                  autocorrect="off"
-                  spellcheck="false"
-                  enterkeyhint="done"
-                />
-              </span>
-            </div>
-            <p id="count-hint" class="count-hint" hidden>Minutes (45), minutes:seconds (45:00) or hours (1h30).</p>
+        <div id="clock-pop-panel" class="pop-panel clock-panel">
+          <div class="clock-read">
+            <strong id="clock-now" class="clock-now"></strong>
+            <small id="clock-sub" class="clock-sub"></small>
+          </div>
+          <div class="clock-actions">
+            <button id="clock-toggle">Pause</button>
+            <button id="clock-reset" title="Time elapsed goes back to 0:00">Reset</button>
+          </div>
+          <div class="clock-row">
+            <span>Show</span>
+            <span class="seg">
+              <button id="count-up">Time elapsed</button>
+              <button id="count-down">Time left</button>
+            </span>
+          </div>
+          <!-- The length is typed, then set: nothing changes on the clock while it is being typed. -->
+          <div id="count-row" class="clock-row">
+            <label for="count-from">Talk length</label>
+            <span class="count">
+              <input
+                id="count-from"
+                type="text"
+                inputmode="text"
+                placeholder="20:00"
+                autocomplete="off"
+                autocapitalize="none"
+                autocorrect="off"
+                spellcheck="false"
+                enterkeyhint="done"
+              />
+              <button id="count-set" class="primary">Set</button>
+            </span>
+          </div>
+          <div id="count-presets" class="presets" aria-label="Talk length in minutes"></div>
+          <p id="count-hint" class="count-hint" hidden>Minutes (45), minutes:seconds (45:00) or hours (1h30).</p>
+          <p class="clock-note">Time left is the talk length minus the time elapsed. Changing the length never resets the time elapsed.</p>
         </div>
       </div>
 

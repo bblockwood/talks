@@ -29,6 +29,8 @@ export interface RoomInfo {
   readonly relay: string;
   /** Every device in the talk, the host first, by device name. */
   readonly devices: readonly string[];
+  /** What each of them shows, in the same order: "audience", "presenter", or "" while it is choosing. */
+  readonly views: readonly string[];
   /** How many of them are showing the slides to an audience. */
   readonly audiences: number;
   /** Input → audience draw timings in milliseconds, for the debug overlay (SPEC §6.4). */
@@ -275,6 +277,7 @@ function parseRoomInfo(v: unknown): RoomInfo | null {
   return {
     relay: typeof v["relay"] === "string" ? v["relay"].slice(0, 24) : "",
     devices: Array.isArray(v["devices"]) ? (v["devices"] as unknown[]).filter((x): x is string => typeof x === "string").slice(0, 8).map((x) => x.slice(0, 64)) : [],
+    views: Array.isArray(v["views"]) ? (v["views"] as unknown[]).slice(0, 8).map((x) => (x === "audience" || x === "presenter" ? x : "")) : [],
     audiences: isIndex(v["audiences"]) ? v["audiences"] : 0,
     draw: { count: isIndex(d["count"]) ? d["count"] : 0, medianMs: ms(d["medianMs"]), lastMs: ms(d["lastMs"]), maxMs: ms(d["maxMs"]) },
     cacheMisses: isIndex(v["cacheMisses"]) ? v["cacheMisses"] : 0,

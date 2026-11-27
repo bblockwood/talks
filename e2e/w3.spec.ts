@@ -157,16 +157,16 @@ test("a phone drives the room PC: steps, notes, clock, slide grid, back, black, 
   // Black and white: the presenter's own slide goes black or white too, as the audience sees it.
   await phone.locator("#t-black").click();
   await expect.poll(() => roomMode(room)).toBe("black");
-  await expect(phone.locator("#pill")).toHaveText("BLACK");
+  await expect(phone.locator("#pill")).toHaveCount(0); // no pill: the lit button and the black slide say it
   await expect(phone.locator("#t-black")).toHaveClass(/on/);
   await phone.locator("#t-black").click();
   await expect.poll(() => roomMode(room)).toBe("live");
-  await expect(phone.locator("#pill")).toBeHidden();
+  await expect(phone.locator("#t-black")).not.toHaveClass(/on/);
   const centre = () =>
     phone.locator("#current canvas").evaluate((c: HTMLCanvasElement) => [...c.getContext("2d")!.getImageData(Math.floor(c.width / 2), Math.floor(c.height / 2), 1, 1).data].slice(0, 3));
   await phone.locator("#t-white").click();
   await expect.poll(() => roomMode(room)).toBe("white");
-  await expect(phone.locator("#pill")).toHaveText("WHITE");
+  await expect(phone.locator("#t-white")).toHaveClass(/on/);
   await expect.poll(centre).toEqual([255, 255, 255]);
   await phone.locator("#t-black").click(); // straight from white to black
   await expect.poll(() => roomMode(room)).toBe("black");
@@ -219,6 +219,11 @@ test("a phone drives the room PC: steps, notes, clock, slide grid, back, black, 
   await phone.locator("#count-from").fill("");
   await phone.locator("#count-from").pressSequentially("1h30"); // digits here are a time, not a frame number
   await expect(phone.locator("#count-hint")).toBeHidden();
+  // Typing is only a draft: the clock is untouched until Set or Enter.
+  await expect(phone.locator("#count-set")).toBeEnabled();
+  await phone.waitForTimeout(300);
+  expect(await roomHook(room, (h) => h.state().timer.targetMs)).toBeNull();
+  await phone.locator("#count-set").click();
   await expect.poll(() => roomHook(room, (h) => h.state().timer.targetMs)).toBe(90 * 60_000);
   await phone.locator("#count-from").press("Enter");
   await expect(phone.locator("#clock-pop")).toBeHidden();
@@ -228,6 +233,7 @@ test("a phone drives the room PC: steps, notes, clock, slide grid, back, black, 
   // Already past the end: red, and counting up.
   await phone.locator("#timer").click();
   await phone.locator("#count-from").fill("1s");
+  await phone.locator("#count-set").click();
   await expect(phone.locator("#timer")).toHaveText(/^−0:\d\d ↓$/, { timeout: 8000 });
   await expect(phone.locator("#timer")).toHaveClass(/over/);
   await expect(phone.locator("#clock-now")).toHaveText(/^0:\d\d over$/);
@@ -253,6 +259,11 @@ test("a phone drives the room PC: steps, notes, clock, slide grid, back, black, 
   await expect(phone.locator("#sheet-more")).toContainText("Connection settings");
   await expect(phone.locator("#sheet-code")).toHaveText(CODE);
   await expect(phone.locator("#join-text")).toHaveText("localhost:5173/talks");
+  // Who is in the talk, each with a dot.
+  await expect(phone.locator("#devices .device")).toHaveCount(2);
+  await expect(phone.locator("#devices .device").first()).toHaveText(/: showing the slides · runs the talk$/);
+  await expect(phone.locator("#devices .device").first()).toHaveClass(/ok/);
+  await expect(phone.locator("#devices .device").nth(1)).toHaveText(/: presenter view/);
   for (const id of ["end-talk", "leave", "change-view", "keys-show"]) await expect(phone.locator(`#${id}`)).toHaveCount(0);
   await phone.locator("#more-close").click();
 
@@ -406,7 +417,6 @@ test("a laptop joined by code gets the full presenter view and drives the room P
   await laptop.keyboard.press("f");
   await laptop.keyboard.press("ArrowRight");
   await expect.poll(() => roomPage(room)).toBe(7);
-  await expect(laptop.locator("#pill")).toBeHidden();
   await expect(laptop.locator("#grid .thumb.current .cap span").first()).toHaveText("5");
 
   // Search: results grouped by frame; Enter jumps; typing does not drive the slides.
@@ -456,9 +466,11 @@ test("a laptop joined by code gets the full presenter view and drives the room P
   await expect(laptop.locator("#notes")).toBeHidden();
   await expect(laptop.locator("#outline .entry-row")).toHaveCount(3);
   await expect(laptop.locator("#outline .entry-row.current")).toHaveCount(1);
+  const beforeJump = await roomPage(room);
   await laptop.locator("#outline .entry-row").first().click();
-  const sectionStart = await roomPage(room);
   await expect(laptop.locator("#outline .entry-row.current .title")).toHaveText("Main");
+  await expect.poll(() => roomPage(room)).not.toBe(beforeJump); // the jump has reached the slides
+  const sectionStart = await roomPage(room);
   await laptop.locator("#tab-notes").click();
   await expect(laptop.locator("#notes")).toBeVisible();
   // Where notes come from, in a pop-up; Enter or Esc closes it without touching the talk.
@@ -553,7 +565,7 @@ test("several presenter views at once: each drives, all stay in step, and ink re
   // The whiteboard, from the phone: every view shows it; its ink is kept apart from the slide's.
   await phone.locator("#t-white").click();
   await expect.poll(() => roomMode(room)).toBe("white");
-  await expect(laptop.locator("#pill")).toHaveText("WHITE");
+  await expect(laptop.locator("#t-white")).toHaveClass(/on/);
   await drag(phone, "#current", [0.3, 0.3], [0.6, 0.3]);
   await expect.poll(() => ink(laptop)).toEqual({ page: 1, board: 1 });
   await expect.poll(() => ink(tablet)).toEqual({ page: 1, board: 1 });
@@ -715,10 +727,28 @@ test("slides shown on a touch screen are run by touch: tap, swipe either way, li
     await expect.poll(() => roomPage(pad)).toBe(link.to);
   }
   expect(link).not.toBeNull();
-  // No Esc key on a tablet: a finger held still returns to the choice of views.
+  // A finger held still does nothing. Two quick taps bring up a bar like the presenter view's,
+  // without stepping; a tap elsewhere puts it away, also without stepping.
+  const here = await roomPage(pad);
   await touch.send("Input.dispatchTouchEvent", { type: "touchStart", touchPoints: at(600, 300) });
-  await expect(pad.locator("#ready")).toBeVisible({ timeout: 4000 });
+  await pad.waitForTimeout(1800);
   await touch.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
+  await expect(pad.locator("#audience")).toBeVisible();
+  await expect(pad.locator(".aud-bar")).toBeHidden();
+  await tap(600, 300);
+  await tap(600, 300);
+  await expect(pad.locator(".aud-bar")).toBeVisible();
+  await expect(pad.locator(".aud-where")).toHaveText(/^Frame \d+ \/ 8/);
+  await expect(pad.locator(".aud-clock")).toHaveText(/^\d+:\d\d/);
+  await expect(pad.locator(".aud-link")).toContainText("Slides showing");
+  await tap(600, 300);
+  await expect(pad.locator(".aud-bar")).toBeHidden();
+  await pad.waitForTimeout(400);
+  expect(await roomPage(pad)).toBe(here);
+  await tap(600, 300);
+  await tap(600, 300);
+  await pad.locator(".aud-exit").tap();
+  await expect(pad.locator("#ready")).toBeVisible();
   await expect(pad.locator("#end-all")).toBeVisible();
   await context.close();
 });

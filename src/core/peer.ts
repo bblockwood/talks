@@ -76,7 +76,7 @@ export interface PeerHooks {
   pointer(x: number, y: number, visible: boolean): void;
   /** The talk was ended for everyone. */
   end(): void;
-  status(): Omit<RoomInfo, "devices" | "audiences">;
+  status(): Omit<RoomInfo, "devices" | "views" | "audiences">;
 }
 
 export interface PeerOptions {
@@ -155,6 +155,11 @@ export class Peer {
   /** The host's last report, for a device that is choosing its view: is a talk already going? */
   get heard(): StateBody | null {
     return this.sessionHost ? null : this.last;
+  }
+
+  /** How many devices are in the talk, this one included, as far as this one knows. */
+  get deviceCount(): number {
+    return this.sessionHost ? this.sessionHost.deviceCount : (this.last?.room?.devices.length ?? 1);
   }
 
   /** What the slides screen shows: the host's own state, or the followed host's as last reported. */

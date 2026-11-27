@@ -4,7 +4,8 @@
 // the talk goes on for the other devices.
 import { KeyInterpreter } from "../core/keys";
 import { prefetchPages } from "../core/prefetch";
-import { initialState } from "../core/session";
+import { formatClock } from "../core/markdown";
+import { elapsedMs, initialState } from "../core/session";
 import type { Command } from "../core/session";
 import { parseSplit } from "../core/split";
 import { APPLE_TOUCH, setStage } from "../shared/device";
@@ -35,6 +36,13 @@ export class Presentation {
   private keyboardLocked = false;
   private escapeDown = false;
   private ended = false;
+
+  /** The bar a double tap brings up on a touch screen: where the talk is, the clock, the connection, Exit. */
+  private bar!: HTMLElement;
+  private barTimer: number | undefined;
+  private barHide: number | undefined;
+  /** `performance.now()` when the followed host's state last arrived, for running its clock on. */
+  private heardAt = 0;
 
   /** Two-screen mode: Ctrl+D or Cmd+D was pressed in the slides window (swap displays, Native §6.5). */
   onSwapKey: (() => void) | null = null;
@@ -68,9 +76,17 @@ export class Presentation {
     this.view = new AudienceView(root, cache, deck);
     this.view.onLink = (page, index) => this.dispatch({ name: "followLink", page, index }, performance.now());
     // A touch screen showing the slides (an iPad mirrored to the projector) runs the talk by
-    // touch: tap or swipe to step. With no Esc key, a long press is the way back to the choice of views.
+    // touch: tap or swipe to step. With no Esc key, two quick taps bring up a bar like the
+    // presenter view's status bar, with Exit; a tap anywhere else puts it away again.
     this.view.onStep = (name) => this.dispatch({ name }, performance.now());
-    this.view.onHold = () => void this.stop();
+    this.view.onDoubleTap = () => this.showBar(this.bar.hidden !== false);
+    this.view.intercept = () => {
+      if (this.bar.hidden) return false;
+      this.showBar(false);
+      return true;
+    };
+    this.bar = this.buildBar();
+    root.append(this.bar);
     setStage(true);
 
     // Out of full screen, the slides stay in the window and every key still just drives them
@@ -98,7 +114,10 @@ export class Presentation {
     void this.requestWakeLock();
 
     talk.audience = {
-      changed: (inputTime) => this.render(inputTime ?? performance.now()),
+      changed: (inputTime) => {
+        this.heardAt = performance.now();
+        this.render(inputTime ?? performance.now());
+      },
       pointer: (x, y, visible) => this.view.setPointer(x, y, visible),
       status: () => this.status(),
     };
@@ -138,9 +157,79 @@ export class Presentation {
     await this.root.requestFullscreen({ navigationUI: "hide", screen });
   }
 
+  private buildBar(): HTMLElement {
+    const bar = document.createElement("div");
+    bar.className = "aud-bar";
+    bar.hidden = true;
+    const part = (cls: string): HTMLElement => {
+      const el = document.createElement("span");
+      el.className = cls;
+      return el;
+    };
+    const exit = document.createElement("button");
+    exit.type = "button";
+    exit.className = "aud-exit";
+    exit.textContent = "Exit";
+    exit.addEventListener("click", (ev) => {
+      ev.stopPropagation();
+      void this.stop();
+    });
+    const right = part("aud-right");
+    right.append(part("aud-link"), exit);
+    bar.append(part("aud-where"), part("aud-clock"), right);
+    return bar;
+  }
+
+  private showBar(on: boolean): void {
+    if (this.ended) return;
+    this.bar.hidden = !on;
+    window.clearInterval(this.barTimer);
+    window.clearTimeout(this.barHide);
+    if (!on) return;
+    this.fillBar();
+    this.barTimer = window.setInterval(() => this.fillBar(), 500);
+    // Not left on the audience's screen: it goes by itself.
+    this.barHide = window.setTimeout(() => this.showBar(false), 10_000);
+  }
+
+  private fillBar(): void {
+    const deck = this.talk.deck;
+    const peer = this.talk.peer;
+    const state = this.state();
+    const frame = deck.frames.frameContaining(state.committedPage);
+    const builds = frame ? frame.lastPage - frame.firstPage + 1 : 1;
+    const set = (cls: string, text: string): HTMLElement => {
+      const el = this.bar.querySelector<HTMLElement>(`.${cls}`) as HTMLElement;
+      if (el.textContent !== text) el.textContent = text;
+      return el;
+    };
+    set("aud-where", frame ? `Frame ${frame.label} / ${deck.frames.frameCount}${builds > 1 ? `   Build ${deck.frames.buildIndex(state.committedPage) + 1}/${builds}` : ""}` : "");
+
+    // The clock: this device's own when it runs the talk, otherwise the host's as last heard, run on from then.
+    const heard = peer.heard;
+    const running = heard ? heard.timer.running : state.timer.runningSince !== null;
+    const elapsed = heard ? heard.timer.elapsedMs + (heard.timer.running ? performance.now() - this.heardAt : 0) : elapsedMs(state.timer, Date.now());
+    const target = heard ? heard.timer.targetMs : state.timer.targetMs;
+    const left = target === null ? null : target - elapsed;
+    const over = left !== null && left <= -1000;
+    const paused = !running && elapsed > 0;
+    const clock = set("aud-clock", `${left === null ? formatClock(elapsed) : `${over ? "−" : ""}${formatClock(Math.abs(left))}`} ${paused ? "paused" : left === null ? "↑" : "↓"}`);
+    clock.className = `aud-clock${!running ? " paused" : left === null ? "" : over ? " over" : " good"}`;
+
+    const count = peer.deviceCount;
+    const link = set(
+      "aud-link",
+      this.talk.relayStatus === "none" ? "This device only" : this.talk.relayStatus !== "connected" ? "Not connected" : count > 1 ? `Slides showing · ${count} devices` : "Slides showing · no other device yet",
+    );
+    link.className = `aud-link ${this.talk.relayStatus === "connected" ? "ok" : this.talk.relayStatus === "none" ? "off" : "bad"}`;
+  }
+
   /** Takes the slides off this screen: out of full screen, locks released, pixels dropped. */
   private async takeDown(): Promise<void> {
     this.ended = true;
+    window.clearInterval(this.barTimer);
+    window.clearTimeout(this.barHide);
+    this.bar.remove();
     window.removeEventListener("keydown", this.onKeyDown, { capture: true });
     window.removeEventListener("keyup", this.onKeyUp, { capture: true });
     document.removeEventListener("fullscreenchange", this.onFullscreenChange);

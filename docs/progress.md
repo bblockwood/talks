@@ -912,3 +912,15 @@ Ben: "Everything worked." Then: more room at the top of the Home Screen version 
 Verification: build; 295 unit tests; 44 e2e tests (new: slides run by real touch events).
 
 Known issues: items 3, 4 and 7 can only be judged on the iPad. If the grey bar in item 4 is still there, it is something else: the status bar itself has a faint grey background on purpose, as in the Mac app.
+
+### W9.4. Five more (2026-11-27)
+
+1. **Slides by touch:** the long press is gone. Two quick taps bring up a black bar along the bottom, laid out like the presenter view's: frame on the left, clock in the middle, connection and **Exit** on the right. A single tap now waits 230 ms to see whether a second follows; swipes are immediate.
+2. **No BLACK/WHITE pill** in the presenter view.
+3. **Devices in this talk** at the bottom of Connection settings: one line per device with a dot, what it shows, and which one runs the talk.
+4. **The clock's pop-up, redesigned:** reading on top, Pause and Reset, "Show: time elapsed | time left", a talk length that is only a draft until **Set** or Enter, and preset lengths. The clock is never paused or changed while you type. Reasons in `docs/decisions.md`.
+5. **Both views** says "(requires two screens)" on the button when it can't be used; the line below shows only when it can.
+
+Verification: build; 295 unit tests; 44 e2e tests.
+
+Known issues: the 230 ms wait on a tap is the price of double tap; say if it feels slow on the iPad and I will swap it for a different gesture. The connection text in the slides' bar is a label, not a button.

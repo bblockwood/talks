@@ -52,11 +52,11 @@ One view for you, on whatever you have: your laptop or tablet on the lectern, yo
 - **Pointer:** press and hold on the slide, then drag. With a mouse, **Laser** (L) points wherever the mouse goes.
 - **Draw** (D) writes on the slide in three colours, or on a whiteboard (**Board**). A pen always draws, without turning Draw on. Everyone's ink shows on every presenter view.
 - **Back** appears under the slide after a jump and says where it goes ("Back to Frame 12").
-- **Click the clock** to pause it, reset it, or count down from a time.
+- **Click the clock** to pause or reset it, and to choose between time elapsed and time left. For time left, type the talk's length and press Set (or Enter), or tap one of the preset lengths; nothing changes while you type.
 - **?** shows the keyboard shortcuts.
 - **Black** and **White** sit under the slide; your own slide goes black or white too, so you see what the audience sees. Draw on the white screen as on a whiteboard.
 - **Tap the status line** ("Slides showing · 2 devices") for the talk code, where other devices join, and connection diagnostics. **Exit**, beside it, goes back to the page where a view is chosen; **Leave this talk** and **End talk on every device** are there.
-- **Slides on an iPad or phone** (say, mirrored to a projector) are run by touch: tap to advance, swipe either way, tap a link to follow it, and hold a finger still for a second and a half to go back to the choice of views.
+- **Slides on an iPad or phone** (say, mirrored to a projector) are run by touch: tap to advance, swipe either way, tap a link to follow it. Two quick taps bring up a bar along the bottom with the frame, the clock, the connection and **Exit**; it goes away after ten seconds or on a tap elsewhere.
 - **On an iPad or phone, add the page to the Home Screen** (Share → Add to Home Screen) to have it fill the screen. Safari's own full screen is not used there: it closes on any downward swipe.
 - **Rehearse** by opening the talk in the presenter view with no screen showing slides; other devices can join. The top line says "No slides screen yet". The clock starts with the first slide change.
 - **Exit** (or Esc twice) returns to the choice of views without leaving the talk, to put the slides on this device's screen or its second screen.

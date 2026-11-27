@@ -93,7 +93,7 @@ test("two screens: the presenter view in a second window drives the audience win
   expect(presenter.url()).toMatch(/\/talks\/#ch=[0-9a-f]{32}$/);
   await expect.poll(() => roomPage(main)).toBe(0);
   // The audience window still shows nothing but slides.
-  await expect(main.locator("#audience > :not(canvas)")).toBeHidden();
+  for (const extra of await main.locator("#audience > :not(canvas)").all()) await expect(extra).toBeHidden();
 
   // The same presenter view as on any other device, here joined without a code or the relay.
   expect(await view((h) => h.kind())).toBe("local");
@@ -148,7 +148,7 @@ test("two screens: the presenter view in a second window drives the audience win
   await expect.poll(inkShown).toBe(1);
   expect(await roomPage(main)).toBe(before); // drawing never advances the slide
   await presenter.locator("#t-white").click();
-  await expect(presenter.locator("#pill")).toHaveText("WHITE");
+  await expect(presenter.locator("#t-white")).toHaveClass(/on/);
   expect(await room(main, (h) => h.state().audienceMode.kind)).toBe("white");
   await presenter.locator("#t-white").click();
   await presenter.keyboard.press("c");
@@ -304,7 +304,8 @@ test("an ordinary deck shows no split line; mirrored displays get a one-line not
   await expect(page.locator("#split-line")).toBeHidden();
   await expect(page.locator("#modes")).toBeHidden();
   await expect(page.locator("#both")).toBeDisabled();
-  await expect(page.locator("#both-note")).toContainText("unavailable: it needs a second screen that extends this one");
+  await expect(page.locator("#both-small")).toHaveText("(requires two screens)");
+  await expect(page.locator("#both-note")).toBeHidden();
   await context.close();
 });
 

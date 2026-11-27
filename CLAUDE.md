@@ -42,7 +42,7 @@ docs/          native-spec.md, decisions.md, progress.md, spikes/
 - **No CDNs, analytics, or third-party requests at runtime.** Self-host PDF.js assets.
 - **Never** log, print (except the publish tool's stdout), commit, or store talk codes or decrypted deck contents. Only `~/.config/lectern/codes.json` holds codes.
 - **Never** write decrypted data to any storage on the room PC.
-- **The audience view never shows** status, errors, toasts, or the cursor beyond the idle timeout.
+- **The audience view never shows** status, errors, toasts, or the cursor beyond the idle timeout. Two things Ben asked for are the only exceptions, and both appear only when the presenter asks (see `docs/decisions.md`, 2026-11-27): the Full screen button on windowed slides while the mouse moves, and the bar two quick taps bring up on a touch screen.
 - Crypto uses WebCrypto only, with identical code paths in Node and the browser, and must pass the shared test vectors.
 - TypeScript strict mode, no `any` in `src/core/`.
 

@@ -27,7 +27,7 @@ export interface HostHooks {
   /** A presenter view asked to end the talk. */
   end(): void;
   /** Status that only the caller knows: relay connection, draw timings. */
-  status(): Omit<RoomInfo, "devices" | "audiences">;
+  status(): Omit<RoomInfo, "devices" | "views" | "audiences">;
   /** What the hosting device itself shows right now. */
   view(): View;
   /** When (ms, this device's clock) its connection to the others opened: see `outranks` in peer.ts. */
@@ -165,6 +165,11 @@ export class SessionHost {
     }
   }
 
+  /** How many devices are in the talk, this one included. */
+  get deviceCount(): number {
+    return 1 + this.devices.size;
+  }
+
   /** The room PC is authoritative: `state` goes out after every change and as a heartbeat. */
   broadcast(ack?: Ack): void {
     const now = this.hooks.now();
@@ -174,6 +179,7 @@ export class SessionHost {
     const room: RoomInfo = {
       ...this.hooks.status(),
       devices: [this.options.device, ...others.map((d) => d.device || "device")],
+      views: [view ?? "", ...others.map((d) => d.view ?? "")],
       audiences: (view === "audience" ? 1 : 0) + others.filter((d) => d.view === "audience").length,
     };
     this.hooks.send({

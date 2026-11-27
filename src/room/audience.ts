@@ -24,7 +24,8 @@ interface Shown {
   height: number;
 }
 
-const HOLD_MS = 1500;
+/** How long a tap waits for a second one before it counts as a single tap. */
+const DOUBLE_TAP_MS = 230;
 const SWIPE_MIN_PX = 45;
 const TAP_SLOP_PX = 10;
 
@@ -33,10 +34,12 @@ export class AudienceView {
   onLink: ((page: number, index: number) => void) | null = null;
   /** A tap (next) or a sideways swipe on a touch screen. */
   onStep: ((name: "next" | "previous") => void) | null = null;
-  /** A finger held still on a touch screen for a while. */
-  onHold: (() => void) | null = null;
+  /** Two quick taps on a touch screen. */
+  onDoubleTap: (() => void) | null = null;
+  /** Asked before a tap acts: true means the tap was used for something else. */
+  intercept: (() => boolean) | null = null;
   private touch: { id: number; x: number; y: number; t: number } | null = null;
-  private holdTimer: number | undefined;
+  private tapTimer: number | undefined;
   private lastTouchAt = -Infinity;
 
   private readonly canvas: HTMLCanvasElement;
@@ -182,8 +185,10 @@ export class AudienceView {
     this.cache.onReady = null;
     this.onLink = null;
     this.onStep = null;
-    this.onHold = null;
-    window.clearTimeout(this.holdTimer);
+    this.onDoubleTap = null;
+    this.intercept = null;
+    window.clearTimeout(this.tapTimer);
+    this.tapTimer = undefined;
     this.touch = null;
     this.root.removeEventListener("pointerdown", this.onPointerDown);
     this.root.removeEventListener("pointermove", this.onPointerMove);
@@ -342,46 +347,43 @@ export class AudienceView {
   };
 
   // Touch (Ben, 2026-11-27): a tap follows a link or else advances; a sideways swipe steps either
-  // way; a finger held still for a second and a half asks to leave the slides.
+  // way; two quick taps bring up the bar with Exit. A single tap therefore waits a moment to see
+  // whether a second one follows; a swipe never waits.
   private readonly onPointerDown = (ev: PointerEvent): void => {
-    if (ev.pointerType === "mouse" || this.touch || (ev.target instanceof Element && ev.target.closest("button"))) return;
+    if (ev.pointerType === "mouse" || this.touch || (ev.target instanceof Element && ev.target.closest("button, .aud-bar"))) return;
     this.touch = { id: ev.pointerId, x: ev.clientX, y: ev.clientY, t: performance.now() };
-    window.clearTimeout(this.holdTimer);
-    this.holdTimer = window.setTimeout(() => {
-      if (!this.touch) return;
-      this.touch = null;
-      this.lastTouchAt = performance.now();
-      this.onHold?.();
-    }, HOLD_MS);
   };
 
-  private readonly onPointerMove = (ev: PointerEvent): void => {
-    const start = this.touch;
-    if (start && ev.pointerId === start.id && Math.hypot(ev.clientX - start.x, ev.clientY - start.y) > TAP_SLOP_PX) window.clearTimeout(this.holdTimer);
-  };
+  private readonly onPointerMove = (): void => {};
 
   private readonly onPointerUp = (ev: PointerEvent): void => {
     const start = this.touch;
     if (!start || ev.pointerId !== start.id) return;
     this.touch = null;
-    window.clearTimeout(this.holdTimer);
     this.lastTouchAt = performance.now(); // the browser's own click for this touch is ignored
     const dx = ev.clientX - start.x;
     const dy = ev.clientY - start.y;
     if (Math.abs(dx) >= SWIPE_MIN_PX && Math.abs(dx) > Math.abs(dy) * 1.5) {
       this.onStep?.(dx < 0 ? "next" : "previous"); // swipe left = forward
     } else if (Math.hypot(dx, dy) <= TAP_SLOP_PX && performance.now() - start.t < 500) {
+      if (this.tapTimer !== undefined) {
+        window.clearTimeout(this.tapTimer);
+        this.tapTimer = undefined;
+        this.onDoubleTap?.();
+        return;
+      }
       const hit = this.linkAt(ev);
-      if (hit) this.onLink?.(hit.page, hit.index);
-      else this.onStep?.("next");
+      this.tapTimer = window.setTimeout(() => {
+        this.tapTimer = undefined;
+        if (this.intercept?.()) return;
+        if (hit) this.onLink?.(hit.page, hit.index);
+        else this.onStep?.("next");
+      }, DOUBLE_TAP_MS);
     }
   };
 
   private readonly onPointerCancel = (ev: PointerEvent): void => {
-    if (this.touch && ev.pointerId === this.touch.id) {
-      this.touch = null;
-      window.clearTimeout(this.holdTimer);
-    }
+    if (this.touch && ev.pointerId === this.touch.id) this.touch = null;
   };
 
   private readonly onClick = (ev: MouseEvent): void => {
