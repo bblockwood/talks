@@ -187,10 +187,10 @@ test("the presenter view reloads offline and reopens a remembered talk", async (
   await phone.locator("#saved .talk").click();
   await phone.locator("#presenter").click();
   await expect(phone.locator("#console")).toBeVisible();
-  await expect(phone.locator("#frame-line")).toHaveText("Frame 1 of 9");
+  await expect(phone.locator("#frame-line")).toHaveText("Frame 1 / 9");
   // With no connection the talk simply runs on this device.
   await expect(phone.locator("#link")).toHaveText("No slides screen yet · offline", { timeout: 10_000 });
   await phone.locator("#next").click();
-  await expect(phone.locator("#frame-line")).toHaveText("Frame 2 of 9");
+  await expect(phone.locator("#frame-line")).toHaveText("Frame 2 / 9");
   await context.close();
 });

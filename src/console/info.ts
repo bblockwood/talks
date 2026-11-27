@@ -18,5 +18,20 @@ export const outlineInfo = (hasOutline: boolean): string =>
       : "This PDF has no outline (bookmarks), so the tab is off. With one, Outline lists each section with the frame it starts on, highlights the one you are in, and jumps there on a click.",
     "- **Beamer.** Every `\\part`, `\\section`, `\\subsection` and `\\subsubsection` becomes an entry; nothing else is needed.",
     "- **Other LaTeX.** Load `hyperref`; the sectioning commands then write bookmarks. Pandoc's Beamer output has them already.",
-    "- **PowerPoint and Keynote.** Their PDF exports usually carry no outline. Slides shows every frame instead.",
+    "- **PowerPoint and Keynote.** Their PDF exports usually carry no outline. The Overview (Tab) shows every frame instead.",
   ].join("\n\n");
+
+export const KEYS_INFO = [
+  "- **Next:** `→` `↓` `Space` `Page Down` `Enter` `N`, or a click on the slide",
+  "- **Previous:** `←` `↑` `Page Up` `P`",
+  "- **Next / previous frame:** `Shift` with `→` / `←`",
+  "- **Go to a frame:** type its number, then `Enter`",
+  "- **Back after a jump:** `Delete` or `Backspace`; on a Mac also `⌘[`, and `⌘]` for forward",
+  "- **Overview:** `Tab`. **Search:** `Ctrl`+`F` or `⌘F`",
+  "- **Laser:** `L`. **Draw:** `D`. **Clear the ink:** `C`",
+  "- **Black:** `B` or `.` **Whiteboard:** `W`. **Freeze:** `F`",
+  "- **Pause the clock:** `T`",
+  "- **Swap displays** (two screens): `Ctrl`+`D` or `⌘D`",
+  "- **Back to the choice of views:** `Esc` twice. One `Esc` closes whatever is open",
+  "- **Timings:** `Ctrl`+`Shift`+`D`. **This card:** `?`",
+].join("\n");

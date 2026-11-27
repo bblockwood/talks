@@ -61,3 +61,24 @@ export function saveNotesSize(px: number): void {
     // See above.
   }
 }
+
+const SPLITS_KEY = "lectern.splits";
+
+/** Where the presenter view's pane dividers were left, as fractions of the window. */
+export function loadSplits(): { left: number; top: number } | null {
+  try {
+    const raw = JSON.parse(localStorage.getItem(SPLITS_KEY) ?? "null") as { left?: unknown; top?: unknown } | null;
+    const ok = (n: unknown): n is number => typeof n === "number" && n >= 0.15 && n <= 0.85;
+    return raw && ok(raw.left) && ok(raw.top) ? { left: raw.left, top: raw.top } : null;
+  } catch {
+    return null;
+  }
+}
+
+export function saveSplits(splits: { left: number; top: number }): void {
+  try {
+    localStorage.setItem(SPLITS_KEY, JSON.stringify(splits));
+  } catch {
+    // Storage is unavailable or full: the layout is simply not remembered.
+  }
+}

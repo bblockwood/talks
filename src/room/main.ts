@@ -10,7 +10,7 @@ import { chooseSplit } from "../core/split";
 import type { NotesSplit } from "../core/split";
 import { LocalClient, TalkClient } from "../console/client";
 import { PresenterConsole, layoutFor } from "../console/console";
-import { forget, loadNotesSize, loadSaved, remember, saveNotesSize } from "../console/saved";
+import { forget, loadNotesSize, loadSaved, loadSplits, remember, saveNotesSize, saveSplits } from "../console/saved";
 import { DeckError, openDeck } from "../shared/deck";
 import { makeJoinCode, receiveDeck } from "../shared/deck-share";
 import { NetworkError, NoTalkError, fetchDeck } from "../shared/fetch-deck";
@@ -472,6 +472,8 @@ function showPresenter(): void {
       ownsDeck: false,
       loadNotesSize: () => (own ? loadNotesSize() : null),
       saveNotesSize,
+      loadSplits: () => (own ? loadSplits() : null),
+      saveSplits,
       ...(current.source.joinCode && current.source.originator ? { joinHint: `code ${current.source.joinCode}` } : {}),
       onLeave: leave,
       // Esc twice, or Change view: back to the choice of views, still in the talk.

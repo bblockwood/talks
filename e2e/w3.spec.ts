@@ -111,7 +111,7 @@ test("a phone drives the room PC: steps, notes, clock, slide grid, back, black, 
   await room.locator("#start").click();
   await expect.poll(() => roomPage(room)).toBe(0);
   await expect(phone.locator("#link")).toContainText("Slides showing");
-  await expect(phone.locator("#frame-line")).toHaveText("Frame 1 of 7");
+  await expect(phone.locator("#frame-line")).toHaveText("Frame 1 / 7");
   // The .pdfpc file sets a 30-minute talk. The clock waits for the first slide change, then
   // shows the time left, in green.
   await expect(phone.locator("#timer")).toHaveText("30:00 ↓");
@@ -121,16 +121,16 @@ test("a phone drives the room PC: steps, notes, clock, slide grid, back, black, 
   await expect.poll(() => roomPage(room)).toBe(1);
   await expect(phone.locator("#timer")).toHaveText(/^29:5\d ↓$/);
   await expect(phone.locator("#timer")).toHaveClass(/good/);
-  await expect(phone.locator("#frame-line")).toHaveText("Frame 2 of 7");
+  await expect(phone.locator("#frame-line")).toHaveText("Frame 2 / 7");
   // Page 2 has an embedded note, overridden by the .pdfpc file's.
   await expect(phone.locator("#notes")).toContainText("Sidecar note for frame 2");
   await phone.locator("#next").click();
-  await expect(phone.locator("#build-line")).toHaveText("Build 1 of 3");
+  await expect(phone.locator("#build-line")).toHaveText("Build 1/3");
   await expect(phone.locator("#notes")).not.toContainText("No notes for this slide");
 
   // The room keyboard and the phone stay in step: the room PC reports every change.
   await room.keyboard.press("ArrowRight");
-  await expect(phone.locator("#build-line")).toHaveText("Build 2 of 3");
+  await expect(phone.locator("#build-line")).toHaveText("Build 2/3");
   await room.keyboard.press("ArrowRight");
   await expect(phone.locator("#notes")).toContainText("Sidecar note for build 3 of frame 3 only");
   await expect(phone.locator("#notes strong")).toHaveText("markdown");
@@ -149,7 +149,7 @@ test("a phone drives the room PC: steps, notes, clock, slide grid, back, black, 
   await expect(phone.locator("#grid .thumb.current .cap span").first()).toHaveText("7");
   await phone.locator("#overview-close").click();
   await expect(phone.locator("#grid")).toBeHidden();
-  await expect(phone.locator("#frame-line")).toHaveText("Frame 7 of 7");
+  await expect(phone.locator("#frame-line")).toHaveText("Frame 7 / 7");
   await expect(phone.locator("#t-back")).toBeEnabled();
   await phone.locator("#t-back").click();
   await expect.poll(() => roomPage(room)).toBe(5);
@@ -165,7 +165,7 @@ test("a phone drives the room PC: steps, notes, clock, slide grid, back, black, 
   await phone.locator("#t-freeze").click();
   await expect(phone.locator("#pill")).toHaveText("FROZEN");
   await phone.locator("#next").click();
-  await expect(phone.locator("#build-line")).toHaveText("Build 2 of 2"); // the presenter moved on
+  await expect(phone.locator("#build-line")).toHaveText("Build 2/2"); // the presenter moved on
   expect(await roomPage(room)).toBe(5); // the audience still sees the frozen page
   await phone.locator("#t-freeze").click();
   await expect.poll(() => roomPage(room)).toBe(6);
@@ -182,8 +182,10 @@ test("a phone drives the room PC: steps, notes, clock, slide grid, back, black, 
   await phone.mouse.up();
   await expect.poll(() => roomHook(room, (h) => h.pointerVisible()), { timeout: 3000 }).toBe(false);
 
-  // Clock: pause from the phone.
+  // Clock: pause from the phone. A tap on the clock opens its own small pop-up, not all of More.
   await phone.locator("#timer").click();
+  await expect(phone.locator("#clock-pop")).toBeVisible();
+  await expect(phone.locator("#sheet-more")).toBeHidden();
   await phone.locator("#clock-toggle").click();
   await expect(phone.locator("#clock-toggle")).toHaveText("Resume");
   await expect(phone.locator("#timer")).toHaveClass(/paused/);
@@ -210,7 +212,7 @@ test("a phone drives the room PC: steps, notes, clock, slide grid, back, black, 
   await expect(phone.locator("#count-hint")).toBeHidden();
   await expect.poll(() => roomHook(room, (h) => h.state().timer.targetMs)).toBe(90 * 60_000);
   await phone.locator("#count-from").press("Enter");
-  await expect(phone.locator("#sheet-more")).toBeHidden();
+  await expect(phone.locator("#clock-pop")).toBeHidden();
   await expect(phone.locator("#timer")).toHaveText(/^1:29:\d\d ↓$/);
   await expect(phone.locator("#timer")).toHaveClass(/good/);
   expect(await roomPage(room)).toBe(before);
@@ -221,7 +223,11 @@ test("a phone drives the room PC: steps, notes, clock, slide grid, back, black, 
   await expect(phone.locator("#timer")).toHaveClass(/over/);
   await expect(phone.locator("#clock-now")).toHaveText(/^0:\d\d over$/);
 
-  // The measured numbers Ben reads off for the acceptance test.
+  // The same controls are under More, with the measured numbers Ben reads off for the acceptance test.
+  await phone.keyboard.press("Escape");
+  await expect(phone.locator("#clock-pop")).toBeHidden();
+  await phone.locator("#t-more").click();
+  await expect(phone.locator("#sheet-more #clock-toggle")).toBeVisible();
   await expect(phone.locator("#diag")).toHaveText(/ping \d+ ms · tap → slide \d+ ms \(median of \d+\)/);
   const numbers = await viewHook(phone, (h) => ({ taps: h.taps().map(Math.round), rtts: h.rtts().map(Math.round) }));
   console.log("local relay: command round trips ms", JSON.stringify(numbers.taps), "ping ms", JSON.stringify(numbers.rtts));
@@ -254,7 +260,7 @@ test("a laptop joined by code gets the full presenter view and drives the room P
 
   // Wide layout: slide, next slide and notes side by side; no big buttons with a mouse.
   expect(await viewHook(laptop, (h) => h.layout())).toBe("wide");
-  await expect(laptop.locator("#bar-where")).toHaveText("Frame 1/7");
+  await expect(laptop.locator("#bar-where")).toHaveText("Frame 1 / 7");
   await expect(laptop.locator("#steps")).toBeHidden();
   await expect(laptop.locator("#next-slide")).toBeVisible();
   const current = (await laptop.locator("#current").boundingBox())!;
@@ -266,7 +272,7 @@ test("a laptop joined by code gets the full presenter view and drives the room P
   await laptop.keyboard.press("ArrowRight");
   await expect.poll(() => roomPage(room)).toBe(1);
   await laptop.keyboard.press("PageDown");
-  await expect(laptop.locator("#bar-where")).toHaveText("Frame 3/7 · 1/3");
+  await expect(laptop.locator("#bar-where")).toHaveText("Frame 3 / 7 Build 1/3");
   await expect(laptop.locator("#notes")).toContainText("every build");
   // A click on the current slide advances; so does a click on the next slide.
   await laptop.locator("#current").click({ position: { x: 300, y: 100 } });
@@ -274,15 +280,42 @@ test("a laptop joined by code gets the full presenter view and drives the room P
   await laptop.locator("#next-slide").click();
   await expect.poll(() => roomPage(room)).toBe(4);
 
-  // Jump by number; Back and Forward name where they go.
+  // The native app's arrangement: the status bar along the bottom with the clock in the middle,
+  // "Current" over the slide, the tools directly under it and exactly as wide.
+  const slideBox = (await laptop.locator("#current").boundingBox())!;
+  const toolsBox = (await laptop.locator("#tools").boundingBox())!;
+  const barBox = (await laptop.locator(".bar").boundingBox())!;
+  const clockBox = (await laptop.locator("#timer").boundingBox())!;
+  const nextHead = (await laptop.locator(".nexthead").boundingBox())!;
+  const currentHead = (await laptop.locator(".current-head").boundingBox())!;
+  expect(barBox.y).toBeGreaterThan(toolsBox.y + toolsBox.height - 1);
+  expect(barBox.y + barBox.height).toBeGreaterThan(800 - 20);
+  expect(Math.abs(toolsBox.y - (slideBox.y + slideBox.height))).toBeLessThan(12);
+  expect(Math.abs(toolsBox.width - slideBox.width)).toBeLessThan(2);
+  expect(Math.abs(slideBox.width / slideBox.height - 16 / 9)).toBeLessThan(0.03); // fitted: no black bars
+  expect(Math.abs(currentHead.y - nextHead.y)).toBeLessThan(2);
+  const middle = clockBox.x + clockBox.width / 2;
+  expect(middle).toBeGreaterThan(1280 * 0.4);
+  expect(middle).toBeLessThan(1280 * 0.6);
+  await expect(laptop.locator("#bar-frame")).toHaveText("Frame 3 / 7");
+  await expect(laptop.locator("#t-back")).toBeHidden(); // nowhere to go back to yet
+  await expect(laptop.locator("#t-laser kbd")).toHaveText("L");
+  // ? shows the shortcuts.
+  await laptop.keyboard.press("?");
+  await expect(laptop.locator("#info-title")).toHaveText("Keyboard shortcuts");
+  await laptop.keyboard.press("Escape");
+  await expect(laptop.locator("#info")).toBeHidden();
+
+  // Jump by number; Back and Forward appear after a jump and name where they go.
   await laptop.keyboard.type("6");
   await expect(laptop.locator("#digits")).toContainText("Go to frame 6");
   await laptop.keyboard.press("Enter");
   await expect.poll(() => roomPage(room)).toBe(8);
-  await expect(laptop.locator("#t-back")).toHaveAttribute("title", /Back to frame 3/);
+  await expect(laptop.locator("#t-back")).toHaveText(/^Back to Frame 3/);
+  await expect(laptop.locator("#t-back")).toHaveAttribute("title", /Back to Frame 3/);
   await laptop.locator("#t-back").click();
   await expect.poll(() => roomPage(room)).toBe(4);
-  await expect(laptop.locator("#t-forward")).toHaveAttribute("title", /Forward to frame 6/);
+  await expect(laptop.locator("#t-forward")).toHaveAttribute("title", /Forward to Frame 6/);
 
   // Overview: its button sits above the next slide, top right, where the grid appears; Tab does
   // the same. The grid swaps in for the right column; a click jumps at once and the overview stays.
@@ -335,8 +368,11 @@ test("a laptop joined by code gets the full presenter view and drives the room P
 
   // Search: results grouped by frame; Enter jumps; typing does not drive the slides.
   const before = await roomPage(room);
+  await laptop.keyboard.press("Control+f"); // the overview's search, not the browser's
+  await expect(laptop.locator("#search")).toBeFocused();
   await laptop.locator("#search").fill("enduserslide");
   await expect(laptop.locator("#results .hit")).toHaveCount(1);
+  await expect(laptop.locator("#search-count")).toHaveText("1 match");
   await expect(laptop.locator("#results .hit .frame")).toHaveText("Frame 5");
   expect(await roomPage(room)).toBe(before);
   await laptop.locator("#search").fill("NOTES");
@@ -444,9 +480,9 @@ test("several presenter views at once: each drives, all stay in step, and ink re
   await expect(phone.locator("#link")).toContainText("Slides showing");
 
   await phone.locator("#next").click();
-  await expect(laptop.locator("#bar-where")).toHaveText("Frame 2/7");
+  await expect(laptop.locator("#bar-where")).toHaveText("Frame 2 / 7");
   await laptop.keyboard.press("ArrowRight");
-  await expect(phone.locator("#build-line")).toHaveText("Build 1 of 3");
+  await expect(phone.locator("#build-line")).toHaveText("Build 1/3");
   await expect.poll(() => roomPage(room)).toBe(2);
 
   // Both are listed, on either device.
@@ -569,7 +605,7 @@ test("a phone held sideways shows two very large buttons that still drive the ta
   await expect.poll(() => viewHook(phone, (h) => h.layout())).toBe("buttons");
   await expect(phone.locator("#current")).toBeHidden();
   await expect(phone.locator("#notes")).toBeHidden();
-  await expect(phone.locator("#bar-where")).toHaveText("Frame 1/7");
+  await expect(phone.locator("#bar-where")).toHaveText("Frame 1 / 7");
   const next = (await phone.locator("#next").boundingBox())!;
   const prev = (await phone.locator("#prev").boundingBox())!;
   expect(next.height).toBeGreaterThan(200);
@@ -583,7 +619,7 @@ test("a phone held sideways shows two very large buttons that still drive the ta
   await phone.locator("#next").click();
   await phone.locator("#next").click();
   await expect.poll(() => roomPage(room)).toBe(2);
-  await expect(phone.locator("#bar-where")).toHaveText("Frame 3/7 · 1/3");
+  await expect(phone.locator("#bar-where")).toHaveText("Frame 3 / 7 Build 1/3");
   await phone.locator("#prev").click();
   await expect.poll(() => roomPage(room)).toBe(1);
   if (process.env["LECTERN_SHOTS"]) await phone.screenshot({ path: `${process.env["LECTERN_SHOTS"]}/view-buttons.png` });
@@ -591,7 +627,7 @@ test("a phone held sideways shows two very large buttons that still drive the ta
   // Turned upright again, the slide and notes come back on the right page.
   await phone.setViewportSize(PHONE);
   await expect(phone.locator("#current")).toBeVisible();
-  await expect(phone.locator("#frame-line")).toHaveText("Frame 2 of 7");
+  await expect(phone.locator("#frame-line")).toHaveText("Frame 2 / 7");
   await expect.poll(() => viewHook(phone, (h) => h.shownPage())).toBe(1);
   await phone.context().close();
   await room.close();
@@ -644,11 +680,14 @@ test("a talk nobody shows slides for is a rehearsal: devices join it, and a slid
   await expect(laptop.locator("#timer")).toHaveText("30:00 ↓"); // the .pdfpc file's 30 minutes
   await laptop.locator("#timer").click();
   await expect(laptop.locator("#clock-sub")).toHaveText("0:00 elapsed · starts with the first slide change");
+  await laptop.keyboard.press("Enter"); // closes the clock's pop-up
+  await expect(laptop.locator("#clock-pop")).toBeHidden();
+  await laptop.locator("#t-more").click();
   await expect(laptop.locator("#diag")).toHaveText("this device runs the talk");
   await laptop.locator("#more-close").click();
   await laptop.keyboard.press("ArrowRight");
   await laptop.keyboard.press("ArrowRight");
-  await expect(laptop.locator("#bar-where")).toHaveText("Frame 3/7 · 1/3");
+  await expect(laptop.locator("#bar-where")).toHaveText("Frame 3 / 7 Build 1/3");
   await expect(laptop.locator("#notes")).toContainText("every build");
   await expect(laptop.locator("#timer")).toHaveText(/^29:5\d ↓$/);
   // Ink, jumps and Back all work as they will in front of an audience.
@@ -658,17 +697,17 @@ test("a talk nobody shows slides for is a rehearsal: devices join it, and a slid
   await laptop.keyboard.press("Escape");
   await laptop.keyboard.type("6");
   await laptop.keyboard.press("Enter");
-  await expect(laptop.locator("#bar-where")).toHaveText("Frame 6/7");
+  await expect(laptop.locator("#bar-where")).toHaveText("Frame 6 / 7");
   await laptop.locator("#t-back").click();
-  await expect(laptop.locator("#bar-where")).toHaveText("Frame 3/7 · 1/3");
+  await expect(laptop.locator("#bar-where")).toHaveText("Frame 3 / 7 Build 1/3");
 
   // A phone joins the rehearsal like any other talk, and drives it.
   const phone = await openView(browser);
   await expect(phone.locator("#link")).toHaveText("No slides screen yet · 2 devices");
-  await expect(phone.locator("#frame-line")).toHaveText("Frame 3 of 7");
+  await expect(phone.locator("#frame-line")).toHaveText("Frame 3 / 7");
   expect(await viewHook(phone, (h) => h.hosting())).toBe(false);
   await phone.locator("#next").click();
-  await expect(laptop.locator("#bar-where")).toHaveText("Frame 3/7 · 2/3");
+  await expect(laptop.locator("#bar-where")).toHaveText("Frame 3 / 7 Build 2/3");
 
   // The room's computer opens the talk: it is told one is going, and Show slides picks it up
   // exactly where it stands. From then on the slides screen runs the talk.
@@ -683,7 +722,7 @@ test("a talk nobody shows slides for is a rehearsal: devices join it, and a slid
   await expect.poll(() => viewHook(laptop, (h) => h.hosting())).toBe(false);
   await phone.locator("#next").click();
   await expect.poll(() => roomPage(room)).toBe(4);
-  await expect(laptop.locator("#bar-where")).toHaveText("Frame 3/7 · 3/3");
+  await expect(laptop.locator("#bar-where")).toHaveText("Frame 3 / 7 Build 3/3");
 
   // Esc twice on the slides screen: back to its choice of views, still in the talk. The others
   // see that no screen is showing slides. One click and they are back.
@@ -701,9 +740,9 @@ test("a talk nobody shows slides for is a rehearsal: devices join it, and a slid
   await room.locator("#another").click();
   await expect(room.locator("#code")).toBeVisible();
   await expect(laptop.locator("#link")).toHaveText("No slides screen yet · 2 devices", { timeout: 10_000 });
-  await expect(laptop.locator("#bar-where")).toHaveText("Frame 3/7 · 3/3");
+  await expect(laptop.locator("#bar-where")).toHaveText("Frame 3 / 7 Build 3/3");
   await laptop.keyboard.press("ArrowRight");
-  await expect(phone.locator("#frame-line")).toHaveText("Frame 4 of 7");
+  await expect(phone.locator("#frame-line")).toHaveText("Frame 4 / 7");
   await laptop.context().close();
   await phone.context().close();
   await room.close();
@@ -727,7 +766,7 @@ test("a PDF opened on one device gets a code; a device that joins with it is sen
   await phone.locator("#next").click();
   await phone.locator("#next").click();
   await expect.poll(() => viewHook(phone, (h) => h.shownPage())).toBe(2);
-  const frame = /Frame (\d+) of 9/.exec((await phone.locator("#frame-line").textContent()) ?? "")?.[1];
+  const frame = /Frame (\d+) \/ 9/.exec((await phone.locator("#frame-line").textContent()) ?? "")?.[1];
   await phone.locator("#t-more").click();
   await expect(phone.locator("#join-text")).toHaveText(`localhost:5173/talks, code ${code}`);
   await phone.locator("#more-close").click();
@@ -869,7 +908,7 @@ test("only ciphertext crosses the relay", async ({ browser }) => {
   await room.locator("#start").click();
   await expect(phone.locator("#link")).toContainText("Slides showing");
   await phone.locator("#next").click();
-  await expect(phone.locator("#frame-line")).toHaveText("Frame 2 of 7");
+  await expect(phone.locator("#frame-line")).toHaveText("Frame 2 / 7");
 
   expect(frames.length).toBeGreaterThanOrEqual(4);
   const session = await roomHook(room, (h) => h.session());
@@ -887,7 +926,7 @@ test("a presenter view recovers by itself when the connection drops, and resyncs
   const phone = await openView(browser);
   await expect(phone.locator("#link")).toContainText("Slides showing");
   await phone.locator("#next").click();
-  await expect(phone.locator("#frame-line")).toHaveText("Frame 2 of 7");
+  await expect(phone.locator("#frame-line")).toHaveText("Frame 2 / 7");
 
   await viewHook(phone, (h) => h.drop());
   await expect(phone.locator("#link")).toHaveText("Reconnecting…");
@@ -898,7 +937,7 @@ test("a presenter view recovers by itself when the connection drops, and resyncs
 
   // No one touches the phone: it reconnects (backoff starts at 0.5 s) and picks up the current state.
   await expect(phone.locator("#link")).toContainText("Slides showing", { timeout: 10_000 });
-  await expect(phone.locator("#build-line")).toHaveText("Build 2 of 3");
+  await expect(phone.locator("#build-line")).toHaveText("Build 2/3");
   await phone.locator("#next").click();
   await expect.poll(() => roomPage(room)).toBe(4);
 
@@ -920,9 +959,9 @@ test("when the slides screen leaves, the talk carries on; when it returns it pic
   await room.locator("#another").click();
   await expect(room.locator("#code")).toBeVisible();
   await expect(phone.locator("#link")).toHaveText("No slides screen yet", { timeout: 10_000 });
-  await expect(phone.locator("#frame-line")).toHaveText("Frame 2 of 7");
+  await expect(phone.locator("#frame-line")).toHaveText("Frame 2 / 7");
   await phone.locator("#next").click();
-  await expect(phone.locator("#frame-line")).toHaveText("Frame 3 of 7");
+  await expect(phone.locator("#frame-line")).toHaveText("Frame 3 / 7");
 
   // It comes back: the talk is where the phone left it, under a new session id.
   await room.locator("#code").fill(CODE);

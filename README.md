@@ -44,13 +44,16 @@ npm run revoke -- talk.pdf       # take a deck down
 
 One view for you, on whatever you have: your laptop or tablet on the lectern, your phone in your hand, or a second window on the computer showing the slides. Several can be open at once, and they all stay in step.
 
-- **It fits the screen.** A laptop or a tablet on its side gets the slide, the next slide and notes side by side; a tablet upright stacks them; a phone gets a compact column; a phone held sideways shows just two very large buttons.
+- **It fits the screen.** A laptop or a tablet on its side gets the native app's arrangement: the current slide on the left with its tools directly under it, the next slide and notes on the right, and a status bar along the bottom with the frame, the clock and everything else. Drag the dividers to resize. A tablet upright stacks the panes; a phone gets a compact column; a phone held sideways shows just two very large buttons.
 - **Stepping:** arrow keys, Space, Page Up/Down or a clicker; click the slide with a mouse; swipe, or tap Next/Prev, on a touch screen.
 - **It fills the screen** when you choose it. Out of full screen, a **Full screen** button sits at the top. Esc twice goes back to the choice of views, as on the slides.
-- **Slides** (Tab) shows every frame, with search. Picking one jumps there at once; **Back** returns. The frame the talk is in shows the build on screen and lists its builds, each a click away; **Builds** shows every build as its own thumbnail.
+- **Overview** (Tab) shows every frame, with search (Ctrl+F or Cmd+F). Picking one jumps there at once; **Back** returns. The frame the talk is in shows the build on screen and lists its builds, each a click away; **Builds** shows every build as its own thumbnail.
 - **Outline**, beside Notes, lists the PDF's sections with the one you are in lit; click one to jump. The **i** beside each says where notes and outlines come from.
 - **Pointer:** press and hold on the slide, then drag. With a mouse, **Laser** (L) points wherever the mouse goes.
 - **Draw** (D) writes on the slide in three colours, or on a whiteboard (**Board**). A pen always draws, without turning Draw on. Everyone's ink shows on every presenter view.
+- **Back** appears under the slide after a jump and says where it goes ("Back to Frame 12").
+- **Click the clock** to pause it, reset it, or count down from a time.
+- **?** shows the keyboard shortcuts.
 - **More** has the clock, the whiteboard, connection numbers, and **End talk**, which asks first. Enter closes it.
 - **Rehearse** by opening the talk in the presenter view with no screen showing slides; other devices can join. The top line says "No slides screen yet". The clock starts with the first slide change.
 - **More → Change view** (or Esc twice) returns to the choice of views without leaving the talk, to put the slides on this device's screen or its second screen.

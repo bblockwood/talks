@@ -822,3 +822,44 @@ Verification: build; 295 unit tests (new: outline); 42 e2e tests (new: drop a PD
 6. **More**: press Enter to close it. **End talk…**: the question appears in the middle; Cancel.
 7. Phone: check the Notes/Outline heading and A−/A+ fit, and **More → Change view**.
 8. Projector, **Both views** in Chrome: Esc twice in the presenter window should close it and bring the first window back to the preview page.
+
+## W9. The presenter view laid out like the native app (2026-11-27)
+
+Ben liked the Mac app's presenter layout better and asked for the differences. I listed 14; he approved them, with Black and Freeze under the slide, the name "Overview", and no appendix detection. Plan: rows 1–12 and 14 of that list.
+
+### Done (laptop-sized screens)
+
+- **Status bar at the bottom**, three regions: "Frame 12 / 40" and "Build 2/3" large on the left; the clock and wall time centred; on the right the BLACK/FROZEN pill, the connection line, Full screen, More, and Swap displays in the corner.
+- **"Current" over the slide.** The slide is fitted (no black bars) and pinned to the top, level with the next slide.
+- **Tools directly under the slide, at its width:** Laser, Draw (with colours, Undo, Clear and Board beside it while drawing), Black, Freeze, a one-line hint for the active tool. Buttons show their key and light in the native colours. When the row is too narrow it drops the hint, then the destinations, then the key badges.
+- **Back and Forward appear only after a jump** and say where they go: "Back to Frame 12", or "Back to build 3" within the frame.
+- **Overview** (was Slides) is a toggle above the next slide that stays in place and stays lit. Search shows the match count and a clear button; Ctrl+F or Cmd+F opens it.
+- **"Next: end of deck"** on the last slide.
+- **A second divider** between Next and Notes; the left pane starts at 68%. Both positions are remembered on a device where the talk is remembered.
+- **A click on the clock** opens a small pop-up beside it with the clock's controls; they are still under More.
+- **"Go to frame 12 ⏎"** shows large at the bottom left while a number is typed.
+- **?** shows the keyboard shortcuts; also under More.
+- **Black background** with faint panes.
+
+Phones and upright tablets keep their arrangement, bar at the top, with the same wording ("Frame 3 / 8", "Build 2/3"), the tools under the slide, More in the top bar, Back only after a jump, and the clock pop-up.
+
+Verification: build; 295 unit tests; 42 e2e tests (the laptop test now measures the layout: bar at the bottom, clock centred, tools under the slide at its width, slide fitted, headings level).
+
+### Known issues
+
+- Compared against the Mac app's source, not side by side with the running app, so spacing and sizes are close rather than identical. Ben's eye is the test.
+- On a phone the tools moved from just above Prev/Next to under the slide, and More moved to the top bar.
+- No appendix badge or marks (decided).
+- The key badge on Back shows ⌫ on every platform; Swap displays has no badge.
+
+### Ben checklist: W9
+
+1. Laptop, presenter view, next to the Mac app with the same deck: compare the status bar, "Current", the tools under the slide, the next slide and notes.
+2. Type a frame number and Enter: the number shows large at the bottom left, then "Back to Frame N" appears under the slide. Click it.
+3. Press L, then D: each button lights in its colour and a hint appears. In Draw, the colours sit in the same row.
+4. Click **Overview** (or Tab): it stays lit in the same place. Ctrl+F or Cmd+F, search a word.
+5. Click the clock: set a countdown, press Enter.
+6. Drag both dividers.
+7. Press **?**.
+8. Phone and iPad upright: check nothing is cramped or cut off, especially the row under the slide while drawing.
+9. Projector, Both views: Swap displays is in the bottom right corner.

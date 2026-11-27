@@ -98,7 +98,7 @@ test("two screens: the presenter view in a second window drives the audience win
   // The same presenter view as on any other device, here joined without a code or the relay.
   expect(await view((h) => h.kind())).toBe("local");
   expect(await view((h) => h.layout())).toBe("wide");
-  await expect(presenter.locator("#bar-where")).toHaveText("Frame 1/7");
+  await expect(presenter.locator("#bar-where")).toHaveText("Frame 1 / 7");
   await expect(presenter.locator("#timer")).toHaveText(/^(30:00|29:\d\d) ↓$/);
   await expect(presenter.locator("#link")).toHaveText("Slides on the other screen");
   await expect(presenter.locator("#entry")).toBeHidden();
@@ -106,10 +106,10 @@ test("two screens: the presenter view in a second window drives the audience win
   // Keys in the presenter window move the audience.
   await presenter.keyboard.press("ArrowRight");
   await expect.poll(() => roomPage(main)).toBe(1);
-  await expect(presenter.locator("#bar-where")).toHaveText("Frame 2/7");
+  await expect(presenter.locator("#bar-where")).toHaveText("Frame 2 / 7");
   await expect(presenter.locator("#notes")).toContainText("Sidecar note for frame 2");
   await presenter.keyboard.press("PageDown");
-  await expect(presenter.locator("#bar-where")).toHaveText("Frame 3/7 · 1/3");
+  await expect(presenter.locator("#bar-where")).toHaveText("Frame 3 / 7 Build 1/3");
   await expect.poll(() => view((h) => h.shownPage())).toBe(2);
   if (process.env["LECTERN_SHOTS"]) await presenter.screenshot({ path: `${process.env["LECTERN_SHOTS"]}/presenter.png` });
 
@@ -220,7 +220,7 @@ test("two screens plus a phone: three views of one talk; closing the second wind
   await expect(phone.locator("#link")).toContainText("Slides showing");
   await expect(presenter.locator("#link")).toHaveText("Slides on the other screen · 1 more device");
   await phone.locator("#next").click();
-  await expect(presenter.locator("#bar-where")).toHaveText("Frame 2/7");
+  await expect(presenter.locator("#bar-where")).toHaveText("Frame 2 / 7");
   // Ink drawn on the phone reaches the second window on the room PC too.
   await phone.locator("#t-draw").click();
   const slide = (await phone.locator("#current").boundingBox())!;
@@ -271,7 +271,7 @@ test("a Beamer notes-split deck: the audience gets the slide half, the presenter
   await expect(presenter.locator("#notes-image")).toBeVisible();
   await expect(presenter.locator("#notes")).toBeHidden();
   await expect(presenter.locator("#notes-image canvas")).toHaveCount(1);
-  await expect(presenter.locator("#bar-where")).toHaveText("Frame 1/6");
+  await expect(presenter.locator("#bar-where")).toHaveText("Frame 1 / 6");
   await context.close();
 });
 

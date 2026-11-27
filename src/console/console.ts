@@ -27,7 +27,7 @@ import { SlideSurface } from "../shared/slide-surface";
 import { ThumbGrid } from "../shared/thumbs";
 import type { ThumbMode } from "../shared/thumbs";
 import type { ConsoleClient } from "./client";
-import { NOTES_INFO, outlineInfo } from "./info";
+import { KEYS_INFO, NOTES_INFO, outlineInfo } from "./info";
 
 const PING_MS = 2000;
 /** The host sends state every 2.5 s; past this it is treated as gone (and a successor takes over). */
@@ -77,6 +77,9 @@ export interface ConsoleOptions {
   readonly ownsDeck: boolean;
   loadNotesSize(): number | null;
   saveNotesSize(px: number): void;
+  /** Where the dividers between the panes were left, as fractions; only kept on the presenter's own device. */
+  loadSplits?: () => { left: number; top: number } | null;
+  saveSplits?: (splits: { left: number; top: number }) => void;
   /** The user closed this presenter view. */
   onLeave(): void;
   /** The room PC has a newer publish of this deck and the user asked to reload. Absent where that can't happen. */
@@ -133,6 +136,7 @@ export class PresenterConsole {
   private outlineShown = false;
   private outlineBuilt = false;
   private keyboardLocked = false;
+  private splits = { left: 0.68, top: 0.42 };
   private pageTexts: string[] | null = null;
   private hits: SearchHit[] = [];
   private selectedHit = 0;
@@ -160,6 +164,13 @@ export class PresenterConsole {
     this.notesSize = options.loadNotesSize() ?? 0;
     document.documentElement.style.setProperty("--slide-aspect", String(this.deck.aspect));
     if (this.notesSize > 0) document.documentElement.style.setProperty("--notes-size", `${this.notesSize}px`);
+
+    const splits = options.loadSplits?.() ?? null;
+    for (const name of ["left", "top"] as const) {
+      if (splits) document.documentElement.style.setProperty(`--${name}`, `${(splits[name] * 100).toFixed(1)}%`);
+      else document.documentElement.style.removeProperty(`--${name}`);
+    }
+    this.splits = splits ?? { left: 0.68, top: 0.42 };
 
     this.current = new SlideSurface($("current"), this.deck, 6);
     this.next = new SlideSurface($("next-slide"), this.deck, 4);
@@ -431,15 +442,22 @@ export class PresenterConsole {
     }
     this.showInk();
     this.current.show(page, [page + 1, page - 1].filter((p) => p >= 0 && p < pageCount));
-    this.next.show(page + 1 < pageCount ? page + 1 : page);
+    const atEnd = page + 1 >= pageCount;
+    this.next.show(atEnd ? page : page + 1);
+    $("next-slide").classList.toggle("end", atEnd);
+    $("next-label").textContent = atEnd ? "Next: end of deck" : "Next";
     void this.deck.loadLinks(page);
 
     const frame = frames.frameContaining(page);
     const builds = frame ? frame.lastPage - frame.firstPage + 1 : 1;
     const build = frames.buildIndex(page) + 1;
-    $("frame-line").textContent = frame ? `Frame ${frame.label} of ${frames.frameCount}` : "–";
-    $("build-line").textContent = builds > 1 ? `Build ${build} of ${builds}` : "";
-    $("bar-where").textContent = frame ? `Frame ${frame.label}/${frames.frameCount}${builds > 1 ? ` · ${build}/${builds}` : ""}` : "";
+    // The same words as the native app's status bar: "Frame 12 / 40", "Build 2/3".
+    const frameText = frame ? `Frame ${frame.label} / ${frames.frameCount}` : "–";
+    const buildText = builds > 1 ? `Build ${build}/${builds}` : "";
+    $("frame-line").textContent = frameText;
+    $("build-line").textContent = buildText;
+    $("bar-frame").textContent = frame ? frameText : "";
+    $("bar-build").textContent = buildText;
 
     // Notes: text when there is any; otherwise, for a Beamer notes-split deck, the notes half as an image.
     const note = this.notes.noteFor(page, frames);
@@ -482,6 +500,7 @@ export class PresenterConsole {
     $("t-draw").classList.toggle("on", this.drawMode);
     $("t-laser").classList.toggle("on", this.laserMode);
     $("drawbar").hidden = !this.drawMode;
+    $("mode-hint").textContent = this.laserMode ? "Move the mouse over the slide" : this.drawMode ? "Draw on the slide; C clears, so does the next slide" : "";
     $("current").classList.toggle("drawing", this.drawMode);
     $("current").classList.toggle("laser", this.laserMode);
     for (const el of document.querySelectorAll<HTMLElement>(".ink-color")) {
@@ -498,13 +517,26 @@ export class PresenterConsole {
     };
     const back = target(view?.history);
     const forward = target(view?.forwardHistory);
-    const label = (p: number | null): string => (p === null ? "" : (frames.frameContaining(p)?.label ?? ""));
+    // "Frame 12", or "build 3" when the target is another build of the frame on screen.
+    const destination = (p: number): string => {
+      const to = frames.frameContaining(p);
+      return to && frame && to.index === frame.index ? `build ${frames.buildIndex(p) + 1}` : `Frame ${to?.label ?? ""}`;
+    };
+    // They appear only when there is somewhere to go, and say where.
     const backButton = $<HTMLButtonElement>("t-back");
     const forwardButton = $<HTMLButtonElement>("t-forward");
-    backButton.disabled = !live || back === null;
-    forwardButton.disabled = !live || forward === null;
-    backButton.title = back === null ? "Back after a jump (Delete)" : `Back to frame ${label(back)} (Delete)`;
-    forwardButton.title = forward === null ? "Forward" : `Forward to frame ${label(forward)}`;
+    backButton.hidden = back === null;
+    forwardButton.hidden = forward === null;
+    backButton.disabled = !live;
+    forwardButton.disabled = !live;
+    if (back !== null) {
+      $("back-dest").textContent = ` to ${destination(back)}`;
+      backButton.title = `Back to ${destination(back)}, where the last jump started (Delete)`;
+    }
+    if (forward !== null) {
+      $("forward-dest").textContent = ` to ${destination(forward)}`;
+      forwardButton.title = `Forward to ${destination(forward)}, where Back came from`;
+    }
     $("clock-toggle").textContent = view?.timer.running === false ? "Resume" : "Pause";
     const countdown = view?.timer.targetMs ?? null;
     if (countdown !== null) this.lastCountdownMs = countdown;
@@ -518,7 +550,8 @@ export class PresenterConsole {
     const where = `${window.location.host}${import.meta.env.BASE_URL.replace(/\/$/, "")}`;
     $("join-text").textContent = `${where}, ${this.options.joinHint ?? "with the same talk code"}`;
 
-    $("digits").textContent = this.keys.typedDigits === "" ? "" : `Go to frame ${this.keys.typedDigits}⏎`;
+    this.showDigits();
+    this.fitTools();
     if (this.overviewOpen) this.markThumbs();
     this.tick();
   }
@@ -614,6 +647,30 @@ export class PresenterConsole {
       `this view               ${this.client.hosting ? "runs the talk" : "follows"}, ${this.layout}${rtt === null ? "" : `, ping ${Math.round(rtt)} ms`}`,
       `page ${this.page + 1}   mode ${this.view?.audienceMode.kind ?? "–"}   history ${this.view?.history.length ?? 0}`,
     ].join("\n");
+  }
+
+  /**
+   * The row under the slide is as wide as the slide. When it is too narrow for everything, the
+   * hint goes first, then the destinations after Back and Forward, then the key badges.
+   */
+  private fitTools(): void {
+    const bar = $("tools");
+    bar.classList.remove("tight", "tighter", "tightest");
+    if (this.layout !== "wide") return;
+    for (const step of ["tight", "tighter", "tightest"]) {
+      if (bar.scrollWidth <= bar.clientWidth + 1) return;
+      bar.classList.add(step);
+    }
+  }
+
+  private showDigits(): void {
+    const typed = this.keys.typedDigits;
+    const box = $("digits");
+    box.hidden = typed === "";
+    if (typed === "") return;
+    const number = document.createElement("strong");
+    number.textContent = typed;
+    box.replaceChildren("Go to frame ", number, " ⏎");
   }
 
   private async loadNotes(): Promise<void> {
@@ -737,6 +794,7 @@ export class PresenterConsole {
     // In the wide and stacked layouts the overview takes the place of the next slide and notes.
     $("side-normal").hidden = open && this.layout !== "compact";
     $("t-slides").classList.toggle("on", open);
+    $("side-slides").classList.toggle("on", open);
     if (open) {
       if (!this.thumbs) {
         $("grid").scrollTop = 0;
@@ -755,6 +813,7 @@ export class PresenterConsole {
       const search = $<HTMLInputElement>("search");
       search.value = "";
       search.blur();
+      this.hits = [];
       this.showHits("");
     }
     this.update();
@@ -791,6 +850,8 @@ export class PresenterConsole {
   private showHits(query: string): void {
     const results = $("results");
     const searching = query.trim() !== "";
+    $("search-count").textContent = !searching ? "" : this.hits.length === 0 ? "no matches" : `${this.hits.length} ${this.hits.length === 1 ? "match" : "matches"}`;
+    $("search-clear").hidden = query === "";
     results.hidden = !searching;
     $("grid").hidden = searching;
     results.replaceChildren();
@@ -845,6 +906,27 @@ export class PresenterConsole {
     else this.send({ name: "setAudienceMode", mode: { kind } });
   }
 
+  /** The clock's controls live under More; a click on the clock borrows them into a small pop-up beside it. */
+  private openClock(): void {
+    $("sheet-more").hidden = true;
+    this.prepareClock();
+    $("clock-pop-panel").append($("clock-box"));
+    $("clock-pop").hidden = false;
+    this.tick();
+  }
+
+  private closeClock(): void {
+    $("clock-pop").hidden = true;
+    $("clock-home").append($("clock-box"));
+  }
+
+  private prepareClock(): void {
+    const countFrom = $<HTMLInputElement>("count-from");
+    countFrom.classList.remove("invalid");
+    $("count-hint").hidden = true;
+    countFrom.value = formatClock(this.view?.timer.targetMs ?? this.lastCountdownMs);
+  }
+
   /** Counts down from the typed time. A time that does not parse is flagged and leaves the clock alone. */
   private countDown(close: boolean): void {
     const input = $<HTMLInputElement>("count-from");
@@ -857,7 +939,10 @@ export class PresenterConsole {
     }
     this.lastCountdownMs = ms;
     this.send({ name: "timerSetTarget", targetMs: ms });
-    if (close) $("sheet-more").hidden = true;
+    if (close) {
+      $("sheet-more").hidden = true;
+      this.closeClock();
+    }
   }
 
   private setNotesSize(px: number): void {
@@ -913,6 +998,7 @@ export class PresenterConsole {
       } else if (ev.key === "Escape") {
         ev.preventDefault();
         $("sheet-more").hidden = true;
+        this.closeClock();
       }
       if (ev.key !== "PageDown" && ev.key !== "PageUp") return;
     }
@@ -961,17 +1047,35 @@ export class PresenterConsole {
     }
     // A single Esc first clears typed digits, then turns the laser or pen off, then closes
     // whatever is open; only after that does it count towards ending the talk (Native §6.5).
-    const sheetOpen = !$("sheet-more").hidden;
-    // With More open, Enter is its Close button.
+    // The shortcut card (?), and Ctrl+F or Cmd+F for the overview's search instead of the browser's.
+    if (!ev.ctrlKey && !ev.altKey && !ev.metaKey && ev.key === "?") {
+      ev.preventDefault();
+      if (!ev.repeat) this.showInfo("Keyboard shortcuts", KEYS_INFO);
+      return;
+    }
+    if ((ev.ctrlKey || ev.metaKey) && !ev.altKey && !ev.shiftKey && (ev.key === "f" || ev.key === "F") && this.layout !== "buttons") {
+      ev.preventDefault();
+      if (!this.overviewOpen) this.setOverview(true);
+      search.focus();
+      return;
+    }
+    const clockOpen = !$("clock-pop").hidden;
+    const sheetOpen = !$("sheet-more").hidden || clockOpen;
+    // With More or the clock's pop-up open, Enter closes it.
     if (plain && sheetOpen && ev.key === "Enter") {
       ev.preventDefault();
-      if (!ev.repeat) $("sheet-more").hidden = true;
+      if (!ev.repeat) {
+        $("sheet-more").hidden = true;
+        this.closeClock();
+      }
       return;
     }
     if (plain && ev.key === "Escape" && !ev.repeat && this.keys.typedDigits === "" && (this.laserMode || this.drawMode || this.overviewOpen || sheetOpen)) {
       ev.preventDefault();
-      if (sheetOpen) $("sheet-more").hidden = true;
-      else if (this.laserMode) this.setLaser(false);
+      if (sheetOpen) {
+        $("sheet-more").hidden = true;
+        this.closeClock();
+      } else if (this.laserMode) this.setLaser(false);
       else if (this.drawMode) this.setDraw(false);
       else this.setOverview(false);
       return;
@@ -986,7 +1090,7 @@ export class PresenterConsole {
     // goes on; ending it for everyone is End talk, under More.
     if (result.end) this.options.onChangeView?.();
     else if (result.command) this.send(result.command);
-    $("digits").textContent = this.keys.typedDigits === "" ? "" : `Go to frame ${this.keys.typedDigits}⏎`;
+    this.showDigits();
   };
 
   private bind(): void {
@@ -1000,6 +1104,7 @@ export class PresenterConsole {
         const was = this.layout;
         this.applyLayout();
         if (was !== this.layout) this.setOverview(false);
+        this.fitTools();
       },
       { signal },
     );
@@ -1064,17 +1169,33 @@ export class PresenterConsole {
     for (const id of ["t-slides", "side-slides"]) on(id, () => this.setOverview(!this.overviewOpen));
     on("overview-close", () => this.setOverview(false));
     $("search").addEventListener("input", () => void this.runSearch(), { signal });
+    on("search-clear", () => {
+      $<HTMLInputElement>("search").value = "";
+      void this.runSearch();
+      $("search").focus();
+    });
 
     const openMore = (): void => {
       $("end-confirm").hidden = true;
-      clearCountError();
-      countFrom.value = formatClock(this.view?.timer.targetMs ?? this.lastCountdownMs);
+      this.closeClock();
+      this.prepareClock();
       $("sheet-more").hidden = false;
       this.tick();
     };
     on("t-more", openMore);
-    on("timer", openMore);
+    on("timer", () => this.openClock());
     on("link", openMore);
+    on("keys-show", () => {
+      $("sheet-more").hidden = true;
+      this.showInfo("Keyboard shortcuts", KEYS_INFO);
+    });
+    $("clock-pop").addEventListener(
+      "click",
+      (ev) => {
+        if (ev.target === ev.currentTarget) this.closeClock(); // a click anywhere else
+      },
+      { signal },
+    );
     on("more-close", () => ($("sheet-more").hidden = true));
     $("sheet-more").addEventListener(
       "click",
@@ -1138,25 +1259,35 @@ export class PresenterConsole {
       { signal },
     );
 
-    // The divider between the panes (wide layout). Not saved on the room PC, which stores nothing.
-    const divider = $("divider");
-    divider.addEventListener(
-      "pointerdown",
-      (down) => {
-        divider.setPointerCapture(down.pointerId);
-        const move = (ev: PointerEvent): void => {
-          const fraction = Math.min(0.8, Math.max(0.2, ev.clientX / window.innerWidth));
-          document.documentElement.style.setProperty("--left", `${(fraction * 100).toFixed(1)}%`);
-        };
-        const up = (): void => {
-          divider.removeEventListener("pointermove", move);
-          divider.removeEventListener("pointerup", up);
-        };
-        divider.addEventListener("pointermove", move);
-        divider.addEventListener("pointerup", up);
-      },
-      { signal },
-    );
+    // The dividers between the panes (wide layout): slide | next and notes, and next / notes.
+    // Remembered only on the presenter's own device; a shared computer stores nothing.
+    const drag = (id: string, name: "left" | "top", min: number, max: number, at: (ev: PointerEvent) => number): void => {
+      const divider = $(id);
+      divider.addEventListener(
+        "pointerdown",
+        (down) => {
+          divider.setPointerCapture(down.pointerId);
+          const move = (ev: PointerEvent): void => {
+            const fraction = Math.min(max, Math.max(min, at(ev)));
+            this.splits = { ...this.splits, [name]: fraction };
+            document.documentElement.style.setProperty(`--${name}`, `${(fraction * 100).toFixed(1)}%`);
+          };
+          const up = (): void => {
+            divider.removeEventListener("pointermove", move);
+            divider.removeEventListener("pointerup", up);
+            if (this.options.remember) this.options.saveSplits?.(this.splits);
+          };
+          divider.addEventListener("pointermove", move);
+          divider.addEventListener("pointerup", up);
+        },
+        { signal },
+      );
+    };
+    drag("divider", "left", 0.3, 0.85, (ev) => ev.clientX / window.innerWidth);
+    drag("hdivider", "top", 0.15, 0.8, (ev) => {
+      const box = $("side-normal").getBoundingClientRect();
+      return box.height > 0 ? (ev.clientY - box.top) / box.height : 0.42;
+    });
 
     this.bindSlide(signal);
   }
@@ -1275,7 +1406,12 @@ export class PresenterConsole {
 
   /** The page elements outlive a console (the same device can open another talk), so start and end clean. */
   private resetPanels(): void {
-    for (const id of ["sheet-more", "end-confirm", "info", "banner", "pill", "overview", "drawbar", "debug", "count-hint", "outline", "fs"]) $(id).hidden = true;
+    for (const id of ["sheet-more", "end-confirm", "info", "banner", "pill", "overview", "drawbar", "debug", "count-hint", "outline", "fs", "clock-pop", "digits", "t-back", "t-forward"]) {
+      $(id).hidden = true;
+    }
+    $("clock-home").append($("clock-box"));
+    $("search-count").textContent = "";
+    for (const id of ["t-slides", "side-slides"]) $(id).classList.remove("on");
     $("outline").replaceChildren();
     delete $("outline").dataset["current"];
     $("side-normal").hidden = false;
