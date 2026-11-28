@@ -18,7 +18,7 @@ test("the sample deck opens with notes, an outline, builds and a working link", 
 
   // The outline lists the deck's sections.
   await page.locator("#tab-outline").click();
-  for (const section of ["What Lectern does", "The two views", "Writing the deck", "During the talk", "Backup slides"])
+  for (const section of ["What Lectern is", "The two views", "Example use cases", "How it works", "Beamer-native", "Creating notes", "During the talk", "Backup slides"])
     await expect(page.locator("#outline")).toContainText(section);
   await page.locator("#tab-notes").click();
   const goTo = async (frame: number) => {
@@ -26,20 +26,20 @@ test("the sample deck opens with notes, an outline, builds and a working link", 
     await page.keyboard.press("Enter");
   };
 
-  // Frame 3 has builds, each with its own note.
-  await goTo(3);
+  // Frame 12 has builds, each with its own note.
+  await goTo(12);
   await expect(page.locator("#notes")).toContainText("five builds appear");
   await page.keyboard.press("ArrowRight");
   await expect(page.locator("#notes")).toContainText("the build about the arrow keys");
 
-  // Frame 7's note is written in Markdown.
-  await goTo(7);
+  // Frame 14's note is written in Markdown.
+  await goTo(14);
   await expect(page.locator("#notes em")).toHaveText("emphasis");
   await expect(page.locator("#notes code")).toHaveText("code");
   await expect(page.locator("#notes p.li")).toHaveCount(3);
 
-  // Frame 8's button leads to a backup slide in the appendix.
-  await goTo(8);
+  // Frame 13's button leads to a backup slide in the appendix.
+  await goTo(13);
   await expect(page.locator("#notes")).toContainText("The Outline tab beside Notes");
   await page.waitForTimeout(500); // the slide is drawn and its links read
   const slide = (await page.locator("#current canvas").first().boundingBox())!;

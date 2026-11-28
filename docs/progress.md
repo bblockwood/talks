@@ -1070,3 +1070,22 @@ Verification: build; 299 unit tests; 51 e2e tests (the sample's test now also ch
 Verification: build; 299 unit tests; 51 e2e tests (the packed copy's test now checks that only the Audience view is offered).
 
 Not changed: the opening page still says "A talk published ahead of time opens with its code here too."
+
+### W10.6. The sample deck is a tour of Lectern itself (2026-11-28)
+
+Ben's outline for `samples/tour.tex`, folded in with what was there. Subtitle: "A full-featured, browser-based PDF presenter".
+
+- 18 frames, 33 pages, 690 KB. Sections: What Lectern is (the core idea; how to use it), The two views, Example use cases (an iPad and the room's computer; two displays on the room's computer; a phone driving the projector; the packed copy), How it works, Beamer-native, Creating notes, During the talk, Backup slides.
+- **How it works** replaces "What content is where": a TikZ picture that assembles (your device, the relay as a minimal chat room, a joining device) and three lines: nothing stored on a server, the relay only passes messages along, everything end-to-end encrypted with a key made from the talk code.
+- Each use case has a small device diagram and three or four steps; the fuller wording is in the speaker notes.
+- The site's address is one macro, `\site`, near the top of the file (now `benlockwood.com/talks`), to change when Lectern has a domain of its own.
+- Kept, at Ben's word: the keyboard shortcuts, the packed copy (as the "no network" use case) and "Now open your own deck".
+- The opening page's line under the sample now says what the deck is about. `shots.mjs` and the sample's e2e test follow the new frame numbers; the screenshots are retaken.
+- Building the PDF needs `cm-super` besides the usual TeX Live packages, or the arrow glyphs come out as a bitmap font.
+
+Verification: build; 299 unit tests; 51 e2e tests.
+
+**Ben checklist**
+1. benlockwood.com/talks → **A tour of Lectern** → Presenter view: read through once, notes included, and say where the wording is off.
+2. The phone-to-projector frame is written from the design, not from a test: with an iPhone on a USB-C or HDMI adapter, check that the Audience view opened from the Home Screen fills the projector, turned sideways.
+3. A clicker plugged into the iPad (frame 6 says it works on either device): check that it advances the talk.
