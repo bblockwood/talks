@@ -911,6 +911,21 @@ button.wide {
 /* Past the last slide there is no next one. */
 #next-slide.end {
   cursor: default;
+  position: relative;
+  background: #000;
+  /* A thin rim, so the slide's outline still shows against the black page. */
+  box-shadow: inset 0 0 0 1px var(--rim);
+}
+/* The box keeps its place and outline; inside it is black, and says why. */
+#next-slide.end::after {
+  content: "(end of deck)";
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--muted);
+  font-size: 0.95rem;
 }
 #next-slide.end canvas {
   visibility: hidden;
@@ -1049,8 +1064,13 @@ button.wide {
   font-size: 0.85rem;
   white-space: nowrap;
 }
+/* A quiet close box, top right of a sheet or dialog. */
 .x {
   flex: none;
+  color: var(--muted);
+  background: none;
+  border-color: var(--rim);
+  border-radius: 0.4rem;
   width: 1.7rem;
   height: 1.7rem;
   padding: 0;

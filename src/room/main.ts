@@ -232,7 +232,7 @@ function showTalkStatus(): void {
   const phone = $("phone-status");
   const canJoin = talk.relayStatus === "connected";
   phone.replaceChildren();
-  if (PACKED) phone.textContent = "A packed copy: the slides are inside this file, and it runs on this computer only.";
+  if (PACKED) phone.textContent = "A packed copy: the slides are inside this file. It shows the Audience view, on this computer only.";
   else if (talk.relayStatus === "none") phone.textContent = "Other devices can't join: this build has no relay.";
   else if (!canJoin) phone.textContent = "Not connected: other devices can't join right now.";
   else phone.textContent = `Other devices join with this code at ${window.location.host}${import.meta.env.BASE_URL.replace(/\/$/, "")}`;
@@ -277,6 +277,10 @@ function showReady(): void {
   showBoth();
   setStatus("");
   $("leave-row").hidden = PACKED;
+  // A packed copy shows the slides and nothing else (Ben, 2026-11-28).
+  $("presenter").hidden = PACKED;
+  $("both").hidden = PACKED;
+  $("both-note").hidden ||= PACKED;
   // Only for slides opened from a file here: a published talk is never written to a disk.
   $("pack-row").hidden = PACKED || FROM_DISK || !talk.source.originator;
   // On a phone the presenter view is the likely choice; on a computer, either.
@@ -761,7 +765,7 @@ window.addEventListener("keydown", (ev) => {
   if (!talk || ready.hidden || entry.hidden || active || presentation) return;
   ev.preventDefault();
   if (ev.repeat || !screenPick.hidden || !endConfirm.hidden) return;
-  if (lastView === "presenter") showPresenter();
+  if (lastView === "presenter" && !PACKED) showPresenter();
   else if (lastView === "both" && !$<HTMLButtonElement>("both").disabled) start(canFullscreen(), true);
   else start(canFullscreen());
 });

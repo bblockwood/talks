@@ -7,7 +7,6 @@ export const NOTES_INFO = [
   "- **pdfpc package.** In LaTeX, `\\usepackage{pdfpc}` and `\\pdfpcnote{…}` inside a frame; `\\only<2>{\\pdfpcnote{…}}` for one build only.",
   "- **pdfcomment package.** `\\usepackage{pdfcomment}` and `\\pdfcomment{…}` or `\\pdfmargincomment{…}` inside a frame. The comments' text becomes the notes; they are never drawn on the slide.",
   "- **Beamer notes on a second screen.** `\\usepackage{pgfpages}` and `\\setbeameroption{show notes on second screen=right}` (or `left`, `bottom`), with `\\note{…}` in frames. Each page then holds the slide and its notes side by side: the page where the view is chosen offers to hide the notes half from the audience, and it is shown here as an image.",
-  "A talk published ahead of time with the `publish` tool also carries the notes kept in files beside the PDF: a `talk.pdfpc` file as pdfpc writes it, the speaker notes of a `.pptx` with the same name, and a `talk.lectern.json` sidecar, which comes before all the others.",
   "Text notes render basic Markdown (*emphasis*, `code`, lists, line breaks). A− and A+ change their size.",
 ].join("\n\n");
 

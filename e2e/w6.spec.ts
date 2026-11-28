@@ -35,7 +35,10 @@ test("a packed copy opened from disk shows its slides and runs the talk, with no
   await expect(page).toHaveTitle("My talk.pdf · Lectern");
   await expect(page.locator("#deck-summary")).toHaveText("9 frames, 23 pages");
   await expect(page.locator("#phone-status")).toContainText("packed copy");
-  await expect(page.locator("#both")).toBeDisabled();
+  // A packed copy offers the Audience view and nothing else.
+  await expect(page.locator("#start")).toBeVisible();
+  await expect(page.locator("#presenter")).toBeHidden();
+  await expect(page.locator("#both")).toBeHidden();
   await expect(page.locator("#leave-row")).toBeHidden();
   await expect(page.locator("#pack-row")).toBeHidden();
   await expect(page.locator("#code-line")).toBeHidden();
@@ -59,15 +62,12 @@ test("a packed copy opened from disk shows its slides and runs the talk, with no
   });
   expect(lit).toBeGreaterThan(100);
 
-  // And the presenter view, in the same window.
+  // Esc twice returns to the page where the view is chosen, which still offers only the slides.
   await page.waitForTimeout(1600);
   await page.keyboard.press("Escape");
   await page.keyboard.press("Escape");
   await expect(page.locator("#ready")).toBeVisible();
-  await page.locator("#presenter").click();
-  await expect(page.locator("#frame-line")).toHaveText("Frame 2 / 9");
-  await page.keyboard.press("Shift+ArrowRight");
-  await expect(page.locator("#frame-line")).toHaveText("Frame 3 / 9");
+  await expect(page.locator("#presenter")).toBeHidden();
   // The PDF reader runs in a worker of its own, not on the page's thread.
   expect(warnings.filter((w) => /fake worker/i.test(w))).toEqual([]);
   expect(problems.filter((p) => !/cmap|standard_fonts|font/i.test(p))).toEqual([]);

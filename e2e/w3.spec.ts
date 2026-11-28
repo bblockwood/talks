@@ -487,7 +487,7 @@ test("a laptop joined by code gets the full presenter view and drives the room P
   // More: Close is the blue button and Enter presses it. The notes size and the old
   // "Slides for the audience" line are gone from it.
   await laptop.locator("#link").click();
-  await expect(laptop.locator("#more-close")).toHaveClass(/primary/);
+  await expect(laptop.locator("#more-close")).toHaveClass(/\bx\b/);
   await expect(laptop.locator("#sheet-more")).not.toContainText("Notes size");
   await expect(laptop.locator("#sheet-more")).not.toContainText("Slides for the audience");
   await laptop.keyboard.press("Enter");

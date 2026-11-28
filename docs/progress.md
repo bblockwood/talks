@@ -1059,3 +1059,14 @@ Ben's changes to `samples/tour.tex`: the revenue curve is gone; a frame shows ho
 - With the curve gone, the only TikZ animation is the diagram that assembles over five builds.
 
 Verification: build; 299 unit tests; 51 e2e tests (the sample's test now also checks the Markdown note and the new link).
+
+### W10.5. Quiet close boxes; end of deck; a packed copy is the Audience view only (2026-11-28)
+
+1. **Connection settings and the "i" panes close with a small × box** at the top right, not a blue Close button. Esc and a click outside still close them.
+2. **The Notes "i" pane no longer mentions publishing** (not offered to others for now).
+3. **Past the last slide,** the Next box keeps its label, place and outline; inside it is black with "(end of deck)" centred. (The label used to change to "Next: end of deck" over an empty box.)
+4. **A packed copy offers the Audience view only.** Presenter view and Both views are hidden there, the download button's hint says so, and the sample deck's frame and the README say the same. The Audience view's own keys, Menu bar, overview, laser and draw still work in it.
+
+Verification: build; 299 unit tests; 51 e2e tests (the packed copy's test now checks that only the Audience view is offered).
+
+Not changed: the opening page still says "A talk published ahead of time opens with its code here too."

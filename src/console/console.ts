@@ -465,7 +465,6 @@ export class PresenterConsole {
     const atEnd = page + 1 >= pageCount;
     this.next.show(atEnd ? page : page + 1);
     $("next-slide").classList.toggle("end", atEnd);
-    $("next-label").textContent = atEnd ? "Next: end of deck" : "Next";
     void this.deck.loadLinks(page);
 
     const frame = frames.frameContaining(page);
