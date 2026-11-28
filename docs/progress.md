@@ -1107,3 +1107,16 @@ Known issues: a packed copy now needs a browser with `DecompressionStream` (Chro
 2. On the iPad's presenter view, press **White**: Draw should be lit, and a finger or Pencil should write on the board, which shows on the projector. **White** again: back to the slide, Draw off.
 3. On a phone showing the slides, bring up the bar with two taps, tap **White**, draw, then tap **White** again: the bar should stay up while the board is shown, so there is a way back.
 4. With a mouse on the slides, move it: the Lectern mark at the bottom left should be easy to find on both light and dark slides.
+
+### W10.8. The tour's roadmap; "Slides loaded locally"; a grey Menu button (2026-11-28)
+
+1. **The tour's sections are its roadmap:** How to use it, How it works, Designing slides, Useful features (the core idea and the roadmap come before the first). 21 frames, 44 pages.
+2. **A new frame under Useful features,** "The room's computer keeps going if the network fails": the whole PDF is sent to a joining device and held in memory; the page says "Slides loaded locally"; the room's keyboard or clicker still runs the talk; other devices fall back into step when the connection returns.
+3. **Under the preview,** on the page where a view is chosen: "Slides loaded locally: they keep working here if the network fails."
+4. **The Menu button on the slides** is dark grey with a lighter grey rim.
+
+Verification: build; 303 unit tests; 51 e2e tests (the sample's test checks the new sections and the line under the preview).
+
+**Ben checklist**
+1. On a classroom PC, join a talk, see "Slides loaded locally" under the preview, start the Audience view, then pull the network cable: the keyboard and a clicker should still step through every slide.
+2. Move the mouse on a light slide and on a dark one: the grey Menu button should be findable on both.

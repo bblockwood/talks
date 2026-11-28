@@ -9,6 +9,7 @@ async function openSample(page: Page): Promise<void> {
   const source = await page.request.get(await page.locator("#sample-tour-tex").evaluate((a: HTMLAnchorElement) => a.href));
   expect(await source.text()).toContain("\\title{A tour of Lectern}");
   await page.locator("#sample-tour").click();
+  await expect(page.locator("#local-line")).toHaveText(/^Slides loaded locally/);
   await page.locator("#presenter").click();
   await expect(page.locator("#console")).toBeVisible();
 }
@@ -21,7 +22,7 @@ test("the sample deck opens with notes, an outline, builds and a working link", 
 
   // The outline lists the deck's sections.
   await page.locator("#tab-outline").click();
-  for (const section of ["The idea", "Operating Lectern", "Designing slides", "Useful features", "Backup slides"])
+  for (const section of ["How to use it", "How it works", "Designing slides", "Useful features", "Backup slides"])
     await expect(page.locator("#outline")).toContainText(section);
   await page.locator("#tab-notes").click();
   const goTo = async (frame: number) => {

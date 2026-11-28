@@ -144,7 +144,7 @@ export class Presentation {
     this.menu.className = "aud-menu";
     // The Lectern mark, not a word (Ben, 2026-11-28).
     this.menu.innerHTML =
-      '<svg viewBox="0 0 1024 1024" aria-hidden="true"><rect width="1024" height="1024" rx="228" fill="#0736A8"/><g fill="#FFFFFF"><path d="M254 357 Q246 360 241 371 L228 395 Q220 410 233 418 Q238 422 246 421 L778 351 Q794 349 789 333 L758 272 Q754 261 743 265 Z"/><path d="M489 406 L531 400 L531 756 L489 756 Z"/><rect x="317" y="756" width="390" height="43" rx="21.5"/></g></svg>';
+      '<svg viewBox="0 0 1024 1024" aria-hidden="true"><rect x="24" y="24" width="976" height="976" rx="208" fill="#2B2B2B" stroke="#9A9A9A" stroke-width="48"/><g fill="#FFFFFF"><path d="M254 357 Q246 360 241 371 L228 395 Q220 410 233 418 Q238 422 246 421 L778 351 Q794 349 789 333 L758 272 Q754 261 743 265 Z"/><path d="M489 406 L531 400 L531 756 L489 756 Z"/><rect x="317" y="756" width="390" height="43" rx="21.5"/></g></svg>';
     this.menu.setAttribute("aria-label", "Menu");
     this.menu.title = options.packed ? "Tools and Exit" : "Tools, clock and Exit";
     this.menu.addEventListener("click", (ev) => {

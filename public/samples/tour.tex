@@ -68,8 +68,6 @@
   \pdfpcnote{Welcome. These are speaker notes: only the presenter view shows them, never the audience.\\\\Press the right arrow, or click the slide, to go on.}
 \end{frame}
 
-\section{The idea}
-
 \begin{frame}{The core idea}
   \begin{itemize}
     \item \textbf{A full-featured PDF presenter.} Fast, with working in-PDF links and keyboard shortcuts for quick navigation.
@@ -87,10 +85,10 @@
 
 \begin{frame}{Roadmap}
   \tableofcontents
-  \pdfpcnote{These are the deck's sections, as written in the LaTeX source. The Outline tab beside Notes lists the same ones, and a click there jumps to one.}
+  \pdfpcnote{These are the deck's sections, as written in the LaTeX source. The Outline tab beside Notes lists the same four, and a click there jumps to one.}
 \end{frame}
 
-\section{Operating Lectern}
+\section{How to use it}
 
 \begin{frame}{How to use it}
   \begin{enumerate}
@@ -230,6 +228,8 @@
   \pdfpcnote{The button is on the page where the view is chosen, after a PDF is opened from a file.\\\\A packed copy shows the Audience view on its one computer: no presenter view, and no other devices can join it. Every key and the Menu bar still work there.}
 \end{frame}
 
+\section{How it works}
+
 \begin{frame}{How it works}
   \centering
   \begin{tikzpicture}[node distance=1.2cm and 1.5cm, font=\small]
@@ -279,7 +279,7 @@
   \only<1>{\pdfpcnote{The frame counter stays at 13 while the five builds appear. Frame numbers match Beamer's own, bottom right.}}
   \only<2>{\pdfpcnote{Each build can carry a note of its own. This one belongs to the build about the arrow keys.}}
   \only<3>{\pdfpcnote{Try it: Shift and the right arrow skips the remaining builds.}}
-  \only<4>{\pdfpcnote{Type 17 and press Enter to go to frame 17. Delete or Backspace returns here.}}
+  \only<4>{\pdfpcnote{Type 18 and press Enter to go to frame 18. Delete or Backspace returns here.}}
   \only<5>{\pdfpcnote{The overview keeps working while you present: the keys still move the talk.}}
 \end{frame}
 
@@ -319,6 +319,17 @@
   \only<1-2>{\pdfpcnote{Each tool is a button in the presenter view and a key in either view.\\\\On the slides themselves, move the mouse and click the Lectern mark at the bottom left for the same tools.}}
   \only<3-4>{\pdfpcnote{What is written on the whiteboard is kept while you return to the slides, until it is cleared.}}
   \only<5-6>{\pdfpcnote{Click the clock to set a countdown. T pauses it.}}
+\end{frame}
+
+\begin{frame}{The room's computer keeps going if the network fails}
+  \begin{itemize}
+    \item When a device joins, the \textbf{whole PDF} is sent to it and held in that browser's memory.
+    \item<2-> The page says so, under the preview: \textbf{Slides loaded locally.}
+    \item<3-> From then on the slides are drawn on that computer. If the network fails, its keyboard or a clicker plugged into it still runs the talk.
+    \item<4-> Other devices fall back into step by themselves when the connection returns.
+  \end{itemize}
+  \only<1-2>{\pdfpcnote{So load the talk on the room's computer before you start, and look for that line.\\\\Nothing is written to its disk: closing the tab, or End talk, forgets the slides.}}
+  \only<3-4>{\pdfpcnote{Without a network a phone or tablet can't steer the room's computer, so know where its arrow keys are.\\\\For a room with no network at all, see Case 4, the packed copy.}}
 \end{frame}
 
 \begin{frame}{Keyboard shortcuts}
