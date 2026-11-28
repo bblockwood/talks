@@ -68,7 +68,7 @@
   \pdfpcnote{Welcome. These are speaker notes: only the presenter view shows them, never the audience.\\\\Press the right arrow, or click the slide, to go on.}
 \end{frame}
 
-\section{What Lectern is}
+\section{The idea}
 
 \begin{frame}{The core idea}
   \begin{itemize}
@@ -84,6 +84,13 @@
   \only<2>{\pdfpcnote{You are probably reading this in the presenter view. The audience view shows the slide and nothing else.}}
   \only<3>{\pdfpcnote{That matters most on a seminar room's computer, where you can't install anything: it only needs a browser.}}
 \end{frame}
+
+\begin{frame}{Roadmap}
+  \tableofcontents
+  \pdfpcnote{These are the deck's sections, as written in the LaTeX source. The Outline tab beside Notes lists the same ones, and a click there jumps to one.}
+\end{frame}
+
+\section{Operating Lectern}
 
 \begin{frame}{How to use it}
   \begin{enumerate}
@@ -102,8 +109,6 @@
   \only<4>{\pdfpcnote{The laser pointer, drawings, black and white screens and the clock are shared in the same way.\\\\If the network drops, the computer showing the slides keeps working by its own keyboard or clicker.}}
 \end{frame}
 
-\section{The two views}
-
 \begin{frame}{Audience view: the slides, full screen}
   \begin{columns}[c]
     \begin{column}{0.62\textwidth}
@@ -113,11 +118,11 @@
       \begin{itemize}
         \item Shows the slides and nothing else.
         \item Runs a talk by itself: every key works here too.
-        \item Move the mouse and click \textbf{Menu}, or tap twice, for the tools.
+        \item Move the mouse and click the Lectern mark, or tap twice, for the tools.
       \end{itemize}
     \end{column}
   \end{columns}
-  \pdfpcnote{The picture shows the bar that Menu brings up: overview, laser, draw, black and white screens, the clock and Exit. It hides itself again.\\\\With one computer and one screen, this view is all you need.}
+  \pdfpcnote{The picture shows the bar that the Lectern mark at the bottom left brings up: overview, laser, draw, black and white screens, the clock and Exit. It hides itself again.\\\\With one computer and one screen, this view is all you need.}
 \end{frame}
 
 \begin{frame}{Presenter view: notes, next slide, clock}
@@ -136,9 +141,7 @@
   \pdfpcnote{Laser and Draw work from here: point or write on the current slide, and the audience sees it.\\\\On a phone this view is mostly two large buttons, Prev and Next, with the notes above them.}
 \end{frame}
 
-\section{Example use cases}
-
-\begin{frame}{An iPad, and the room's computer}
+\begin{frame}{Case 1: an iPad, and the room's computer}
   \begin{columns}[c]
     \begin{column}{0.4\textwidth}
       \centering
@@ -162,7 +165,7 @@
   \only<2>{\pdfpcnote{A clicker sends arrow keys, so it works on whichever device it is plugged into.\\\\The phone joins with the same code and shows the presenter view: Prev, Next and your notes.}}
 \end{frame}
 
-\begin{frame}{Two displays on the room's computer}
+\begin{frame}{Case 2: two displays on the room's computer}
   \begin{columns}[c]
     \begin{column}{0.4\textwidth}
       \centering
@@ -188,7 +191,7 @@
   \only<2>{\pdfpcnote{Swap displays is at the top of the presenter view.}}
 \end{frame}
 
-\begin{frame}{No computer: a phone drives the projector}
+\begin{frame}{Case 3: no computer, phone to projector}
   \begin{columns}[c]
     \begin{column}{0.4\textwidth}
       \centering
@@ -211,7 +214,7 @@
   \pdfpcnote{The phone needs no computer in the room at all.\\\\Turn the phone sideways. On an iPhone, add the site to the Home Screen first: opened from there, the slides fill the screen without Safari's bars.}
 \end{frame}
 
-\begin{frame}{No network: carry a packed copy}
+\begin{frame}{Case 4: no network, carry a packed copy}
   \begin{columns}[c]
     \begin{column}{0.56\textwidth}
       \shot{\textwidth}{pack}
@@ -220,14 +223,12 @@
       \begin{itemize}
         \item \textbf{Download a packed copy} saves one HTML file: Lectern with your slides inside.
         \item Put it on a thumb drive and open it in Chrome or Edge.
-        \item It needs no network, and shows the Audience view only.
+        \item It needs no network, and shows the Audience view only, without a clock.
       \end{itemize}
     \end{column}
   \end{columns}
   \pdfpcnote{The button is on the page where the view is chosen, after a PDF is opened from a file.\\\\A packed copy shows the Audience view on its one computer: no presenter view, and no other devices can join it. Every key and the Menu bar still work there.}
 \end{frame}
-
-\section{How it works}
 
 \begin{frame}{How it works}
   \centering
@@ -251,7 +252,7 @@
   \only<3>{\pdfpcnote{The code is the key, so anyone who has the code can join the talk. When the talk ends, every device forgets the slides.\\\\The notes travel too, and never reach an audience view.}}
 \end{frame}
 
-\section{Beamer-native}
+\section{Designing slides}
 
 \begin{frame}{Any PDF works, but it is built for Beamer}
   \begin{itemize}
@@ -275,10 +276,10 @@
     \item<4-> \key{A number, then Enter,} goes to that frame.
     \item<5-> \key{Tab} shows every frame at once.
   \end{itemize}
-  \only<1>{\pdfpcnote{The frame counter stays at 12 while the five builds appear. Frame numbers match Beamer's own, bottom right.}}
+  \only<1>{\pdfpcnote{The frame counter stays at 13 while the five builds appear. Frame numbers match Beamer's own, bottom right.}}
   \only<2>{\pdfpcnote{Each build can carry a note of its own. This one belongs to the build about the arrow keys.}}
   \only<3>{\pdfpcnote{Try it: Shift and the right arrow skips the remaining builds.}}
-  \only<4>{\pdfpcnote{Type 15 and press Enter to go to frame 15. Delete or Backspace returns here.}}
+  \only<4>{\pdfpcnote{Type 17 and press Enter to go to frame 17. Delete or Backspace returns here.}}
   \only<5>{\pdfpcnote{The overview keeps working while you present: the keys still move the talk.}}
 \end{frame}
 
@@ -293,8 +294,6 @@
   \pdfpcnote{The Outline tab beside Notes lists this deck's sections; a click on one jumps there.\\\\Links work with a click in either view.}
 \end{frame}
 
-\section{Creating notes}
-
 \begin{frame}[label=notes]{Speaker notes: \texttt{\textbackslash pdfpcnote} inside the frame}
   \BUseVerbatim[fontsize=\small]{codenotes}
 
@@ -306,7 +305,21 @@
   \pdfpcnote{This note is written in Markdown, as the notes of your own deck can be:\\\\- *emphasis* with asterisks\\- `code` with backticks\\- a list, one dash per line\\\\Two backslashes in the LaTeX source start a new line. A- and A+ above change the size of this text.}
 \end{frame}
 
-\section{During the talk}
+\section{Useful features}
+
+\begin{frame}{Tools, on any device in the talk}
+  \begin{itemize}
+    \item \textbf{Laser:} point with the mouse or a finger; the audience sees the dot.
+    \item<2-> \textbf{Draw:} write on the current slide, in three colours. The ink goes when the slide does.
+    \item<3-> \textbf{Whiteboard:} \key{W} gives a white screen with Draw already on. \key{W} again returns to the slide.
+    \item<4-> \textbf{Black:} \key{B} darkens the screen while you talk.
+    \item<5-> \textbf{Clock:} counts up, or down from a length you set.
+    \item<6-> \textbf{Overview:} \key{Tab} shows every frame; click one to go there.
+  \end{itemize}
+  \only<1-2>{\pdfpcnote{Each tool is a button in the presenter view and a key in either view.\\\\On the slides themselves, move the mouse and click the Lectern mark at the bottom left for the same tools.}}
+  \only<3-4>{\pdfpcnote{What is written on the whiteboard is kept while you return to the slides, until it is cleared.}}
+  \only<5-6>{\pdfpcnote{Click the clock to set a countdown. T pauses it.}}
+\end{frame}
 
 \begin{frame}{Keyboard shortcuts}
   \begin{columns}[T]
@@ -325,7 +338,7 @@
       \begin{itemize}
         \item \key{L} laser pointer
         \item \key{D} draw, \key{C} clear the ink
-        \item \key{B} black, \key{W} white screen
+        \item \key{B} black, \key{W} whiteboard
         \item \key{T} pause the clock
         \item \key{?} every shortcut
       \end{itemize}
@@ -340,7 +353,7 @@
     \item \textbf{Leave this talk,} then open a PDF from this device.
     \item Its talk code lets your phone or laptop join.
   \end{itemize}
-  \pdfpcnote{The last frame of the main talk. What follows is the appendix, reached by the buttons on frames 13 and 14.}
+  \pdfpcnote{The last frame of the main talk. What follows is the appendix, reached by the buttons on frames 14 and 15.}
 \end{frame}
 
 \appendix

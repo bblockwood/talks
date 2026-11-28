@@ -31,7 +31,7 @@ export const keysInfo = (mac: boolean): string => {
     `- **Back after a jump:** ${mac ? "`Delete`" : "`Backspace` or `Delete`"} or ${mod("[")}. **Forward again:** ${mod("]")}`,
     `- **Overview:** \`Tab\`. **Search:** ${mod("F")}`,
     "- **Laser:** `L`. **Draw:** `D`. **Clear the ink:** `C`",
-    "- **Black:** `B` or `.` **White,** to draw on: `W`",
+    "- **Black:** `B` or `.` **Whiteboard** (white, with Draw on): `W`",
     "- **Pause the clock:** `T`",
     `- **Swap displays** (two screens): ${mod("D")}`,
     "- **Exit to the choice of views:** `Esc` twice. One `Esc` closes whatever is open",
@@ -40,7 +40,7 @@ export const keysInfo = (mac: boolean): string => {
 };
 
 /** The same card on the slides themselves, for a talk run from one device with one screen. */
-export const stageKeysInfo = (mac: boolean): string => {
+export const stageKeysInfo = (mac: boolean, clock = true): string => {
   const mod = (key: string): string => (mac ? `\`⌘${key}\`` : `\`Ctrl\`+\`${key}\``);
   return [
     "- **Next:** `→` `↓` `Space` `Page Down` `Enter` `N`, or a click on the slide",
@@ -50,9 +50,9 @@ export const stageKeysInfo = (mac: boolean): string => {
     `- **Back after a jump:** ${mac ? "`Delete`" : "`Backspace` or `Delete`"} or ${mod("[")}. **Forward again:** ${mod("]")}`,
     "- **Overview:** `Tab`; a click on a frame goes there",
     "- **Laser:** `L`, then move the mouse. **Draw:** `D`. **Clear the ink:** `C`",
-    "- **Black:** `B` or `.` **White,** to draw on: `W`",
-    "- **Pause the clock:** `T`",
-    "- **Tools, clock and Exit:** move the mouse and click **Menu** at the bottom left, or tap twice",
+    "- **Black:** `B` or `.` **Whiteboard** (white, with Draw on): `W`",
+    ...(clock ? ["- **Pause the clock:** `T`"] : []),
+    `- **Tools${clock ? ", clock" : ""} and Exit:** move the mouse and click the Lectern mark at the bottom left, or tap twice`,
     "- **Back to the choice of views:** `Esc` twice. One `Esc` closes whatever is open",
   ].join("\n");
 };

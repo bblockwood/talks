@@ -51,6 +51,7 @@ test("a packed copy opened from disk shows its slides and runs the talk, with no
   await expect(page.locator(".aud-where")).toHaveText(/^Frame 2 \/ 9/);
   await expect(page.locator(".aud-overview .thumb")).toHaveCount(9);
   await expect(page.locator(".aud-link")).toHaveText("This device only");
+  await expect(page.locator(".aud-clock")).toBeHidden(); // no clock in a packed copy
   // The slide itself was drawn by the PDF reader running inside the file: not a black canvas.
   await page.keyboard.press("Tab");
   const lit = await page.evaluate(() => {

@@ -1089,3 +1089,21 @@ Verification: build; 299 unit tests; 51 e2e tests.
 1. benlockwood.com/talks → **A tour of Lectern** → Presenter view: read through once, notes included, and say where the wording is off.
 2. The phone-to-projector frame is written from the design, not from a test: with an iPhone on a USB-C or HDMI adapter, check that the Audience view opened from the Home Screen fills the projector, turned sideways.
 3. A clicker plugged into the iPad (frame 6 says it works on either device): check that it advances the talk.
+
+### W10.7. A whiteboard, a lighter packed copy, the tour's source (2026-11-28)
+
+1. **Opening page:** "New here? Take a tour with a sample deck", and the deck's `tour.tex` as a download link in the text under the button.
+2. **The tour deck:** the use cases are "Case 1" to "Case 4"; four sections (The idea, Operating Lectern, Designing slides, Useful features) with a Roadmap frame after the core idea; a new frame on the tools (laser, draw, whiteboard, black, clock, overview). 20 frames, 40 pages.
+3. **The Menu button on the slides is the Lectern mark.**
+4. **The packed copy is 0.8 MB, from 2.3 MB.** Not by removing drawing, which is a few kB: the app and the PDF reader's worker are gzipped inside the page and unpacked as it opens. The clock is removed from a packed copy.
+5. **White is a whiteboard:** Draw comes on with it and goes off with it, on every device in the talk.
+
+Verification: build; 303 unit tests (new: the whiteboard rule; the downloadable source matches `samples/tour.tex`); 51 e2e tests (now also: Draw follows white in both views; no clock in a packed copy; the source link).
+
+Known issues: a packed copy now needs a browser with `DecompressionStream` (Chrome and Edge since 2020, Safari 16.4, Firefox 113). An older one shows the "browser is too old" line.
+
+**Ben checklist**
+1. Download a packed copy of a real deck, put it on a thumb drive, and open it on a classroom PC with the network unplugged: it should open as before, a little later than instantly (it unpacks first), and show no clock in the bar.
+2. On the iPad's presenter view, press **White**: Draw should be lit, and a finger or Pencil should write on the board, which shows on the projector. **White** again: back to the slide, Draw off.
+3. On a phone showing the slides, bring up the bar with two taps, tap **White**, draw, then tap **White** again: the bar should stay up while the board is shown, so there is a way back.
+4. With a mouse on the slides, move it: the Lectern mark at the bottom left should be easy to find on both light and dark slides.

@@ -55,11 +55,12 @@
           <p class="hint">The PDF is not uploaded or stored anywhere. It opens in this browser, and you get a talk code for your other devices.</p>
         </section>
         <section id="samples" class="card">
-          <h2>New here? Try a sample deck</h2>
+          <h2>New here? Take a tour with a sample deck</h2>
           <div class="choices"><button id="sample-tour" type="button">A tour of Lectern</button></div>
           <p class="hint">
             A short deck on what Lectern is, how to use it and how it works, with builds, speaker notes, an outline
-            and links between slides. Choose <strong>Presenter view</strong> to see the notes.
+            and links between slides. Choose <strong>Presenter view</strong> to see the notes. Its LaTeX source,
+            to see how it is made: <a id="sample-tour-tex" href="samples/tour.tex" download="lectern-tour.tex">tour.tex</a>.
           </p>
         </section>
         <div id="fixtures" class="choices" hidden></div>
@@ -125,7 +126,7 @@
           <p class="keys">
             <kbd>→</kbd> <kbd>Space</kbd> <kbd>Page Down</kbd> next · <kbd>←</kbd> <kbd>Page Up</kbd> previous ·
             <kbd>Shift</kbd>+<kbd>→</kbd>/<kbd>←</kbd> next/previous frame · number then <kbd>Enter</kbd> jump to frame ·
-            <kbd>Delete</kbd> back after a jump · <kbd>B</kbd> black · <kbd>W</kbd> white · <kbd>T</kbd> pause clock ·
+            <kbd>Delete</kbd> back after a jump · <kbd>B</kbd> black · <kbd>W</kbd> whiteboard · <span id="key-clock"><kbd>T</kbd> pause clock ·</span>
             <kbd>Esc</kbd> twice to come back to this page · <kbd>F5</kbd> here (a clicker's start button) to show the same view again, where the talk stands
           </p>
           <p class="hint">In the presenter view, type <kbd>?</kbd> to see the keys at any time.</p>
@@ -192,7 +193,7 @@
                   <button id="ink-clear" class="tool">Clear <kbd>C</kbd></button>
                 </span>
                 <button id="t-black" class="tool" title="Black screen (B)">Black <kbd>B</kbd></button>
-                <button id="t-white" class="tool" title="White screen to draw on (W)">White <kbd>W</kbd></button>
+                <button id="t-white" class="tool" title="Whiteboard: a white screen with Draw on (W)">White <kbd>W</kbd></button>
                 <span id="mode-hint" class="mode-hint"></span>
                 <span class="spacer"></span>
                 <button id="t-back" class="tool" hidden><span class="arrow" aria-hidden="true">←</span><span class="dest" id="back-dest"></span></button>

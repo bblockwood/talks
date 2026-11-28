@@ -1,7 +1,12 @@
 // Folds the standalone build (.standalone/) into one self-contained page, with a marker where
 // the app later puts a PDF. Usage: node tools/make-standalone.mjs [out.html]
+//
+// The page carries the app and the PDF reader's worker gzipped (as base64, in inert script
+// elements), and a few lines that unpack and start them: about a third of the size of the same
+// code written out (Ben, 2026-11-28).
 import { readFile, writeFile, readdir, mkdir } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
+import { gzipSync } from "node:zlib";
 import path from "node:path";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
@@ -15,7 +20,7 @@ const one = (ext) => {
   if (found.length !== 1) throw new Error(`expected one ${ext} file in the standalone build, found ${found.length}`);
   return readFile(path.join(from, "assets", found[0]), "utf8");
 };
-const js = await one(".js");
+let js = await one(".js");
 const css = await one(".css");
 let html = await readFile(path.join(from, "index.html"), "utf8");
 
@@ -32,8 +37,40 @@ replaceOnce(
 html = html.replace(/<link rel="(manifest|apple-touch-icon)"[^>]*>\s*/g, "");
 replaceOnce(/<link rel="stylesheet"[^>]*>/, `<style>${css.replaceAll("</style", "<\\/style")}</style>`, "the stylesheet");
 html = html.replace(/<script type="module"[^>]*src="[^"]*"[^>]*><\/script>\s*/g, "");
-// Inside a script element only "</script" ends it; in JavaScript source "<\/script" means the same.
-replaceOnce(/<\/body>/, `${MARKER}\n<script type="module">${js.replaceAll("</script", "<\\/script")}</script>\n</body>`, "the end of the body");
+
+// The build writes the worker into the app as a base64 data URL, which gzip can do little with.
+// It is taken out and packed by itself; the lines below hand the app the same data URL again.
+const WORKER = /(["'`])data:text\/javascript;base64,([A-Za-z0-9+/=]+)\1/g;
+const workers = [...js.matchAll(WORKER)];
+if (workers.length !== 1) throw new Error(`standalone page: expected the worker once in the app, found it ${workers.length} times`);
+const worker = Buffer.from(workers[0][2], "base64");
+js = js.replace(WORKER, () => "globalThis.LECTERN_WORKER_URL");
+const packed = (bytes) => gzipSync(bytes, { level: 9 }).toString("base64");
+const boot = `
+const unpack = (id) => {
+  const bytes = Uint8Array.from(atob(document.getElementById(id).textContent), (c) => c.charCodeAt(0));
+  return new Response(new Blob([bytes]).stream().pipeThrough(new DecompressionStream("gzip")));
+};
+const dataUrl = (blob) => new Promise((resolve, reject) => {
+  const reader = new FileReader();
+  reader.onload = () => resolve(reader.result);
+  reader.onerror = () => reject(reader.error);
+  reader.readAsDataURL(blob);
+});
+(async () => {
+  const worker = await unpack("lectern-worker").blob();
+  globalThis.LECTERN_WORKER_URL = await dataUrl(new Blob([worker], { type: "text/javascript" }));
+  const app = document.createElement("script");
+  app.type = "module";
+  app.textContent = await unpack("lectern-app").text();
+  document.body.append(app);
+})();
+`;
+replaceOnce(
+  /<\/body>/,
+  `${MARKER}\n<script id="lectern-worker" type="application/gzip-base64">${packed(worker)}</script>\n<script id="lectern-app" type="application/gzip-base64">${packed(Buffer.from(js, "utf8"))}</script>\n<script>${boot}</script>\n</body>`,
+  "the end of the body",
+);
 if (/(src|href)="\.\/assets\//.test(html)) throw new Error("standalone page still points at separate files");
 
 await mkdir(path.dirname(out), { recursive: true });

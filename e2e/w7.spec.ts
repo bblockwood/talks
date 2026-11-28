@@ -5,6 +5,9 @@ import type { Page } from "@playwright/test";
 
 async function openSample(page: Page): Promise<void> {
   await page.goto("./");
+  // The deck's LaTeX source is offered beside it.
+  const source = await page.request.get(await page.locator("#sample-tour-tex").evaluate((a: HTMLAnchorElement) => a.href));
+  expect(await source.text()).toContain("\\title{A tour of Lectern}");
   await page.locator("#sample-tour").click();
   await page.locator("#presenter").click();
   await expect(page.locator("#console")).toBeVisible();
@@ -18,7 +21,7 @@ test("the sample deck opens with notes, an outline, builds and a working link", 
 
   // The outline lists the deck's sections.
   await page.locator("#tab-outline").click();
-  for (const section of ["What Lectern is", "The two views", "Example use cases", "How it works", "Beamer-native", "Creating notes", "During the talk", "Backup slides"])
+  for (const section of ["The idea", "Operating Lectern", "Designing slides", "Useful features", "Backup slides"])
     await expect(page.locator("#outline")).toContainText(section);
   await page.locator("#tab-notes").click();
   const goTo = async (frame: number) => {
@@ -26,20 +29,20 @@ test("the sample deck opens with notes, an outline, builds and a working link", 
     await page.keyboard.press("Enter");
   };
 
-  // Frame 12 has builds, each with its own note.
-  await goTo(12);
+  // Frame 13 has builds, each with its own note.
+  await goTo(13);
   await expect(page.locator("#notes")).toContainText("five builds appear");
   await page.keyboard.press("ArrowRight");
   await expect(page.locator("#notes")).toContainText("the build about the arrow keys");
 
-  // Frame 14's note is written in Markdown.
-  await goTo(14);
+  // Frame 15's note is written in Markdown.
+  await goTo(15);
   await expect(page.locator("#notes em")).toHaveText("emphasis");
   await expect(page.locator("#notes code")).toHaveText("code");
   await expect(page.locator("#notes p.li")).toHaveCount(3);
 
-  // Frame 13's button leads to a backup slide in the appendix.
-  await goTo(13);
+  // Frame 14's button leads to a backup slide in the appendix.
+  await goTo(14);
   await expect(page.locator("#notes")).toContainText("The Outline tab beside Notes");
   await page.waitForTimeout(500); // the slide is drawn and its links read
   const slide = (await page.locator("#current canvas").first().boundingBox())!;

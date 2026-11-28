@@ -170,7 +170,10 @@ test("a phone drives the room PC: steps, notes, clock, slide grid, back, black, 
   await expect.poll(() => roomMode(room)).toBe("white");
   await expect(phone.locator("#t-white")).toHaveClass(/on/);
   await expect.poll(centre).toEqual([255, 255, 255]);
+  // White is a whiteboard: Draw comes on with it, and goes off when it ends.
+  await expect(phone.locator("#t-draw")).toHaveClass(/on/);
   await phone.locator("#t-black").click(); // straight from white to black
+  await expect(phone.locator("#t-draw")).not.toHaveClass(/on/);
   await expect.poll(() => roomMode(room)).toBe("black");
   await expect.poll(centre).toEqual([0, 0, 0]);
   await phone.locator("#t-black").click();
@@ -849,8 +852,10 @@ test("one device, one screen: the slides are run from the slides, with the prese
   expect(await roomHook(page, (h) => h.tool())).toBe("none");
   await page.locator(".aud-white").click();
   expect(await roomMode(page)).toBe("white");
+  expect(await roomHook(page, (h) => h.tool())).toBe("draw"); // the whiteboard brings Draw
   await page.keyboard.press("w");
   expect(await roomMode(page)).toBe("live");
+  expect(await roomHook(page, (h) => h.tool())).toBe("none");
   // Away from the bar, it goes by itself.
   await page.mouse.move(640, 300);
   await expect(page.locator(".aud-bar")).toBeHidden({ timeout: 4000 });

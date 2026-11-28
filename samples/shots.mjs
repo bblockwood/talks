@@ -27,7 +27,7 @@ const goTo = async (page, frame, builds) => {
   const page = await open({ width: 1280, height: 720 });
   await page.click("#start");
   await page.waitForSelector("#audience .aud-menu", { state: "attached" });
-  await goTo(page, 10, 2);
+  await goTo(page, 11, 2);
   await page.mouse.move(600, 300);
   await page.mouse.move(620, 320);
   await page.click(".aud-menu");
@@ -42,7 +42,7 @@ const goTo = async (page, frame, builds) => {
   const page = await open({ width: 1280, height: 760 });
   await page.click("#presenter");
   await page.waitForSelector("#console:not([hidden])");
-  await goTo(page, 12, 2);
+  await goTo(page, 13, 2);
   // The status line names the talk code; a picture must not.
   await page.evaluate(() => {
     const link = document.getElementById("link");
