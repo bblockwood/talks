@@ -628,6 +628,7 @@ function start(fullscreen: boolean, both = false, audienceScreen: ScreenDetailed
     fullscreen: fullscreen && !byHand,
     ...(placement ? { screen: placement.audience } : {}),
     ...(byHand ? { setup: true } : {}),
+    packed: PACKED,
     onStopped: () => {
       presentation = null;
       showReady();
@@ -877,6 +878,9 @@ window.addEventListener("pagehide", () => {
 // The sample deck, for someone who has no PDF at hand (Ben, 2026-11-27). Built from samples/tour.tex.
 // A page opened from disk has no site to fetch it from.
 $("samples").hidden = FROM_DISK;
+$<HTMLAnchorElement>("sample-tour-tex").href = `${import.meta.env.BASE_URL}samples/tour.tex`;
+// A packed copy shows no clock, so it names no key for one.
+$("key-clock").hidden = PACKED;
 $("sample-tour").addEventListener("click", () =>
   openPdf(async () => {
     const response = await fetch(`${import.meta.env.BASE_URL}samples/tour.pdf`);

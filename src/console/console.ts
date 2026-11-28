@@ -30,6 +30,7 @@ import { ThumbGrid } from "../shared/thumbs";
 import type { ThumbMode } from "../shared/thumbs";
 import type { ConsoleClient } from "./client";
 import { NOTES_INFO, keysInfo, outlineInfo } from "./info";
+import { WhiteboardDraw } from "../core/whiteboard";
 
 const PING_MS = 2000;
 /** The host sends state every 2.5 s; past this it is treated as gone (and a successor takes over). */
@@ -123,6 +124,8 @@ export class PresenterConsole {
   /** This view's copy of the ink on screen, kept in step by `strokes` messages. */
   private ink: InkState = NO_INK;
   private drawMode = false;
+  /** White is a whiteboard: Draw comes on and goes off with it. */
+  private readonly board = new WhiteboardDraw();
   private laserMode = false;
   private remoteDotTimer: number | undefined;
   private inkColor = 0;
@@ -459,6 +462,18 @@ export class PresenterConsole {
     if (!live) {
       this.drawMode = false;
       this.laserMode = false;
+    }
+    const draw = this.board.follow(mode === "white", this.drawMode);
+    if (draw === true && live) {
+      if (this.laserMode) {
+        this.current.setDot(null);
+        this.client.send({ type: "pointer", body: { x: 0, y: 0, visible: false } });
+        this.laserMode = false;
+      }
+      this.drawMode = true;
+    } else if (draw === false) {
+      this.endInk();
+      this.drawMode = false;
     }
     this.showInk();
     this.current.show(page, [page + 1, page - 1].filter((p) => p >= 0 && p < pageCount));

@@ -3,6 +3,7 @@
 // is this device itself whenever it can be (see core/peer.ts). Leaving wipes everything here;
 // the talk goes on for the other devices.
 import { stageKeysInfo } from "../console/info";
+import { WhiteboardDraw } from "../core/whiteboard";
 import { buildCount } from "../core/frames";
 import { DEFAULT_INK_WIDTH, INK_COLORS } from "../core/ink";
 import { KeyInterpreter } from "../core/keys";
@@ -34,6 +35,8 @@ export interface PresentationOptions {
    * projector: the Full screen button then stays in view until it has been used once.
    */
   readonly setup?: boolean;
+  /** A packed copy: one screen and no presenter view, so no clock is shown or kept (Ben, 2026-11-28). */
+  readonly packed?: boolean;
   /** Esc twice: the slides are off this screen, but the device is still in the talk, choosing a view. */
   readonly onStopped: () => void;
   /** Called once this device has left the talk and everything decrypted has been dropped. */
@@ -60,6 +63,10 @@ export class Presentation {
   // unless the presenter asks for it.
   /** The tool was chosen on the bar by touch, so the bar stays up to turn it off again. */
   private barPinned = false;
+  /** White is a whiteboard: Draw comes on and goes off with it. */
+  private readonly board = new WhiteboardDraw();
+  /** White was chosen on the bar by touch: the Draw it brings keeps the bar up, as Draw by touch does. */
+  private whiteByTouch = false;
   private barHovered = false;
   private help: HTMLElement | null = null;
   private overview: HTMLElement | null = null;
@@ -135,8 +142,11 @@ export class Presentation {
     this.menu = document.createElement("button");
     this.menu.type = "button";
     this.menu.className = "aud-menu";
-    this.menu.textContent = "Menu";
-    this.menu.title = "Tools, clock and Exit";
+    // The Lectern mark, not a word (Ben, 2026-11-28).
+    this.menu.innerHTML =
+      '<svg viewBox="0 0 1024 1024" aria-hidden="true"><rect x="24" y="24" width="976" height="976" rx="208" fill="#2B2B2B" stroke="#9A9A9A" stroke-width="48"/><g fill="#FFFFFF"><path d="M254 357 Q246 360 241 371 L228 395 Q220 410 233 418 Q238 422 246 421 L778 351 Q794 349 789 333 L758 272 Q754 261 743 265 Z"/><path d="M489 406 L531 400 L531 756 L489 756 Z"/><rect x="317" y="756" width="390" height="43" rx="21.5"/></g></svg>';
+    this.menu.setAttribute("aria-label", "Menu");
+    this.menu.title = options.packed ? "Tools and Exit" : "Tools, clock and Exit";
     this.menu.addEventListener("click", (ev) => {
       ev.stopPropagation();
       this.menu.blur();
@@ -242,8 +252,10 @@ export class Presentation {
     };
     // A tool chosen by touch keeps the bar up: with it on, a tap no longer brings the bar back.
     const byTouch = (ev: MouseEvent): boolean => (ev as PointerEvent).pointerType !== undefined && (ev as PointerEvent).pointerType !== "mouse" && (ev as PointerEvent).pointerType !== "";
-    const mode = (kind: "black" | "white"): void =>
+    const mode = (kind: "black" | "white", touch = false): void => {
+      this.whiteByTouch = kind === "white" && touch;
       this.dispatch({ name: "setAudienceMode", mode: this.state().audienceMode.kind === kind ? LIVE : { kind } }, performance.now());
+    };
 
     const tools = part("aud-tools");
     const drawbar = part("aud-drawbar");
@@ -266,7 +278,7 @@ export class Presentation {
       button("aud-tool aud-draw", "Draw", "Draw on the slide (D)", (ev) => this.setTool(this.view.tool === "draw" ? "none" : "draw", byTouch(ev))),
       drawbar,
       button("aud-tool aud-black", "Black", "Black screen (B)", () => mode("black")),
-      button("aud-tool aud-white", "White", "White screen, to draw on (W)", () => mode("white")),
+      button("aud-tool aud-white", "White", "Whiteboard: a white screen with Draw on (W)", (ev) => mode("white", byTouch(ev))),
       part("aud-spacer"),
       button("aud-tool aud-back", "", "Back to where the last jump started", () => this.dispatch({ name: "back" }, performance.now())),
       button("aud-tool aud-forward", "", "Forward again", () => this.dispatch({ name: "forward" }, performance.now())),
@@ -279,7 +291,9 @@ export class Presentation {
       part("aud-link"),
       button("aud-exit", "Exit", "Back to the page where a view is chosen (Esc twice)", () => void this.stop()),
     );
-    status.append(part("aud-where"), part("aud-clock"), right);
+    const clock = part("aud-clock");
+    clock.hidden = this.options.packed === true;
+    status.append(part("aud-where"), clock, right);
     bar.append(tools, status);
     bar.addEventListener("mouseenter", () => {
       this.barHovered = true;
@@ -456,7 +470,7 @@ export class Presentation {
     title.textContent = "Keyboard shortcuts";
     const body = document.createElement("div");
     body.className = "info-body";
-    body.innerHTML = renderNotesHtml(stageKeysInfo(IS_MAC)); // fixed text, escaped by renderNotesHtml
+    body.innerHTML = renderNotesHtml(stageKeysInfo(IS_MAC, this.options.packed !== true)); // fixed text, escaped by renderNotesHtml
     panel.append(title, body);
     help.append(panel);
     help.addEventListener("click", (ev) => {
@@ -608,6 +622,9 @@ export class Presentation {
     this.cache.want(pages);
     for (const page of pages) void deck.loadLinks(page);
     this.view.show(state, inputTime);
+    const draw = this.board.follow(state.audienceMode.kind === "white", this.view.tool === "draw");
+    if (draw !== null) this.setTool(draw ? "draw" : "none", draw && this.whiteByTouch);
+    if (draw !== null || state.audienceMode.kind !== "white") this.whiteByTouch = false;
   }
 
   private readonly onKeyDown = (ev: KeyboardEvent): void => {
@@ -657,7 +674,7 @@ export class Presentation {
     this.showDigits();
 
     if (result.end) void this.stop();
-    else if (result.command) this.dispatch(result.command, ev.timeStamp);
+    else if (result.command && !(this.options.packed && result.command.name === "timerToggle")) this.dispatch(result.command, ev.timeStamp);
   };
 
   private readonly onKeyUp = (ev: KeyboardEvent): void => {

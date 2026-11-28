@@ -24,3 +24,11 @@ describe("packed copy", () => {
     expect(packFileName("")).toBe("talk.lectern.html");
   });
 });
+
+describe("the sample deck's source", () => {
+  it("is offered for download as it is in samples/ (run `make -C samples` after editing it)", async () => {
+    const { readFile } = await import("node:fs/promises");
+    const read = (file: string): Promise<string> => readFile(new URL(file, import.meta.url), "utf8");
+    expect(await read("../public/samples/tour.tex")).toBe(await read("../samples/tour.tex"));
+  });
+});

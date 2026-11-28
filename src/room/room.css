@@ -487,10 +487,16 @@ kbd {
   bottom: 0.8rem;
   z-index: 1;
   display: none;
-  padding: 0.3rem 0.7rem;
-  font-size: 0.85rem;
+  padding: 0;
+  border: 0;
+  background: none;
+  line-height: 0;
   opacity: 0.85;
   cursor: default;
+}
+.audience .aud-menu svg {
+  width: 2.2rem;
+  height: 2.2rem;
 }
 .audience:not(.cursor-hidden):not(.tool-laser):not(.bar-up) .aud-menu {
   display: block;
