@@ -1049,3 +1049,13 @@ Verification: build; 299 unit tests; 50 e2e tests (new: the presenter view, its 
 Ben: on a phone the connection button's text must always fit on one line. In the phone layouts it now says one of **Slides showing**, **No slides screen**, **This device only**, **Offline** (or Reconnecting…, Joining the talk…), never wraps, and a passing notice is cut with an ellipsis. The device count and the code to join with are in the sheet the button opens; a screen reader still gets the full sentence. Laptop and tablet layouts are unchanged.
 
 Verification: build; 299 unit tests; 51 e2e tests (new: one line at 320 and 390 px wide).
+
+### W10.4. The sample deck teaches Beamer with Lectern (2026-11-27)
+
+Ben's changes to `samples/tour.tex`: the revenue curve is gone; a frame shows how to write notes inside the PDF with `\pdfpcnote` (its own note is a Markdown list with emphasis and code); the diagram is "What content is where"; titles say what each frame teaches ("Overlays become the builds of one frame", "Keyboard shortcuts"); "Any PDF works, but it is built for Beamer"; one frame each on the audience view, the presenter view and the packed copy, each with a screenshot.
+
+- 13 frames, 24 pages, 570 KB. Sections: What Lectern does, The two views, Writing the deck, During the talk, Backup slides (other ways to write notes; a slide to jump to and return from).
+- The screenshots are taken from the app showing this deck: `npm run dev` and the relay, `node samples/shots.mjs`, `make -C samples`. No picture shows a talk code.
+- With the curve gone, the only TikZ animation is the diagram that assembles over five builds.
+
+Verification: build; 299 unit tests; 51 e2e tests (the sample's test now also checks the Markdown note and the new link).

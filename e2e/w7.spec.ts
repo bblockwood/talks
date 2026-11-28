@@ -18,23 +18,32 @@ test("the sample deck opens with notes, an outline, builds and a working link", 
 
   // The outline lists the deck's sections.
   await page.locator("#tab-outline").click();
-  await expect(page.locator("#outline")).toContainText("Moving around");
-  await expect(page.locator("#outline")).toContainText("Pictures that move");
-  await expect(page.locator("#outline")).toContainText("Backup slides");
+  for (const section of ["What Lectern does", "The two views", "Writing the deck", "During the talk", "Backup slides"])
+    await expect(page.locator("#outline")).toContainText(section);
   await page.locator("#tab-notes").click();
+  const goTo = async (frame: number) => {
+    await page.keyboard.type(String(frame));
+    await page.keyboard.press("Enter");
+  };
 
-  // Frame 2 has builds, each with its own note.
-  await page.keyboard.press("ArrowRight");
-  await expect(page.locator("#notes")).toContainText("five builds");
+  // Frame 3 has builds, each with its own note.
+  await goTo(3);
+  await expect(page.locator("#notes")).toContainText("five builds appear");
   await page.keyboard.press("ArrowRight");
   await expect(page.locator("#notes")).toContainText("the build about the arrow keys");
 
-  // Frame 3's first button leads to the proof in the appendix.
-  await page.keyboard.press("Shift+ArrowRight");
-  await expect(page.locator("#notes")).toContainText("Both buttons jump");
+  // Frame 7's note is written in Markdown.
+  await goTo(7);
+  await expect(page.locator("#notes em")).toHaveText("emphasis");
+  await expect(page.locator("#notes code")).toHaveText("code");
+  await expect(page.locator("#notes p.li")).toHaveCount(3);
+
+  // Frame 8's button leads to a backup slide in the appendix.
+  await goTo(8);
+  await expect(page.locator("#notes")).toContainText("The Outline tab beside Notes");
   await page.waitForTimeout(500); // the slide is drawn and its links read
   const slide = (await page.locator("#current canvas").first().boundingBox())!;
-  await page.mouse.click(slide.x + slide.width * 0.2, slide.y + slide.height * 0.43);
+  await page.mouse.click(slide.x + slide.width * 0.171, slide.y + slide.height * 0.706);
   await expect(page.locator("#notes")).toContainText("A backup slide with two builds");
   await context.close();
 });

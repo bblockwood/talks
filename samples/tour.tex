@@ -1,10 +1,12 @@
-% The sample deck offered on the opening page: builds, speaker notes, an outline, links between
-% slides, and TikZ pictures that animate. Build with `make` in this directory; the PDF is committed.
+% The sample deck offered on the opening page. It teaches how to present a Beamer deck with
+% Lectern, and uses what it describes: builds, speaker notes, an outline, links between slides and
+% a TikZ picture that assembles. Build with `make` in this directory; the PDF is committed.
+% The screenshots in img/ are taken by shots.mjs (see the Makefile).
 \documentclass[aspectratio=169,14pt]{beamer}
 \usetheme{default}
 \usepackage{pdfpc}
-\usepackage{pgfplots}
-\pgfplotsset{compat=1.17}
+\usepackage{tikz}
+\usepackage{fancyvrb}
 \usetikzlibrary{arrows.meta,positioning}
 \definecolor{lectern}{HTML}{0736A8}
 \definecolor{warm}{HTML}{C2410C}
@@ -20,145 +22,234 @@
   box/.style={draw=lectern, very thick, rounded corners=3pt, minimum width=2.6cm, minimum height=1.1cm, align=center},
   flow/.style={-{Stealth[length=7pt]}, very thick, lectern},
 }
+\newcommand{\key}[1]{\textbf{#1}}
+% A screenshot with a thin rim, so its dark edge reads against the white slide.
+\newcommand{\shot}[2]{\IfFileExists{img/#2.png}{{\setlength{\fboxsep}{0pt}\color{black!40}\fbox{\includegraphics[width=#1]{img/#2.png}}}}{\fbox{\parbox[c][3cm][c]{#1}{\centering #2}}}}
+\newcommand{\goto}[2]{\hyperlink{#1}{\scalebox{1.4}{\beamergotobutton{#2}}}}
+\newcommand{\return}[2]{\hyperlink{#1}{\scalebox{1.4}{\beamerreturnbutton{#2}}}}
 \title{A tour of Lectern}
-\subtitle{A sample deck with builds, notes, links and animation}
-\author{Made with Beamer and TikZ}
+\subtitle{Presenting a Beamer deck from a browser}
+\author{A sample deck, made with Beamer and TikZ}
 \date{}
 \begin{document}
+
+% The listings, kept outside their frames: a frame cannot hold a literal \end{frame}.
+\begin{SaveVerbatim}{codenotes}
+\usepackage{pdfpc}              % in the preamble
+
+\begin{frame}{Results}
+  Our main estimate.
+  \pdfpcnote{Say *why* this matters.\\- then the caveat}
+  \only<2>{\pdfpcnote{A note for build 2 only.}}
+\end{frame}
+\end{SaveVerbatim}
+\begin{SaveVerbatim}{codelinks}
+\section{Results}               % an entry in the outline
+
+\hyperlink{proof}{\beamergotobutton{The proof}}
+
+\appendix
+\begin{frame}[label=proof]{Backup: the proof}
+\end{SaveVerbatim}
+\begin{SaveVerbatim}{codebeamer}
+  \usepackage{pgfpages}
+  \setbeameroption{show notes on second screen=right}
+  ... \note{Say why this matters.}
+\end{SaveVerbatim}
 
 \begin{frame}
   \titlepage
   \pdfpcnote{Welcome. These are speaker notes: only the presenter view shows them, never the audience.\\\\Press the right arrow, or click the slide, to go on.}
 \end{frame}
 
-\section{Moving around}
+\section{What Lectern does}
 
-\begin{frame}{Frames and builds}
-  A slide that appears step by step is one \emph{frame} with several \emph{builds}.
+\begin{frame}{Any PDF works, but it is built for Beamer}
   \begin{itemize}
-    \item<2-> \textbf{Arrow keys} step one build at a time.
-    \item<3-> \textbf{Shift with an arrow} moves a whole frame.
-    \item<4-> \textbf{A number, then Enter,} goes to that frame.
-    \item<5-> \textbf{Tab} shows every frame at once.
+    \item \textbf{Any PDF opens,} including PowerPoint and Keynote exports.
+    \item<2-> \textbf{Beamer decks get more:}
+      \begin{itemize}
+        \item overlays (\texttt{\textbackslash pause}, \texttt{<2->}) become builds of one frame
+        \item \texttt{\textbackslash section} becomes the outline
+        \item \texttt{\textbackslash hyperlink} buttons jump, and Back returns
+        \item \texttt{\textbackslash pdfpcnote} becomes speaker notes
+      \end{itemize}
+    \item<3-> \textbf{Nothing is uploaded.} The PDF opens in this browser.
   \end{itemize}
-  \only<1>{\pdfpcnote{This frame has five builds. The frame counter stays at 2 while they appear.}}
+  \pdfpcnote{Nothing to install on the room's computer: it only needs a browser.\\\\The following frames show each of the four Beamer features in turn.}
+\end{frame}
+
+\begin{frame}{Overlays become the builds of one frame}
+  This frame is five PDF pages, and Lectern counts it as one frame.
+  \begin{itemize}
+    \item<2-> \key{→} and \key{←} step one build at a time.
+    \item<3-> \key{Shift} with an arrow moves a whole frame.
+    \item<4-> \key{A number, then Enter,} goes to that frame.
+    \item<5-> \key{Tab} shows every frame at once.
+  \end{itemize}
+  \only<1>{\pdfpcnote{The frame counter stays at 3 while the five builds appear. Frame numbers match Beamer's own, bottom right.}}
   \only<2>{\pdfpcnote{Each build can carry a note of its own. This one belongs to the build about the arrow keys.}}
   \only<3>{\pdfpcnote{Try it: Shift and the right arrow skips the remaining builds.}}
-  \only<4>{\pdfpcnote{Type 5 and press Enter to go to frame 5. Delete or Backspace returns here.}}
+  \only<4>{\pdfpcnote{Type 8 and press Enter to go to frame 8. Delete or Backspace returns here.}}
   \only<5>{\pdfpcnote{The overview keeps working while you present: the keys still move the talk.}}
 \end{frame}
 
-\begin{frame}[label=links]{Links between slides}
-  Links in the PDF work with a click, in either view.
-
-  \bigskip
-  \hyperlink{backup-proof}{\scalebox{1.5}{\beamergotobutton{The proof, in the backup slides}}}
-
-  \medskip
-  \hyperlink{backup-data}{\scalebox{1.5}{\beamergotobutton{The data behind the picture}}}
-
-  \bigskip
-  After a jump, \textbf{Back} (or Delete) returns to where you were.
-  \pdfpcnote{Both buttons jump to the appendix. Each backup slide has a return button, and the Back button under the current slide does the same.\\\\- The outline tab lists the sections.}
-\end{frame}
-
-\section{Pictures that move}
-
-\begin{frame}{A curve drawn point by point}
-  \centering
-  \begin{tikzpicture}
-    \begin{axis}[width=12.5cm, height=6.4cm, axis lines=left, xmin=0, xmax=1, ymin=0, ymax=0.3,
-        xlabel={Tax rate}, ylabel={Revenue}, xtick={0,0.25,0.5,0.75,1}, ytick=\empty,
-        every axis plot/.append style={line width=1.6pt}, clip=false]
-      \addplot[lectern!25, domain=0:1, samples=60] {x*(1-x)};
-      \foreach \n in {1,...,20} {
-        \only<\n>{
-          \pgfmathsetmacro{\t}{\n/20}
-          \addplot[lectern, domain=0:\t, samples=60] {x*(1-x)};
-          \addplot[only marks, mark=*, mark size=3.5pt, warm] coordinates {(\t, {\t*(1-\t)})};
-          \addplot[warm, dashed, line width=0.8pt] coordinates {(\t,0) (\t, {\t*(1-\t)})};
-        }
-      }
-      \only<10>{\node[above=6pt, warm] at (axis cs:0.5,0.25) {the peak};}
-    \end{axis}
-  \end{tikzpicture}
-  \pdfpcnote{Twenty builds, one per position of the point. Hold the right arrow to play it as an animation; the left arrow runs it backwards.\\\\Revenue is the rate times what is left of the base, so it peaks in the middle.}
-\end{frame}
-
-\begin{frame}{A diagram that assembles itself}
+\begin{frame}{What content is where}
   \centering
   \begin{tikzpicture}[node distance=1.2cm and 0.9cm, font=\small]
     \node[box] (pdf) {Your PDF};
     \uncover<2->{\node[box, right=of pdf] (app) {Lectern,\\in a browser};}
-    \uncover<3->{\node[box, above right=of app] (aud) {Slides for\\the audience};}
-    \uncover<4->{\node[box, below right=of app] (pres) {Presenter view\\with notes};}
+    \uncover<3->{\node[box, above right=of app] (aud) {Audience view:\\slides only};}
+    \uncover<4->{\node[box, below right=of app] (pres) {Presenter view:\\notes, next, clock};}
     \uncover<5->{\node[box, right=of pres, draw=warm] (phone) {A phone\\as a remote};}
     \uncover<2->{\draw[flow] (pdf) -- (app);}
     \uncover<3->{\draw[flow] (app) |- (aud);}
     \uncover<4->{\draw[flow] (app) |- (pres);}
     \uncover<5->{\draw[flow, warm, {Stealth[length=7pt]}-{Stealth[length=7pt]}] (pres) -- (phone);}
   \end{tikzpicture}
-  \only<1-4>{\pdfpcnote{The picture gains a piece with each build. The next-slide preview shows what the next key press adds.}}
-  \only<5>{\pdfpcnote{Any device that enters the talk code joins in, and each one chooses what it shows.}}
+  \only<1-4>{\pdfpcnote{A TikZ picture that gains a piece with each build. The next-slide preview shows what the next key press adds.}}
+  \only<5>{\pdfpcnote{Any device that enters the talk code joins the same talk, and each one chooses which view it shows.\\\\The notes never reach the audience view.}}
 \end{frame}
 
-\section{Tools while you talk}
+\section{The two views}
 
-\begin{frame}{Things to try}
-  \begin{columns}[T]
-    \begin{column}{0.48\textwidth}
-      \textbf{Point and draw}
-      \begin{itemize}
-        \item \textbf{L} for a laser pointer
-        \item \textbf{D} to draw on the slide
-        \item \textbf{C} to clear the ink
-      \end{itemize}
+\begin{frame}{Audience view: the slides, full screen}
+  \begin{columns}[c]
+    \begin{column}{0.62\textwidth}
+      \shot{\textwidth}{audience}
     \end{column}
-    \begin{column}{0.48\textwidth}
-      \textbf{Pause the room}
+    \begin{column}{0.36\textwidth}
       \begin{itemize}
-        \item \textbf{B} for a black screen
-        \item \textbf{W} for a white one
-        \item \textbf{?} for every shortcut
+        \item Shows the slides and nothing else.
+        \item Runs a talk by itself: every key works here too.
+        \item Move the mouse and click \textbf{Menu}, or tap twice, for the tools.
       \end{itemize}
     \end{column}
   \end{columns}
-  \pdfpcnote{Notes understand a little Markdown: *emphasis*, `code`, and lists.\\\\- A- and A+ change the size of this text.\\- The clock above starts with the talk; T pauses it.}
+  \pdfpcnote{The picture shows the bar that Menu brings up: overview, laser, draw, black and white screens, the clock and Exit. It hides itself again.\\\\With one computer and one screen, this view is all you need.}
 \end{frame}
 
-\begin{frame}{Now open your own}
+\begin{frame}{Presenter view: notes, next slide, clock}
+  \begin{columns}[c]
+    \begin{column}{0.62\textwidth}
+      \shot{\textwidth}{presenter}
+    \end{column}
+    \begin{column}{0.36\textwidth}
+      \begin{itemize}
+        \item On a second screen, a laptop, a tablet or a phone.
+        \item Click the clock to set a countdown.
+        \item \textbf{Outline} lists the sections; \textbf{Overview} shows every frame.
+      \end{itemize}
+    \end{column}
+  \end{columns}
+  \pdfpcnote{With a projector attached, **Both views** puts the slides on one screen and this view on the other.\\\\From another device, enter the talk code on the opening page and choose Presenter view.}
+\end{frame}
+
+\section{Writing the deck}
+
+\begin{frame}{Speaker notes: \texttt{\textbackslash pdfpcnote} inside the frame}
+  \BUseVerbatim[fontsize=\small]{codenotes}
+
+  \medskip
+  The notes travel inside the PDF. They may use a little Markdown.
+
+  \smallskip
+  \goto{backup-notes}{Other ways to write notes}
+  \pdfpcnote{This note is written in Markdown, as the notes of your own deck can be:\\\\- *emphasis* with asterisks\\- `code` with backticks\\- a list, one dash per line\\\\Two backslashes in the LaTeX source start a new line. A- and A+ above change the size of this text.}
+\end{frame}
+
+\begin{frame}[label=links]{Outline from \texttt{\textbackslash section}, links from \texttt{\textbackslash hyperlink}}
+  \BUseVerbatim[fontsize=\small]{codelinks}
+
+  \medskip
+  Click a button to jump; \textbf{Back} (or \key{Delete}) returns.
+
+  \smallskip
+  \goto{backup-jump}{Try it: a backup slide}
+  \pdfpcnote{The Outline tab beside Notes lists this deck's sections; a click on one jumps there.\\\\Links work with a click in either view.}
+\end{frame}
+
+\section{During the talk}
+
+\begin{frame}{Keyboard shortcuts}
+  \begin{columns}[T]
+    \begin{column}{0.48\textwidth}
+      \textbf{Moving}
+      \begin{itemize}
+        \item \key{→ ←} one build
+        \item \key{Shift → ←} one frame
+        \item \key{number, Enter} that frame
+        \item \key{Delete} back after a jump
+        \item \key{Tab} overview
+      \end{itemize}
+    \end{column}
+    \begin{column}{0.48\textwidth}
+      \textbf{Tools}
+      \begin{itemize}
+        \item \key{L} laser pointer
+        \item \key{D} draw, \key{C} clear the ink
+        \item \key{B} black, \key{W} white screen
+        \item \key{T} pause the clock
+        \item \key{?} every shortcut
+      \end{itemize}
+    \end{column}
+  \end{columns}
+  \pdfpcnote{A clicker works as it is: it sends the same keys.\\\\Esc twice leaves a view and returns to the page where the view is chosen.}
+\end{frame}
+
+\begin{frame}{No connection? Carry a packed copy}
+  \begin{columns}[c]
+    \begin{column}{0.56\textwidth}
+      \shot{\textwidth}{pack}
+    \end{column}
+    \begin{column}{0.42\textwidth}
+      \begin{itemize}
+        \item \textbf{Download a packed copy} saves one HTML file: Lectern with your slides inside.
+        \item Put it on a thumb drive and open it in Chrome or Edge.
+        \item It needs no network at all.
+      \end{itemize}
+    \end{column}
+  \end{columns}
+  \pdfpcnote{The button is on the page where the view is chosen, after a PDF is opened from a file.\\\\A packed copy runs on its one computer: no other devices can join it.}
+\end{frame}
+
+\begin{frame}{Now open your own deck}
   \begin{itemize}
-    \item Any PDF works: Beamer, PowerPoint or Keynote exports.
-    \item It opens in this browser and is not uploaded anywhere.
-    \item Press \textbf{Esc} twice to go back and choose a file.
+    \item Press \key{Esc} twice to leave this view.
+    \item \textbf{Leave this talk,} then open a PDF from this device.
+    \item Its talk code lets your phone or laptop join.
   \end{itemize}
-  \pdfpcnote{The last frame of the main talk. What follows is the appendix, reached by the links on frame 3.}
+  \pdfpcnote{The last frame of the main talk. What follows is the appendix, reached by the buttons on frames 7 and 8.}
 \end{frame}
 
 \appendix
 \section{Backup slides}
 
-\begin{frame}[label=backup-proof]{Backup: the proof}
-  Revenue is $R(t) = t\,(1-t)$, so
-  \[ R'(t) = 1 - 2t = 0 \quad\Longrightarrow\quad t^* = \tfrac12 . \]
-  \uncover<2->{Since $R''(t) = -2 < 0$, this is the maximum, with $R(t^*) = \tfrac14$.}
+\begin{frame}[fragile,label=backup-notes]{Backup: other ways to write notes}
+  \begin{itemize}
+    \item \textbf{pdfcomment:} \verb|\pdfcomment{...}| inside a frame.
+    \item \textbf{Beamer's own notes,} on a second half of each page:
+  \end{itemize}
+  \BUseVerbatim[fontsize=\small]{codebeamer}
 
-  \bigskip
-  \hyperlink{links}{\scalebox{1.5}{\beamerreturnbutton{Back to the links}}}
-  \pdfpcnote{A backup slide with two builds. The return button, the Back button and the Delete key all lead back.}
+  \medskip
+  Lectern shows the slide half to the audience and the notes half to you.
+
+  \smallskip
+  \return{links}{Back}
+  \pdfpcnote{The i beside Notes in the presenter view lists all of these.}
 \end{frame}
 
-\begin{frame}[label=backup-data]{Backup: the data}
-  \centering
-  \begin{tikzpicture}
-    \begin{axis}[width=11cm, height=5.6cm, ybar, bar width=14pt, axis lines=left, ymin=0, ymax=0.3,
-        xlabel={Tax rate}, ylabel={Revenue}, xtick=data, ytick=\empty, enlarge x limits=0.12]
-      \addplot[fill=lectern!70, draw=lectern] coordinates {(0.1,0.09) (0.3,0.21) (0.5,0.25) (0.7,0.21) (0.9,0.09)};
-    \end{axis}
-  \end{tikzpicture}
+\begin{frame}[label=backup-jump]{Backup: you jumped here}
+  This frame is in the appendix, after the last frame of the talk.
+  \begin{itemize}
+    \item<2-> The button below returns, as written in the deck.
+    \item<2-> \textbf{Back}, under the current slide, returns from any jump.
+  \end{itemize}
 
-  \hyperlink{links}{\scalebox{1.5}{\beamerreturnbutton{Back to the links}}}
-  \pdfpcnote{The same curve at five rates.}
+  \bigskip
+  \return{links}{Back to the links}
+  \pdfpcnote{A backup slide with two builds. The return button, the Back button and the Delete key all lead back.}
 \end{frame}
 
 \end{document}
