@@ -114,6 +114,7 @@ src/sw/        service worker
 relay/         Cloudflare Worker and Durable Object
 tools/         publish, codes, revoke
 fixtures/      test decks
+samples/       the sample deck offered on the opening page (LaTeX source; built into public/samples/)
 docs/          specs, decisions, progress, test results
 ```
 

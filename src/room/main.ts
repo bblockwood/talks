@@ -870,6 +870,17 @@ window.addEventListener("pagehide", () => {
   else void talk?.close();
 });
 
+// The sample deck, for someone who has no PDF at hand (Ben, 2026-11-27). Built from samples/tour.tex.
+// A page opened from disk has no site to fetch it from.
+$("samples").hidden = FROM_DISK;
+$("sample-tour").addEventListener("click", () =>
+  openPdf(async () => {
+    const response = await fetch(`${import.meta.env.BASE_URL}samples/tour.pdf`);
+    if (!response.ok) throw new NetworkError(`HTTP ${response.status}`);
+    return response.arrayBuffer();
+  }, "Lectern tour.pdf"),
+);
+
 if (import.meta.env.DEV) {
   // Development and e2e only: the bundled test decks. Not part of the production build.
   void import("./dev-fixtures").then(({ FIXTURES }) => {

@@ -1019,3 +1019,17 @@ Verification: build; 299 unit tests; 47 e2e tests (new: a packed copy opened fro
 2. On a room PC (ideally with the network cable out or Wi-Fi off), double-click the file. If it opens in another browser, right-click → Open with → Chrome or Edge.
 3. Audience view, clicker, Esc twice, F5. Presenter view.
 4. Tell me if the PC refuses to open local HTML files, or shows a warning: some managed PCs do.
+
+### W10.1. A sample deck; the Overview button's size (2026-11-27)
+
+- **A sample deck on the opening page:** "New here? Try a sample deck" → **A tour of Lectern**. Nine frames (37 pages) made for this: builds with a note each, an outline with four sections, link buttons into the appendix and back, a plot that animates over 20 builds, and a TikZ diagram that assembles over 5. Source `samples/tour.tex` (`make` in `samples/` rebuilds `public/samples/tour.pdf`, which is committed). It opens like any PDF from the device, so it gets a talk code too. Not offered in a packed copy or a page opened from disk.
+- **The lit Overview button** (wide presenter view) was drawn at the overview head's larger text size, 17.6px against 16px, so it grew by 6 × 2 px. It now has exactly the unlit button's box.
+
+Verification: build; 299 unit tests; 49 e2e tests (new `e2e/w7.spec.ts`: the sample's notes, outline, builds and a link; the Overview button's box lit and unlit).
+
+Known issue, found while testing and not new: a click on a link in the first moments after a slide appears, before its links are read, advances instead.
+
+### Ben checklist: W10.1
+
+1. benlockwood.com/talks → **A tour of Lectern** → Presenter view. Notes, Outline tab, the buttons on frame 3, hold → on frame 4.
+2. Press Tab: the Overview button should turn blue and nothing should shift.
