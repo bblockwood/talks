@@ -15,6 +15,40 @@ import { loadEmbeddedNotes } from "./deck-notes";
 
 GlobalWorkerOptions.workerSrc = workerUrl;
 
+/**
+ * In a packed copy the worker's code is inside the page, as a data URL. Opened from a disk,
+ * Chrome will not start a module worker (which is how PDF.js starts its own), but it does start
+ * an ordinary worker that then imports the module. That worker is handed to PDF.js once it has
+ * loaded; before that it would miss what PDF.js sends it.
+ */
+let workerReady: Promise<void> | null = null;
+function prepareWorker(): Promise<void> {
+  workerReady ??= (async () => {
+    if (!workerUrl.startsWith("data:")) return;
+    let worker: Worker | null = null;
+    try {
+      const boot = `import(${JSON.stringify(workerUrl)}).then(() => postMessage("lectern-worker-ready"), () => postMessage("lectern-worker-failed"));`;
+      const made = new Worker(URL.createObjectURL(new Blob([boot], { type: "text/javascript" })));
+      worker = made;
+      const ready = await new Promise<boolean>((resolve) => {
+        // Loaded: PDF.js's worker announces itself first (a message PDF.js ignores when it is
+        // handed a worker), then the import settles.
+        made.onmessage = (ev: MessageEvent) => resolve(ev.data !== "lectern-worker-failed");
+        made.onerror = () => resolve(false);
+        window.setTimeout(() => resolve(false), 8000);
+      });
+      made.onmessage = null;
+      made.onerror = null;
+      if (!ready) throw new Error("worker did not load");
+      GlobalWorkerOptions.workerPort = made;
+    } catch {
+      // PDF.js then reads the PDF on the page's own thread: slower, but it works.
+      worker?.terminate();
+    }
+  })();
+  return workerReady;
+}
+
 const ASSETS = `${import.meta.env.BASE_URL}pdfjs/`;
 
 /** A failure with a message fit to show on the entry screen. */
@@ -58,6 +92,7 @@ export interface Deck {
 }
 
 export async function openDeck(data: ArrayBuffer): Promise<Deck> {
+  await prepareWorker();
   const task = getDocument({
     data: new Uint8Array(data),
     cMapUrl: `${ASSETS}cmaps/`,

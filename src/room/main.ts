@@ -13,7 +13,8 @@ import { PresenterConsole, layoutFor } from "../console/console";
 import { forget, loadNotesSize, loadSaved, loadSplits, remember, saveNotesSize, saveSplits } from "../console/saved";
 import { DeckError, openDeck } from "../shared/deck";
 import { IS_MAC, shortcut, APPLE_TOUCH } from "../shared/device";
-import { makeJoinCode, receiveDeck } from "../shared/deck-share";
+import { PACK_ELEMENT_ID, packFileName, packPage } from "../core/pack";
+import { fromBase64, makeJoinCode, receiveDeck, toBase64 } from "../shared/deck-share";
 import { NetworkError, NoTalkError, fetchDeck } from "../shared/fetch-deck";
 import { SWAP_MESSAGE, channelNameFromHash } from "../shared/local-channel";
 import type { PresenterDeck } from "../shared/local-channel";
@@ -68,6 +69,14 @@ let shownSlidesHere = false;
 let lastView: "audience" | "presenter" | "both" = "audience";
 /** Leave or End was chosen: the page may go without asking. */
 let leavingOnPurpose = false;
+/**
+ * A packed copy (Ben, 2026-11-27): this page is one file with the slides inside it, opened from
+ * a disk with no connection. It runs on this computer only, and has nothing to leave to.
+ */
+const packedDeck = document.getElementById(PACK_ELEMENT_ID);
+const PACKED = packedDeck !== null;
+/** Opened straight from a disk: the browser keeps such pages apart, so two windows can't talk to each other. */
+const FROM_DISK = window.location.protocol === "file:";
 
 function setStatus(text: string, error = false): void {
   status.textContent = text;
@@ -92,6 +101,12 @@ function showBoth(): void {
   const managed = typeof window.getScreenDetails === "function";
   const possible = twoScreensPossible();
   const byHand = (!managed || placeByHand) && canPlaceByHand();
+  if (FROM_DISK) {
+    $<HTMLButtonElement>("both").disabled = true;
+    $("both-small").textContent = "(not from a file on disk)";
+    $("both-note").hidden = true;
+    return;
+  }
   $<HTMLButtonElement>("both").disabled = !possible && !byHand;
   // Under the buttons: what Both views does here. Where it can't be used, the button says why.
   $("both-small").textContent = possible || byHand ? "on two screens" : "(requires two screens)";
@@ -217,7 +232,8 @@ function showTalkStatus(): void {
   const phone = $("phone-status");
   const canJoin = talk.relayStatus === "connected";
   phone.replaceChildren();
-  if (talk.relayStatus === "none") phone.textContent = "Other devices can't join: this build has no relay.";
+  if (PACKED) phone.textContent = "A packed copy: the slides are inside this file, and it runs on this computer only.";
+  else if (talk.relayStatus === "none") phone.textContent = "Other devices can't join: this build has no relay.";
   else if (!canJoin) phone.textContent = "Not connected: other devices can't join right now.";
   else phone.textContent = `Other devices join with this code at ${window.location.host}${import.meta.env.BASE_URL.replace(/\/$/, "")}`;
   phone.classList.toggle("ok", canJoin);
@@ -260,6 +276,9 @@ function showReady(): void {
   showSummary();
   showBoth();
   setStatus("");
+  $("leave-row").hidden = PACKED;
+  // Only for slides opened from a file here: a published talk is never written to a disk.
+  $("pack-row").hidden = PACKED || FROM_DISK || !talk.source.originator;
   // On a phone the presenter view is the likely choice; on a computer, either.
   const small = layoutFor(window.innerWidth, window.innerHeight) !== "wide";
   codeRevealed = false;
@@ -341,7 +360,13 @@ async function dropTalk(): Promise<void> {
 function leave(): void {
   leavingOnPurpose = true;
   if (presentation) void presentation.end();
-  else void dropTalk().then(() => window.location.replace(import.meta.env.BASE_URL));
+  else void dropTalk().then(goHome);
+}
+
+/** The start page afresh. A packed copy is its own start page. */
+function goHome(): void {
+  if (PACKED || FROM_DISK) window.location.reload();
+  else window.location.replace(import.meta.env.BASE_URL);
 }
 
 interface Loaded {
@@ -448,6 +473,54 @@ function openByCode(rawCode: string, own: boolean, then?: () => void): void {
     showCodeLine();
     then?.();
   });
+}
+
+/** A packed copy opens the slides it carries, at once. */
+function openPacked(holder: HTMLElement): void {
+  void load(async () => {
+    setStatus("Opening…");
+    await new Promise((resolve) => window.setTimeout(resolve, 0)); // let "Opening…" show before the decode
+    let bytes: Uint8Array;
+    try {
+      bytes = fromBase64((holder.textContent ?? "").trim());
+    } catch {
+      throw new DeckError("This packed copy is damaged: the slides inside it could not be read.");
+    }
+    const pdf = new ArrayBuffer(bytes.length);
+    new Uint8Array(pdf).set(bytes);
+    return { pdf, title: holder.dataset["title"] || "Untitled", notes: NO_NOTES, targetMs: null, published: "", keys: null, joinCode: null, originator: true };
+  });
+}
+
+/**
+ * Download a packed copy: the app's one-file form, fetched from the site (or the offline cache),
+ * with these slides put inside it. Made in the browser; the PDF goes nowhere.
+ */
+async function downloadPacked(): Promise<void> {
+  const current = talk;
+  if (!current) return;
+  const button = $<HTMLButtonElement>("pack");
+  button.disabled = true;
+  setStatus("Making the packed copy…");
+  try {
+    const response = await fetch(`${import.meta.env.BASE_URL}standalone.html`);
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    const parts = packPage(await response.text(), toBase64(new Uint8Array(current.source.pdf)), current.source.title);
+    if (!parts) throw new Error("not a standalone page");
+    const url = URL.createObjectURL(new Blob(parts, { type: "text/html" }));
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = packFileName(current.source.title);
+    document.body.append(link);
+    link.click();
+    link.remove();
+    window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
+    setStatus(`Saved as ${link.download}. Open that file in Chrome or Edge on any computer; it needs no connection.`);
+  } catch {
+    setStatus("Could not make the packed copy: the site could not be reached. Try again with a connection.", true);
+  } finally {
+    button.disabled = false;
+  }
 }
 
 function openPdf(pdf: () => Promise<ArrayBuffer>, name: string): void {
@@ -557,7 +630,7 @@ function start(fullscreen: boolean, both = false, audienceScreen: ScreenDetailed
     },
     onEnded: () => {
       leavingOnPurpose = true;
-      window.location.replace(import.meta.env.BASE_URL);
+      goHome();
     },
   });
   void starter.then((started) => {
@@ -679,6 +752,7 @@ $("start-windowed").addEventListener("click", () => start(false));
 $("both").addEventListener("click", () => start(canFullscreen(), true));
 $("split-toggle").addEventListener("click", () => applySplit(talk?.deck.split ? null : suggestedSplit));
 $("another").addEventListener("click", leave);
+$("pack").addEventListener("click", () => void downloadPacked());
 
 // A clicker's start button sends F5 (or Shift+F5): on the page where a view is chosen it shows
 // the last view again, where the talk stands, instead of reloading the page and losing the talk.
@@ -695,7 +769,7 @@ window.addEventListener("keydown", (ev) => {
 // A talk opened from a file exists only in this tab: a reload or a closed tab would lose it,
 // so the browser asks first. Leave and End do not ask.
 window.addEventListener("beforeunload", (ev) => {
-  if (!talk || leavingOnPurpose) return;
+  if (!talk || leavingOnPurpose || PACKED) return; // a packed copy reopens its slides by itself
   ev.preventDefault();
   ev.returnValue = "";
 });
@@ -834,7 +908,9 @@ maskCode(true);
 
 $("boot").remove();
 const channelName = channelNameFromHash(window.location.hash);
-if (typeof crypto === "undefined" || !crypto.subtle || typeof ResizeObserver === "undefined") {
+if (packedDeck && typeof ResizeObserver !== "undefined") {
+  openPacked(packedDeck);
+} else if (typeof crypto === "undefined" || !crypto.subtle || typeof ResizeObserver === "undefined") {
   setStatus("This browser is too old to open talks. Use a current Chrome, Edge, Firefox or Safari.", true);
 } else if (channelName) {
   joinLocal(channelName);

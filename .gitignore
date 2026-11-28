@@ -11,3 +11,4 @@ playwright-report/
 .DS_Store
 .e2e/
 .e2e-dist/
+.standalone/

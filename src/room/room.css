@@ -495,3 +495,24 @@ kbd {
 .audience:not(.cursor-hidden):not(.tool-laser):not(.bar-up) .aud-menu {
   display: block;
 }
+
+.pack-row {
+  display: flex;
+  align-items: center;
+  gap: 0.8rem;
+  margin: 1rem 0;
+}
+.pack-row button {
+  flex: none;
+}
+.pack-row .hint {
+  margin: 0;
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+@media (max-width: 600px) {
+  .pack-row {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+}

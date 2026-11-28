@@ -997,3 +997,25 @@ Not done, by Ben's choice: two-word codes; the Esc-twice risk from clickers stay
 Verification: build; 296 unit tests; 46 e2e tests.
 
 Known issues: items 1 and 2 can't be reproduced in the test browser (a dead connection, an iPad's canvas limit); they are reasoned from the code. Very large PDFs (100 MB and more) still take two to three copies in memory.
+
+### W10. The packed copy (2026-11-27)
+
+Ben: opening a local file is likely the main use, so a talk should be downloadable from Lectern as one self-contained file for a room PC with no connection.
+
+- On the page where a view is chosen, for slides opened from a file on this device: **Download a packed copy**. It saves `<name>.lectern.html`: the app, the PDF reader and the PDF in one file (the PDF plus a third, plus 2.3 MB). It is made in the browser; the PDF goes nowhere.
+- Opened from a disk (`file://`) in Chrome or Edge, it opens its slides at once. Audience view, presenter view, keys, clicker, laser, draw, overview all work. Its content security policy allows no request to anywhere.
+- How: a second build (`vite.standalone.config.ts`, `tools/make-standalone.mjs`) makes `standalone.html`, one page with everything inline and a marker where the PDF goes; the site serves it and the page fills it in (`src/core/pack.ts`). `npm run build` does both.
+- Chrome will not start a module worker from a page on disk, so the PDF reader's worker is started as an ordinary worker that imports it (`prepareWorker` in `src/shared/deck.ts`).
+
+Not in a packed copy: other devices (no network, no relay); **Both views** (Chrome keeps pages opened from disk apart, so the two windows can't talk; the button says so); the PDF reader's extra files for PDFs that do not embed their fonts, or that use JPEG 2000 images. Notes kept beside the PDF (`.pdfpc`, sidecar) are not packed; notes inside the PDF are.
+
+A published talk (opened by code) offers no packed copy: its decrypted slides are never written to a disk.
+
+Verification: build; 299 unit tests; 47 e2e tests (new: a packed copy opened from `file://` with the network off shows its slides, runs both views, and uses a real worker).
+
+### Ben checklist: W10
+
+1. Open a PDF at benlockwood.com/talks, click **Download a packed copy**, copy the file to a thumb drive.
+2. On a room PC (ideally with the network cable out or Wi-Fi off), double-click the file. If it opens in another browser, right-click → Open with → Chrome or Edge.
+3. Audience view, clicker, Esc twice, F5. Presenter view.
+4. Tell me if the PC refuses to open local HTML files, or shows a warning: some managed PCs do.
