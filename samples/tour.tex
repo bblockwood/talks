@@ -1,5 +1,5 @@
-% The sample deck offered on the opening page. It teaches how to present a Beamer deck with
-% Lectern, and uses what it describes: builds, speaker notes, an outline, links between slides and
+% The sample deck offered on the opening page. It says what Lectern is, how to use it and how it
+% works, and uses what it describes: builds, speaker notes, an outline, links between slides and
 % a TikZ picture that assembles. Build with `make` in this directory; the PDF is committed.
 % The screenshots in img/ are taken by shots.mjs (see the Makefile).
 \documentclass[aspectratio=169,14pt]{beamer}
@@ -22,13 +22,19 @@
   box/.style={draw=lectern, very thick, rounded corners=3pt, minimum width=2.6cm, minimum height=1.1cm, align=center},
   flow/.style={-{Stealth[length=7pt]}, very thick, lectern},
 }
+\tikzset{
+  dev/.style={box, minimum width=3.3cm, minimum height=1.2cm, font=\small, inner sep=3pt},
+  both/.style={{Stealth[length=7pt]}-{Stealth[length=7pt]}, very thick, lectern},
+}
 \newcommand{\key}[1]{\textbf{#1}}
+% The site's address, in one place: change it here when Lectern moves to a domain of its own.
+\newcommand{\site}{\texttt{benlockwood.com/talks}}
 % A screenshot with a thin rim, so its dark edge reads against the white slide.
 \newcommand{\shot}[2]{\IfFileExists{img/#2.png}{{\setlength{\fboxsep}{0pt}\color{black!40}\fbox{\includegraphics[width=#1]{img/#2.png}}}}{\fbox{\parbox[c][3cm][c]{#1}{\centering #2}}}}
 \newcommand{\goto}[2]{\hyperlink{#1}{\scalebox{1.4}{\beamergotobutton{#2}}}}
 \newcommand{\return}[2]{\hyperlink{#1}{\scalebox{1.4}{\beamerreturnbutton{#2}}}}
 \title{A tour of Lectern}
-\subtitle{Presenting a Beamer deck from a browser}
+\subtitle{A full-featured, browser-based PDF presenter}
 \author{A sample deck, made with Beamer and TikZ}
 \date{}
 \begin{document}
@@ -62,53 +68,38 @@
   \pdfpcnote{Welcome. These are speaker notes: only the presenter view shows them, never the audience.\\\\Press the right arrow, or click the slide, to go on.}
 \end{frame}
 
-\section{What Lectern does}
+\section{What Lectern is}
 
-\begin{frame}{Any PDF works, but it is built for Beamer}
+\begin{frame}{The core idea}
   \begin{itemize}
-    \item \textbf{Any PDF opens,} including PowerPoint and Keynote exports.
-    \item<2-> \textbf{Beamer decks get more:}
+    \item \textbf{A full-featured PDF presenter.} Fast, with working in-PDF links and keyboard shortcuts for quick navigation.
+    \item<2-> \textbf{A presenter view for the speaker,} as in PowerPoint or Keynote: notes, timer, outline, annotation tools.
       \begin{itemize}
-        \item overlays (\texttt{\textbackslash pause}, \texttt{<2->}) become builds of one frame
-        \item \texttt{\textbackslash section} becomes the outline
-        \item \texttt{\textbackslash hyperlink} buttons jump, and Back returns
-        \item \texttt{\textbackslash pdfpcnote} becomes speaker notes
+        \item on a second screen of the same computer, or
+        \item on a different device (laptop, tablet, phone), which is then a remote control too
       \end{itemize}
-    \item<3-> \textbf{Nothing is uploaded.} The PDF opens in this browser.
+    \item<3-> \textbf{Entirely in the browser.} Nothing to install; it works on any computer with web access.
   \end{itemize}
-  \pdfpcnote{Nothing to install on the room's computer: it only needs a browser.\\\\The following frames show each of the four Beamer features in turn.}
+  \only<1>{\pdfpcnote{Slides are drawn ahead of time, so the next one appears at once.\\\\Any PDF works: Beamer, or a PowerPoint or Keynote export.}}
+  \only<2>{\pdfpcnote{You are probably reading this in the presenter view. The audience view shows the slide and nothing else.}}
+  \only<3>{\pdfpcnote{That matters most on a seminar room's computer, where you can't install anything: it only needs a browser.}}
 \end{frame}
 
-\begin{frame}{Overlays become the builds of one frame}
-  This frame is five PDF pages, and Lectern counts it as one frame.
-  \begin{itemize}
-    \item<2-> \key{→} and \key{←} step one build at a time.
-    \item<3-> \key{Shift} with an arrow moves a whole frame.
-    \item<4-> \key{A number, then Enter,} goes to that frame.
-    \item<5-> \key{Tab} shows every frame at once.
-  \end{itemize}
-  \only<1>{\pdfpcnote{The frame counter stays at 3 while the five builds appear. Frame numbers match Beamer's own, bottom right.}}
-  \only<2>{\pdfpcnote{Each build can carry a note of its own. This one belongs to the build about the arrow keys.}}
-  \only<3>{\pdfpcnote{Try it: Shift and the right arrow skips the remaining builds.}}
-  \only<4>{\pdfpcnote{Type 8 and press Enter to go to frame 8. Delete or Backspace returns here.}}
-  \only<5>{\pdfpcnote{The overview keeps working while you present: the keys still move the talk.}}
-\end{frame}
-
-\begin{frame}{What content is where}
-  \centering
-  \begin{tikzpicture}[node distance=1.2cm and 0.9cm, font=\small]
-    \node[box] (pdf) {Your PDF};
-    \uncover<2->{\node[box, right=of pdf] (app) {Lectern,\\in a browser};}
-    \uncover<3->{\node[box, above right=of app] (aud) {Audience view:\\slides only};}
-    \uncover<4->{\node[box, below right=of app] (pres) {Presenter view:\\notes, next, clock};}
-    \uncover<5->{\node[box, right=of pres, draw=warm] (phone) {A phone\\as a remote};}
-    \uncover<2->{\draw[flow] (pdf) -- (app);}
-    \uncover<3->{\draw[flow] (app) |- (aud);}
-    \uncover<4->{\draw[flow] (app) |- (pres);}
-    \uncover<5->{\draw[flow, warm, {Stealth[length=7pt]}-{Stealth[length=7pt]}] (pres) -- (phone);}
-  \end{tikzpicture}
-  \only<1-4>{\pdfpcnote{A TikZ picture that gains a piece with each build. The next-slide preview shows what the next key press adds.}}
-  \only<5>{\pdfpcnote{Any device that enters the talk code joins the same talk, and each one chooses which view it shows.\\\\The notes never reach the audience view.}}
+\begin{frame}{How to use it}
+  \begin{enumerate}
+    \item Go to \site{} and \textbf{open your PDF.}\\
+      Your talk is now live, with a one-word \textbf{talk code}.
+    \item<2-> On any other device, go to \site{} and \textbf{enter the code.}
+    \item<3-> Each device chooses what it shows:
+      \begin{itemize}
+        \item \textbf{Audience view:} the slides, full screen
+        \item \textbf{Presenter view:} notes, controls, timer
+      \end{itemize}
+    \item<4-> \textbf{Every device stays in step.} Advance on one, and all the others advance.
+  \end{enumerate}
+  \only<1>{\pdfpcnote{The code is shown on the page where the view is chosen, and under the connection button in the presenter view. It is never shown on the slides.}}
+  \only<2-3>{\pdfpcnote{Any number of devices can join, and each can change its view at any time: Esc twice returns to the page where the view is chosen.}}
+  \only<4>{\pdfpcnote{The laser pointer, drawings, black and white screens and the clock are shared in the same way.\\\\If the network drops, the computer showing the slides keeps working by its own keyboard or clicker.}}
 \end{frame}
 
 \section{The two views}
@@ -142,20 +133,153 @@
       \end{itemize}
     \end{column}
   \end{columns}
-  \pdfpcnote{With a projector attached, **Both views** puts the slides on one screen and this view on the other.\\\\From another device, enter the talk code on the opening page and choose Presenter view.}
+  \pdfpcnote{Laser and Draw work from here: point or write on the current slide, and the audience sees it.\\\\On a phone this view is mostly two large buttons, Prev and Next, with the notes above them.}
 \end{frame}
 
-\section{Writing the deck}
+\section{Example use cases}
 
-\begin{frame}{Speaker notes: \texttt{\textbackslash pdfpcnote} inside the frame}
-  \BUseVerbatim[fontsize=\small]{codenotes}
+\begin{frame}{An iPad, and the room's computer}
+  \begin{columns}[c]
+    \begin{column}{0.4\textwidth}
+      \centering
+      \begin{tikzpicture}[node distance=0.75cm and 0.5cm]
+        \node[dev] (pc) {Room computer\\\textbf{Audience view}};
+        \node[dev, below=of pc] (ipad) {Your iPad\\\textbf{Presenter view}};
+        \uncover<2->{\node[dev, below=of ipad, draw=warm] (phone) {Your phone,\\as a remote};}
+        \draw[both] (ipad) -- node[right, font=\scriptsize, lectern] {in step} (pc);
+        \uncover<2->{\draw[both, warm] (phone) -- (ipad);}
+      \end{tikzpicture}
+    \end{column}
+    \begin{column}{0.58\textwidth}
+      \begin{itemize}
+        \item \textbf{Beforehand:} open your talk on the iPad and choose Presenter view.
+        \item \textbf{In the room:} stand the iPad facing you. On the room's computer open \site, enter the code, choose Audience view.
+        \item<2-> \textbf{Advance} with a clicker plugged into either one, or join on your phone and use that.
+      \end{itemize}
+    \end{column}
+  \end{columns}
+  \only<1>{\pdfpcnote{Nothing is installed or left behind on the room's computer. A private window there forgets the code as well.}}
+  \only<2>{\pdfpcnote{A clicker sends arrow keys, so it works on whichever device it is plugged into.\\\\The phone joins with the same code and shows the presenter view: Prev, Next and your notes.}}
+\end{frame}
+
+\begin{frame}{Two displays on the room's computer}
+  \begin{columns}[c]
+    \begin{column}{0.4\textwidth}
+      \centering
+      \begin{tikzpicture}[node distance=0.75cm and 0.5cm]
+        \node[dev] (proj) {Projector\\\textbf{Audience view}};
+        \node[dev, below=of proj] (pc) {Room computer};
+        \node[dev, below=of pc] (mon) {Its own screen\\\textbf{Presenter view}};
+        \draw[flow] (pc) -- (proj);
+        \draw[flow] (pc) -- (mon);
+        \uncover<2->{\draw[both, warm] (proj.east) to[bend left=50] node[right, font=\scriptsize, warm] {swap} (mon.east);}
+      \end{tikzpicture}
+    \end{column}
+    \begin{column}{0.58\textwidth}
+      \begin{itemize}
+        \item Bring the PDF on a USB drive, or download it there.
+        \item Open \site{} and load the slides.
+        \item Click \textbf{Both views:} the slides go to one display and the presenter view to the other.
+        \item<2-> Wrong way round? Click \textbf{Swap displays.}
+      \end{itemize}
+    \end{column}
+  \end{columns}
+  \only<1>{\pdfpcnote{The displays must extend the desktop. Mirrored displays look like one screen to the browser.\\\\Chrome and Edge ask once for permission to place windows on the screens.}}
+  \only<2>{\pdfpcnote{Swap displays is at the top of the presenter view.}}
+\end{frame}
+
+\begin{frame}{No computer: a phone drives the projector}
+  \begin{columns}[c]
+    \begin{column}{0.4\textwidth}
+      \centering
+      \begin{tikzpicture}[node distance=0.75cm and 0.5cm]
+        \node[dev] (proj) {Projector};
+        \node[dev, below=of proj] (phone) {Your phone\\\textbf{Audience view}};
+        \node[dev, below=of phone] (ipad) {Your iPad\\\textbf{Presenter view}};
+        \draw[flow, warm] (phone) -- node[right, font=\scriptsize, warm] {USB-C or HDMI} (proj);
+        \draw[both] (ipad) -- node[right, font=\scriptsize, lectern] {in step} (phone);
+      \end{tikzpicture}
+    \end{column}
+    \begin{column}{0.58\textwidth}
+      \begin{itemize}
+        \item Open your talk on the iPad and choose Presenter view.
+        \item Join on your phone with the code and choose Audience view.
+        \item Connect the phone to the projector with a USB-C or HDMI adapter.
+      \end{itemize}
+    \end{column}
+  \end{columns}
+  \pdfpcnote{The phone needs no computer in the room at all.\\\\Turn the phone sideways. On an iPhone, add the site to the Home Screen first: opened from there, the slides fill the screen without Safari's bars.}
+\end{frame}
+
+\begin{frame}{No network: carry a packed copy}
+  \begin{columns}[c]
+    \begin{column}{0.56\textwidth}
+      \shot{\textwidth}{pack}
+    \end{column}
+    \begin{column}{0.42\textwidth}
+      \begin{itemize}
+        \item \textbf{Download a packed copy} saves one HTML file: Lectern with your slides inside.
+        \item Put it on a thumb drive and open it in Chrome or Edge.
+        \item It needs no network, and shows the Audience view only.
+      \end{itemize}
+    \end{column}
+  \end{columns}
+  \pdfpcnote{The button is on the page where the view is chosen, after a PDF is opened from a file.\\\\A packed copy shows the Audience view on its one computer: no presenter view, and no other devices can join it. Every key and the Menu bar still work there.}
+\end{frame}
+
+\section{How it works}
+
+\begin{frame}{How it works}
+  \centering
+  \begin{tikzpicture}[node distance=1.2cm and 1.5cm, font=\small]
+    \node[box] (mine) {Your device:\\the PDF};
+    \uncover<2->{\node[box, right=of mine, draw=warm, minimum width=3.6cm] (relay) {The relay:\\a minimal chat room};}
+    \uncover<2->{\node[box, right=of relay] (other) {A device that\\joins with the code};}
+    \uncover<2->{\draw[both] (mine) -- (relay);}
+    \uncover<2->{\draw[both] (relay) -- (other);}
+    \uncover<3->{\node[below=0.15cm of relay, font=\footnotesize, warm] {sees only scrambled messages};}
+  \end{tikzpicture}
 
   \medskip
-  The notes travel inside the PDF. They may use a little Markdown.
+  \begin{itemize}\small
+    \item \textbf{Your slides are never stored on a server.} The PDF opens in your browser.
+    \item<2-> Devices with the same code meet in a \textbf{chat room} that only passes their messages along: the slides, then where the talk is. It keeps nothing.
+    \item<3-> Every message is \textbf{end-to-end encrypted} with a key made from the talk code, which the relay never sees.
+  \end{itemize}
+  \only<1>{\pdfpcnote{A TikZ picture that gains a piece with each build. The next-slide preview shows what the next key press adds.}}
+  \only<2>{\pdfpcnote{Nothing leaves your device until another device joins with the code. Then the PDF is sent to it once, through the relay, and after that only small messages: frame 12, laser here, clock paused.}}
+  \only<3>{\pdfpcnote{The code is the key, so anyone who has the code can join the talk. When the talk ends, every device forgets the slides.\\\\The notes travel too, and never reach an audience view.}}
+\end{frame}
 
-  \smallskip
-  \goto{backup-notes}{Other ways to write notes}
-  \pdfpcnote{This note is written in Markdown, as the notes of your own deck can be:\\\\- *emphasis* with asterisks\\- `code` with backticks\\- a list, one dash per line\\\\Two backslashes in the LaTeX source start a new line. A- and A+ above change the size of this text.}
+\section{Beamer-native}
+
+\begin{frame}{Any PDF works, but it is built for Beamer}
+  \begin{itemize}
+    \item \textbf{Any PDF opens,} including PowerPoint and Keynote exports.
+    \item<2-> \textbf{Beamer decks get more:}
+      \begin{itemize}
+        \item overlays (\texttt{\textbackslash pause}, \texttt{<2->}) become builds of one frame
+        \item \texttt{\textbackslash section} becomes the outline
+        \item \texttt{\textbackslash hyperlink} buttons jump, and Back returns
+        \item \texttt{\textbackslash pdfpcnote} becomes speaker notes
+      \end{itemize}
+  \end{itemize}
+  \pdfpcnote{None of this needs a special class or theme: it is read from an ordinary Beamer PDF.\\\\The following frames show each of the four in turn.}
+\end{frame}
+
+\begin{frame}{Overlays become the builds of one frame}
+  This frame is five PDF pages, and Lectern counts it as one frame.
+  \begin{itemize}
+    \item<2-> \key{→} and \key{←} step one build at a time.
+    \item<3-> \key{Shift} with an arrow moves a whole frame.
+    \item<4-> \key{A number, then Enter,} goes to that frame.
+    \item<5-> \key{Tab} shows every frame at once.
+  \end{itemize}
+  \only<1>{\pdfpcnote{The frame counter stays at 12 while the five builds appear. Frame numbers match Beamer's own, bottom right.}}
+  \only<2>{\pdfpcnote{Each build can carry a note of its own. This one belongs to the build about the arrow keys.}}
+  \only<3>{\pdfpcnote{Try it: Shift and the right arrow skips the remaining builds.}}
+  \only<4>{\pdfpcnote{Type 15 and press Enter to go to frame 15. Delete or Backspace returns here.}}
+  \only<5>{\pdfpcnote{The overview keeps working while you present: the keys still move the talk.}}
 \end{frame}
 
 \begin{frame}[label=links]{Outline from \texttt{\textbackslash section}, links from \texttt{\textbackslash hyperlink}}
@@ -167,6 +291,19 @@
   \smallskip
   \goto{backup-jump}{Try it: a backup slide}
   \pdfpcnote{The Outline tab beside Notes lists this deck's sections; a click on one jumps there.\\\\Links work with a click in either view.}
+\end{frame}
+
+\section{Creating notes}
+
+\begin{frame}[label=notes]{Speaker notes: \texttt{\textbackslash pdfpcnote} inside the frame}
+  \BUseVerbatim[fontsize=\small]{codenotes}
+
+  \medskip
+  The notes travel inside the PDF. They may use a little Markdown.
+
+  \smallskip
+  \goto{backup-notes}{Other ways to write notes}
+  \pdfpcnote{This note is written in Markdown, as the notes of your own deck can be:\\\\- *emphasis* with asterisks\\- `code` with backticks\\- a list, one dash per line\\\\Two backslashes in the LaTeX source start a new line. A- and A+ above change the size of this text.}
 \end{frame}
 
 \section{During the talk}
@@ -197,29 +334,13 @@
   \pdfpcnote{A clicker works as it is: it sends the same keys.\\\\Esc twice leaves a view and returns to the page where the view is chosen.}
 \end{frame}
 
-\begin{frame}{No connection? Carry a packed copy}
-  \begin{columns}[c]
-    \begin{column}{0.56\textwidth}
-      \shot{\textwidth}{pack}
-    \end{column}
-    \begin{column}{0.42\textwidth}
-      \begin{itemize}
-        \item \textbf{Download a packed copy} saves one HTML file: Lectern with your slides inside.
-        \item Put it on a thumb drive and open it in Chrome or Edge.
-        \item It needs no network, and shows the Audience view only.
-      \end{itemize}
-    \end{column}
-  \end{columns}
-  \pdfpcnote{The button is on the page where the view is chosen, after a PDF is opened from a file.\\\\A packed copy shows the Audience view on its one computer: no presenter view, and no other devices can join it. Every key and the Menu bar still work there.}
-\end{frame}
-
 \begin{frame}{Now open your own deck}
   \begin{itemize}
     \item Press \key{Esc} twice to leave this view.
     \item \textbf{Leave this talk,} then open a PDF from this device.
     \item Its talk code lets your phone or laptop join.
   \end{itemize}
-  \pdfpcnote{The last frame of the main talk. What follows is the appendix, reached by the buttons on frames 7 and 8.}
+  \pdfpcnote{The last frame of the main talk. What follows is the appendix, reached by the buttons on frames 13 and 14.}
 \end{frame}
 
 \appendix
@@ -236,7 +357,7 @@
   Lectern shows the slide half to the audience and the notes half to you.
 
   \smallskip
-  \return{links}{Back}
+  \return{notes}{Back}
   \pdfpcnote{The i beside Notes in the presenter view lists all of these.}
 \end{frame}
 
