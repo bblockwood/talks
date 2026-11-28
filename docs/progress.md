@@ -1120,3 +1120,12 @@ Verification: build; 303 unit tests; 51 e2e tests (the sample's test checks the 
 **Ben checklist**
 1. On a classroom PC, join a talk, see "Slides loaded locally" under the preview, start the Audience view, then pull the network cable: the keyboard and a clicker should still step through every slide.
 2. Move the mouse on a light slide and on a dark one: the grey Menu button should be findable on both.
+
+### W10.9. The tour says how to add Lectern to the Home Screen (2026-11-28)
+
+A new frame under Useful features, "iPhone or iPad: add to the Home Screen": open the site in Safari, Share, Add to Home Screen, Add, then open it from its icon, where it fills the screen without Safari's bars. 22 frames, 47 pages.
+
+Verification: build; 303 unit tests; 51 e2e tests.
+
+**Ben checklist**
+1. Follow the frame's four steps on your iPhone and iPad and say where Safari's wording differs (the note says Share may be behind the "..." button on an iPhone).
