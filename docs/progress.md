@@ -1043,3 +1043,9 @@ Verification: build; 299 unit tests; 50 e2e tests (new: the presenter view, its 
 ### Ben checklist: W10.2
 
 1. On the iPad and the phone, from the Home Screen icon: presenter view → Overview, the connection line, the clock. Nothing should sit under the status bar's fade. Tell me which screen, if any still does.
+
+### W10.3. A short connection button on a phone (2026-11-27)
+
+Ben: on a phone the connection button's text must always fit on one line. In the phone layouts it now says one of **Slides showing**, **No slides screen**, **This device only**, **Offline** (or Reconnecting…, Joining the talk…), never wraps, and a passing notice is cut with an ellipsis. The device count and the code to join with are in the sheet the button opens; a screen reader still gets the full sentence. Laptop and tablet layouts are unchanged.
+
+Verification: build; 299 unit tests; 51 e2e tests (new: one line at 320 and 390 px wide).

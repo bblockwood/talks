@@ -108,7 +108,7 @@ test("a phone drives the room PC: steps, notes, clock, slide grid, back, black, 
   });
   expect(await viewHook(phone, (h) => h.layout())).toBe("compact");
   // The room's computer has the talk open but is still choosing: no screen shows the slides yet.
-  await expect(phone.locator("#link")).toHaveText("No slides screen yet · 2 devices");
+  await expect(phone.locator("#link")).toHaveAttribute("aria-label", "No slides screen yet · 2 devices");
 
   await room.locator("#start").click();
   await expect.poll(() => roomPage(room)).toBe(0);
@@ -1032,7 +1032,7 @@ test("a talk nobody shows slides for is a rehearsal: devices join it, and a slid
 
   // A phone joins the rehearsal like any other talk, and drives it.
   const phone = await openView(browser);
-  await expect(phone.locator("#link")).toHaveText("No slides screen yet · 2 devices");
+  await expect(phone.locator("#link")).toHaveAttribute("aria-label", "No slides screen yet · 2 devices");
   await expect(phone.locator("#frame-line")).toHaveText("Frame 3 / 7");
   expect(await viewHook(phone, (h) => h.hosting())).toBe(false);
   await phone.locator("#next").click();
@@ -1091,7 +1091,7 @@ test("a PDF opened on one device gets a code; a device that joins with it is sen
   const code = (await phone.locator("#join-code").textContent()) ?? "";
   expect(code).toMatch(/^[a-z]{3,}$/);
   await phone.locator("#presenter").click();
-  await expect(phone.locator("#link")).toHaveText(`No slides screen yet · join with code ${code}`);
+  await expect(phone.locator("#link")).toHaveAttribute("aria-label", `No slides screen yet · join with code ${code}`);
   await phone.locator("#next").click();
   await phone.locator("#next").click();
   await expect.poll(() => viewHook(phone, (h) => h.shownPage())).toBe(2);
@@ -1129,7 +1129,7 @@ test("a PDF opened on one device gets a code; a device that joins with it is sen
 
   await room.locator("#start").click();
   await expect.poll(() => roomPage(room)).toBe(2);
-  await expect(phone.locator("#link")).toHaveText("Slides showing · 2 devices");
+  await expect(phone.locator("#link")).toHaveAttribute("aria-label", "Slides showing · 2 devices");
   await phone.locator("#next").click();
   await expect.poll(() => roomPage(room)).toBe(3);
   expect(await room.evaluate(() => localStorage.length + sessionStorage.length)).toBe(0);
@@ -1258,7 +1258,7 @@ test("a presenter view recovers by itself when the connection drops, and resyncs
   await expect(phone.locator("#frame-line")).toHaveText("Frame 2 / 7");
 
   await viewHook(phone, (h) => h.drop());
-  await expect(phone.locator("#link")).toHaveText("Reconnecting…");
+  await expect(phone.locator("#link")).toHaveAttribute("aria-label", "Reconnecting…");
   // While the phone is away the room PC carries on from its keyboard.
   await room.keyboard.press("ArrowRight");
   await room.keyboard.press("ArrowRight");
@@ -1287,7 +1287,7 @@ test("when the slides screen leaves, the talk carries on; when it returns it pic
   await room.keyboard.press("Escape");
   await room.locator("#another").click();
   await expect(room.locator("#code")).toBeVisible();
-  await expect(phone.locator("#link")).toHaveText("No slides screen yet", { timeout: 10_000 });
+  await expect(phone.locator("#link")).toHaveAttribute("aria-label", "No slides screen yet", { timeout: 10_000 });
   await expect(phone.locator("#frame-line")).toHaveText("Frame 2 / 7");
   await phone.locator("#next").click();
   await expect(phone.locator("#frame-line")).toHaveText("Frame 3 / 7");
@@ -1300,7 +1300,7 @@ test("when the slides screen leaves, the talk carries on; when it returns it pic
   await expect.poll(() => roomHook(room, (h) => h.role())).toBe("host");
   const second = await roomHook(room, (h) => h.session());
   expect(second).not.toBe(first);
-  await expect(phone.locator("#link")).toHaveText("Slides showing · 2 devices");
+  await expect(phone.locator("#link")).toHaveAttribute("aria-label", "Slides showing · 2 devices");
   await phone.locator("#next").click();
   await expect.poll(() => roomPage(room)).toBe(3);
   await phone.context().close();

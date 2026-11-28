@@ -612,7 +612,17 @@ export class PresenterConsole {
       text = screens > 0 ? `Slides showing${screens > 1 ? ` on ${screens} screens` : ""}${others}${alone}` : `No slides screen yet${others}${alone}${join}`;
       cls = screens > 0 ? "ok" : "wait";
     }
+    // A phone's bar has room for a few words on one line (Ben, 2026-11-27): the rest (how many
+    // devices, the code to join with) is in the sheet this button opens.
+    const full = text;
+    if (this.layout !== "wide" && this.layout !== "stacked" && now >= this.noticeUntil && this.live) {
+      if (this.client.kind === "local") text = "Other screen";
+      else if (room?.relay === "none") text = "This device only";
+      else if (room?.relay !== "connected" && this.client.hosting) text = "Offline";
+      else text = screens > 0 ? "Slides showing" : "No slides screen";
+    }
     if (link.textContent !== text) link.textContent = text;
+    if (link.getAttribute("aria-label") !== full) link.setAttribute("aria-label", full);
     link.classList.toggle("ok", cls === "ok");
     link.classList.toggle("wait", cls === "wait");
 

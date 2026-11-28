@@ -73,3 +73,19 @@ test("opened from the Home Screen, every full-screen surface keeps the same clea
   expect(await top(".sheet-panel:visible")).toBe(clear);
   await context.close();
 });
+
+test("on a phone the connection button is a few words on one line", async ({ browser }) => {
+  for (const width of [320, 390]) {
+    const context = await browser.newContext({ viewport: { width, height: 700 }, deviceScaleFactor: 2, hasTouch: true });
+    const page = await context.newPage();
+    await openSample(page);
+    const link = page.locator("#link");
+    await expect(link).toHaveText(/^(No slides screen|This device only|Offline)$/);
+    await expect(link).toHaveAttribute("aria-label", /No slides screen yet/);
+    // One line: nothing cut off, and no taller than a line of text with the button's padding.
+    await expect
+      .poll(() => link.evaluate((el) => el.scrollWidth <= el.clientWidth && el.getBoundingClientRect().height < 34))
+      .toBe(true);
+    await context.close();
+  }
+});

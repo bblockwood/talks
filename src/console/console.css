@@ -1099,10 +1099,6 @@ button.wide {
 .console[data-layout="compact"] #t-forward {
   display: none;
 }
-.console[data-layout="compact"] .linkstate {
-  white-space: normal;
-  line-height: 1.2;
-}
 .console[data-layout="compact"] #current {
   aspect-ratio: var(--slide-aspect, 16 / 9);
   max-height: 38dvh;
