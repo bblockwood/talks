@@ -54,3 +54,22 @@ test("the Overview button keeps its size and place when lit", async ({ browser }
   expect(await box("#overview-close")).toEqual(unlit);
   await context.close();
 });
+
+test("opened from the Home Screen, every full-screen surface keeps the same clear strip at the top", async ({ browser }) => {
+  const context = await browser.newContext({ viewport: { width: 390, height: 800 }, deviceScaleFactor: 2, hasTouch: true });
+  const page = await context.newPage();
+  await openSample(page);
+  // The browser under test cannot pretend to be a Home Screen app; what that mode sets is one variable.
+  await page.evaluate(() => document.documentElement.style.setProperty("--status-clear", "2.2rem"));
+  const top = (selector: string) => page.locator(selector).evaluate((el) => getComputedStyle(el).paddingTop);
+  const clear = await top("#console");
+  expect(parseFloat(clear)).toBeGreaterThan(30);
+  await page.locator("#t-slides").click();
+  await expect(page.locator("#overview")).toBeVisible();
+  expect(await top("#overview")).toBe(clear);
+  await page.locator("#overview-close").click();
+  await page.locator("#link").click();
+  await expect(page.locator(".sheet-panel:visible")).toBeVisible();
+  expect(await top(".sheet-panel:visible")).toBe(clear);
+  await context.close();
+});

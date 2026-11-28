@@ -432,7 +432,7 @@ kbd {
   gap: 0.6rem;
   box-sizing: border-box;
   /* The bar lies over the bottom: the last row of frames scrolls clear of it. */
-  padding: max(0.8rem, env(safe-area-inset-top)) max(1rem, env(safe-area-inset-right)) 0 max(1rem, env(safe-area-inset-left));
+  padding: max(0.8rem, calc(env(safe-area-inset-top) + var(--status-clear))) max(1rem, env(safe-area-inset-right)) 0 max(1rem, env(safe-area-inset-left));
   background: #0b0b0c;
   color: #e8eaed;
   font-family: system-ui, -apple-system, "Segoe UI", sans-serif;

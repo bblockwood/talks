@@ -1033,3 +1033,13 @@ Known issue, found while testing and not new: a click on a link in the first mom
 
 1. benlockwood.com/talks → **A tour of Lectern** → Presenter view. Notes, Outline tab, the buttons on frame 3, hold → on frame 4.
 2. Press Tab: the Overview button should turn blue and nothing should shift.
+
+### W10.2. The same clear strip at the top of every screen (2026-11-27)
+
+Ben: opened from the Home Screen on an iPad or phone, the overview, the connection settings and other sheets still ran under the status bar's fade. The presenter view already kept 2.2rem clear; now one value (`--status-clear`) gives the same strip to the phone's overview, every sheet (connection settings, clock), the pop-ups, the dialogs, and the overview on the slides.
+
+Verification: build; 299 unit tests; 50 e2e tests (new: the presenter view, its overview and a sheet have the same top padding). The test browser cannot run as a Home Screen app, so the test sets the value that mode sets.
+
+### Ben checklist: W10.2
+
+1. On the iPad and the phone, from the Home Screen icon: presenter view → Overview, the connection line, the clock. Nothing should sit under the status bar's fade. Tell me which screen, if any still does.

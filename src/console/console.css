@@ -1,5 +1,7 @@
 :root {
   color-scheme: dark;
+  /* Extra room at the top of every screen-filling surface; see the standalone rule at the end. */
+  --status-clear: 0rem;
   --bg: #111418;
   --panel: #1b2027;
   --line: #2c333d;
@@ -249,7 +251,7 @@ button.wide {
   background: var(--bg);
   display: flex;
   flex-direction: column;
-  padding: env(safe-area-inset-top) max(0.6rem, env(safe-area-inset-right)) max(0.6rem, env(safe-area-inset-bottom))
+  padding: calc(env(safe-area-inset-top) + var(--status-clear)) max(0.6rem, env(safe-area-inset-right)) max(0.6rem, env(safe-area-inset-bottom))
     max(0.6rem, env(safe-area-inset-left));
   gap: 0.5rem;
   user-select: none;
@@ -690,7 +692,7 @@ button.wide {
   max-height: 100%;
   overflow-y: auto;
   box-sizing: border-box;
-  padding: env(safe-area-inset-top) max(0.9rem, env(safe-area-inset-right)) max(0.9rem, env(safe-area-inset-bottom))
+  padding: calc(env(safe-area-inset-top) + var(--status-clear)) max(0.9rem, env(safe-area-inset-right)) max(0.9rem, env(safe-area-inset-bottom))
     max(0.9rem, env(safe-area-inset-left));
 }
 .row {
@@ -764,6 +766,7 @@ button.wide {
   justify-content: center;
   align-items: center;
   padding: 1rem;
+  padding-top: max(1rem, calc(env(safe-area-inset-top) + var(--status-clear)));
 }
 .modal-panel {
   box-sizing: border-box;
@@ -1068,7 +1071,7 @@ button.wide {
 .pop-panel {
   position: absolute;
   /* Clear of a phone's notch or status bar, which lies over the top of the page. */
-  --pop-top: calc(env(safe-area-inset-top) + var(--pop-clear, 0rem) + 3.2rem);
+  --pop-top: calc(env(safe-area-inset-top) + var(--status-clear) + 3.2rem);
   top: var(--pop-top);
   right: 0.6rem;
   box-sizing: border-box;
@@ -1127,7 +1130,7 @@ button.wide {
   inset: 0;
   z-index: 9;
   background: var(--bg);
-  padding: env(safe-area-inset-top) max(0.75rem, env(safe-area-inset-right)) env(safe-area-inset-bottom)
+  padding: calc(env(safe-area-inset-top) + var(--status-clear)) max(0.75rem, env(safe-area-inset-right)) env(safe-area-inset-bottom)
     max(0.75rem, env(safe-area-inset-left));
 }
 .console[data-layout="compact"] .overview-toggle .as-toggle {
@@ -1208,7 +1211,7 @@ button.wide {
 /* The status bar sits at the bottom in three regions: where the talk is, the clock, the rest. The
    clock stays centred whatever the text beside it does. */
 .console[data-layout="wide"] {
-  padding-top: max(0.5rem, env(safe-area-inset-top));
+  padding-top: max(0.5rem, calc(env(safe-area-inset-top) + var(--status-clear)));
 }
 .console[data-layout="wide"] .bar {
   order: 10;
@@ -1245,7 +1248,7 @@ button.wide {
   font-size: 1.4rem;
 }
 .console[data-layout="wide"] .pop-panel {
-  max-height: calc(100dvh - 4.8rem - env(safe-area-inset-top) - var(--pop-clear, 0rem) - 0.6rem);
+  max-height: calc(100dvh - 4.8rem - env(safe-area-inset-top) - var(--status-clear) - 0.6rem);
   top: auto;
   right: auto;
   bottom: 4.8rem;
@@ -1458,15 +1461,12 @@ html.presenting input {
   stroke-linecap: round;
   stroke-linejoin: round;
 }
-/* Opened from the Home Screen, an iPad lays its status bar, fading to black, over the top of
-   the page: keep clear of it. */
+/* Opened from the Home Screen, an iPad or iPhone lays its status bar, fading to black, over the
+   top of the page: everything that fills the screen keeps clear of it by the same amount (the
+   presenter view, its sheets, overview, pop-ups and dialogs, and the slides' overview and card). */
 @media (display-mode: standalone) {
-  .pop-panel {
-    --pop-clear: 2.2rem;
-  }
-  .console,
-  .console[data-layout="wide"] {
-    padding-top: calc(env(safe-area-inset-top) + 2.2rem);
+  :root {
+    --status-clear: 2.2rem;
   }
   .entry {
     padding-top: calc(2rem + env(safe-area-inset-top));
